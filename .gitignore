@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+npm-debug.log*
+yarn-error.log*
+
+# Env
+.env
+.env.local
+.env*.local
+
+# Data / OS
+*.db
+*.sqlite3
+.DS_Store
+
+# 设计文档（按用户要求不提交）
+Azmark_行迹_Personal_Travel_OS_方案_v1.1.md

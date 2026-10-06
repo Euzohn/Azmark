@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: azmark
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-azmark}
+      POSTGRES_DB: azmark
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U azmark"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  api:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://azmark:${POSTGRES_PASSWORD:-azmark}@postgres:5432/azmark
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  web:
+    build: ./web
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres_data:
