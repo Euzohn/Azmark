@@ -1,12 +1,13 @@
 services:
+  # postgres/redis 只在 compose 内部网络可达，不发布任何宿主机端口，
+  # 避免与服务器上已有的 PostgreSQL/Redis 冲突。需要从宿主机连接时，
+  # 用 `docker compose exec postgres psql -U azmark azmark`。
   postgres:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: azmark
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-azmark}
       POSTGRES_DB: azmark
-    ports:
-      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -17,12 +18,11 @@ services:
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "127.0.0.1:6379:6379"
 
   api:
     build: ./backend
     environment:
+      # 密码必须是 URL 安全字符（推荐 openssl rand -hex 24），否则 URL 解析会失败。
       DATABASE_URL: postgresql+psycopg://azmark:${POSTGRES_PASSWORD:-azmark}@postgres:5432/azmark
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
