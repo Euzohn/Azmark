@@ -53,7 +53,7 @@ npm run typecheck
 npm run build
 ```
 
-API 地址由 `NEXT_PUBLIC_API_BASE_URL` 配置（默认 `http://localhost:8000`）。
+前端默认走**同源代理**：浏览器只访问 web（`/api/v1/...`），由 Next.js 服务端把 `/api/*` 转发到后端。本地开发时转发目标是 `http://localhost:8000`，Docker 部署时是内部地址 `http://api:8000`（见 `web/next.config.ts` 的 `API_INTERNAL_URL`，由 compose 构建参数注入）。后端无需对外暴露端口。
 
 ## 本地验证边界（重要）
 

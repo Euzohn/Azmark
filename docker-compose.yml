@@ -30,16 +30,14 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    ports:
-      - "${API_PORT:-8000}:8000"
+    # 不对外发布端口：仅 web 通过内部网络访问 http://api:8000
 
   web:
     build:
       context: ./web
       args:
-        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
-    environment:
-      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+        # Next.js 在服务端把 /api/* 反代到这个内部地址（构建期写入）
+        API_INTERNAL_URL: http://api:8000
     depends_on:
       - api
     ports:
