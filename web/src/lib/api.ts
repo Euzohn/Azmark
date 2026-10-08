@@ -6,7 +6,10 @@ import type {
   Flight,
   FlightInput,
   FlightList,
+  FlightLookup,
   FlightNumberLookup,
+  ProviderKeysRead,
+  ProviderKeyStatus,
   TokenResponse,
   User,
 } from "@/lib/types";
@@ -103,6 +106,17 @@ export const api = {
     request<Airline[]>(`/reference/airlines?q=${encodeURIComponent(query)}`),
   lookupFlightNumber: (number: string) =>
     request<FlightNumberLookup>(`/reference/flight-lookup?number=${encodeURIComponent(number)}`),
+  lookupFlight: (data: { flight_number: string; date?: string; provider?: string }) =>
+    request<FlightLookup>("/flights/lookup", { method: "POST", body: JSON.stringify(data) }),
+
+  listProviderKeys: () => request<ProviderKeysRead>("/settings/provider-keys"),
+  setProviderKey: (provider: string, api_key: string) =>
+    request<ProviderKeyStatus>(`/settings/provider-keys/${provider}`, {
+      method: "PUT",
+      body: JSON.stringify({ api_key }),
+    }),
+  deleteProviderKey: (provider: string) =>
+    request<void>(`/settings/provider-keys/${provider}`, { method: "DELETE" }),
 
   listAuditLogs: (params: { page?: number; page_size?: number } = {}) => {
     const query = new URLSearchParams();

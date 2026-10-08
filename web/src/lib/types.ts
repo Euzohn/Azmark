@@ -16,6 +16,8 @@ export interface Flight {
   status: string;
   departure_time: string | null;
   arrival_time: string | null;
+  actual_departure_time: string | null;
+  actual_arrival_time: string | null;
   departure_timezone: string | null;
   arrival_timezone: string | null;
   origin: string | null;
@@ -27,8 +29,10 @@ export interface Flight {
   gate: string | null;
   booking_reference: string | null;
   ticket_number: string | null;
+  purchase_credential: string | null;
   price: string | null;
   currency: string | null;
+  distance: string | null;
   notes: string | null;
   trip_id: string | null;
   created_at: string;
@@ -39,6 +43,8 @@ export interface FlightInput {
   status?: string;
   departure_time?: string | null;
   arrival_time?: string | null;
+  actual_departure_time?: string | null;
+  actual_arrival_time?: string | null;
   departure_timezone?: string | null;
   arrival_timezone?: string | null;
   origin?: string | null;
@@ -50,8 +56,10 @@ export interface FlightInput {
   gate?: string | null;
   booking_reference?: string | null;
   ticket_number?: string | null;
+  purchase_credential?: string | null;
   price?: string | null;
   currency?: string | null;
+  distance?: string | null;
   notes?: string | null;
 }
 
@@ -104,4 +112,28 @@ export interface FlightNumberLookup {
   flight_number: string;
   airline_code: string | null;
   airline: Airline | null;
+}
+
+export interface FlightLookup {
+  flight_number: string;
+  airline_code: string | null;
+  airline_name: string | null;
+  origin_iata: string | null;
+  destination_iata: string | null;
+  origin_name: string | null;
+  destination_name: string | null;
+  departure_time: string | null;
+  arrival_time: string | null;
+  aircraft: string | null;
+  status: string | null;
+  source: string | null;
+}
+
+export interface ProviderKeyStatus {
+  provider: string;
+  configured: boolean;
+}
+
+export interface ProviderKeysRead {
+  providers: ProviderKeyStatus[];
 }
