@@ -42,15 +42,20 @@ def upgrade() -> None:
     )
     op.create_index(op.f("ix_trips_user_id"), "trips", ["user_id"])
 
-    op.add_column(
+    # transport_records.trip_id 自 0001_initial 已存在（裸列），这里补 FK 与索引。
+    op.create_foreign_key(
+        "fk_transport_records_trip_id",
         "transport_records",
-        sa.Column("trip_id", sa.Uuid(), sa.ForeignKey("trips.id", ondelete="SET NULL")),
+        "trips",
+        ["trip_id"],
+        ["id"],
+        ondelete="SET NULL",
     )
     op.create_index(op.f("ix_transport_records_trip_id"), "transport_records", ["trip_id"])
 
 
 def downgrade() -> None:
     op.drop_index(op.f("ix_transport_records_trip_id"), table_name="transport_records")
-    op.drop_column("transport_records", "trip_id")
+    op.drop_constraint("fk_transport_records_trip_id", "transport_records", type_="foreignkey")
     op.drop_index(op.f("ix_trips_user_id"), table_name="trips")
     op.drop_table("trips")
