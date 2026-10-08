@@ -1,12 +1,20 @@
 import uuid
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
-from app.api.deps import get_audit_service, get_current_user, get_flight_service
+from app.api.deps import (
+    get_audit_service,
+    get_current_user,
+    get_flight_enrichment_service,
+    get_flight_service,
+)
 from app.models.audit_log import AuditAction
 from app.models.user import User
+from app.schemas.flight_lookup import FlightLookupRequest, FlightLookupResponse
 from app.schemas.transport import FlightCreate, FlightList, FlightRead, FlightUpdate
 from app.services.audit import AuditService
+from app.services.flight_enrichment import FlightEnrichmentService, ProviderNotFoundError
 from app.services.transport import FlightService, RecordNotFoundError
 
 router = APIRouter(prefix="/flights", tags=["flights"])
@@ -27,6 +35,25 @@ def list_flights(
         page_size=page_size,
     )
     return FlightList(items=items, total=total, page=page, page_size=page_size)
+
+
+@router.post("/lookup", response_model=FlightLookupResponse)
+async def lookup_flight(
+    payload: FlightLookupRequest,
+    current_user: User = Depends(get_current_user),
+    enrichment: FlightEnrichmentService = Depends(get_flight_enrichment_service),
+) -> FlightLookupResponse:
+    try:
+        return await enrichment.lookup(
+            user_id=current_user.id,
+            flight_number=payload.flight_number,
+            date=payload.date or date.today(),
+            provider=payload.provider,
+        )
+    except ProviderNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Unknown provider"
+        ) from None
 
 
 @router.post("", response_model=FlightRead, status_code=status.HTTP_201_CREATED)

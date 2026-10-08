@@ -33,13 +33,9 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint(
-            "user_id", "provider", name="uq_provider_settings_user_provider"
-        ),
+        sa.UniqueConstraint("user_id", "provider", name="uq_provider_settings_user_provider"),
     )
-    op.create_index(
-        op.f("ix_provider_settings_user_id"), "provider_settings", ["user_id"]
-    )
+    op.create_index(op.f("ix_provider_settings_user_id"), "provider_settings", ["user_id"])
 
 
 def downgrade() -> None:

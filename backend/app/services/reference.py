@@ -102,13 +102,17 @@ def search_airlines(query: str, *, limit: int = 10) -> list[dict[str, Any]]:
     return [airline for _, _, airline in scored[:limit]]
 
 
+def normalize_flight_number(number: str) -> str:
+    return re.sub(r"[\s-]", "", number).upper()
+
+
 def lookup_flight_number(number: str) -> dict[str, Any]:
     """Resolve a flight number to its operating airline by code prefix (spec #38).
 
     Only the airline is inferred locally. Route/times/aircraft require an
     external FlightProvider (a keyed or live-only source) and are out of scope.
     """
-    normalized = re.sub(r"[\s-]", "", number).upper()
+    normalized = normalize_flight_number(number)
     digital = _IATA_FLIGHT_RE.match(normalized)
     if digital:
         code = digital.group(1)

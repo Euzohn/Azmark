@@ -17,6 +17,9 @@ class Settings(BaseSettings):
 
     cors_origins: str = "http://localhost:3000"
 
+    aerodatabox_base_url: str = "https://aerodatabox.p.rapidapi.com"
+    aerodatabox_host: str = "aerodatabox.p.rapidapi.com"
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]

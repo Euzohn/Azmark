@@ -54,3 +54,15 @@ def get_audit_service(db: Session = Depends(get_db)):
     from app.services.audit import AuditService
 
     return AuditService(db)
+
+
+def get_provider_keys_service(db: Session = Depends(get_db)):
+    from app.services.provider_keys import ProviderKeyStore
+
+    return ProviderKeyStore(db)
+
+
+def get_flight_enrichment_service(db: Session = Depends(get_db)):
+    from app.services.flight_enrichment import FlightEnrichmentService
+
+    return FlightEnrichmentService(db)
