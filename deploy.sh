@@ -18,6 +18,11 @@ HEALTH_RETRIES="${HEALTH_RETRIES:-30}"
 DB_USER="${POSTGRES_USER:-azmark}"
 DB_NAME="${POSTGRES_DB:-azmark}"
 
+# 强制使用 BuildKit：层缓存跨构建复用（依赖重装+Next.js 增量编译的关键）。
+# 旧构建器的中间层会被 `docker image prune` 当 dangling 镜像清掉，导致每次全量重装。
+export DOCKER_BUILDKIT=1
+export COMPOSE_DOCKER_CLI_BUILD=1
+
 log() { printf '\033[1;34m[deploy]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[deploy]\033[0m %s\n' "$*"; }
 err() { printf '\033[1;31m[deploy]\033[0m %s\n' "$*" >&2; }

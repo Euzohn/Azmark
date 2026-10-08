@@ -1,7 +1,9 @@
+# syntax=docker/dockerfile:1.6
 FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+# npm 缓存目录持久化，lock 不变时秒级完成。
+RUN --mount=type=cache,target=/root/.npm npm ci
 
 FROM node:22-alpine AS builder
 WORKDIR /app
@@ -10,7 +12,8 @@ COPY . .
 ARG API_INTERNAL_URL=http://localhost:8000
 ENV API_INTERNAL_URL=$API_INTERNAL_URL
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+# 持久化 Next.js 构建缓存，后续构建只重编译变更部分。
+RUN --mount=type=cache,target=/app/.next/cache npm run build
 
 FROM node:22-alpine AS runner
 WORKDIR /app
