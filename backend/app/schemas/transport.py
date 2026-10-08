@@ -9,6 +9,8 @@ class FlightBase(BaseModel):
     status: str = Field(default="scheduled", max_length=20)
     departure_time: datetime | None = None
     arrival_time: datetime | None = None
+    actual_departure_time: datetime | None = None
+    actual_arrival_time: datetime | None = None
     departure_timezone: str | None = Field(default=None, max_length=64)
     arrival_timezone: str | None = Field(default=None, max_length=64)
     origin: str | None = Field(default=None, max_length=120)
@@ -20,8 +22,10 @@ class FlightBase(BaseModel):
     gate: str | None = Field(default=None, max_length=20)
     booking_reference: str | None = Field(default=None, max_length=64)
     ticket_number: str | None = Field(default=None, max_length=64)
+    purchase_credential: str | None = Field(default=None, max_length=64)
     price: Decimal | None = None
     currency: str | None = Field(default=None, max_length=3)
+    distance: Decimal | None = None
     notes: str | None = None
 
 
@@ -33,6 +37,8 @@ class FlightUpdate(BaseModel):
     status: str | None = Field(default=None, max_length=20)
     departure_time: datetime | None = None
     arrival_time: datetime | None = None
+    actual_departure_time: datetime | None = None
+    actual_arrival_time: datetime | None = None
     departure_timezone: str | None = Field(default=None, max_length=64)
     arrival_timezone: str | None = Field(default=None, max_length=64)
     origin: str | None = Field(default=None, max_length=120)
@@ -44,8 +50,10 @@ class FlightUpdate(BaseModel):
     gate: str | None = Field(default=None, max_length=20)
     booking_reference: str | None = Field(default=None, max_length=64)
     ticket_number: str | None = Field(default=None, max_length=64)
+    purchase_credential: str | None = Field(default=None, max_length=64)
     price: Decimal | None = None
     currency: str | None = Field(default=None, max_length=3)
+    distance: Decimal | None = None
     notes: str | None = None
 
 

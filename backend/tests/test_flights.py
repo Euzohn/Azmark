@@ -99,3 +99,49 @@ def test_invalid_record_id(client):
     token = register_and_login(client, "invalid")["access_token"]
     response = client.get(f"/api/v1/flights/{uuid.uuid4()}", headers=auth_headers(token))
     assert response.status_code == 404
+
+
+def test_purchase_credential_encrypted_at_rest(client, db):
+    """Passport/ID is encrypted at rest; owner sees plaintext (spec #45/#96)."""
+    from sqlalchemy import select
+
+    from app.core.crypto import decrypt_value
+    from app.models.transport_record import TransportRecord
+
+    token = register_and_login(client, "cred_user")["access_token"]
+    headers = auth_headers(token)
+
+    payload = {
+        **FLIGHT,
+        "purchase_credential": "E12345678",
+        "booking_reference": "ABCDEF",
+        "ticket_number": "160-1234567890",
+        "distance": "2580.5",
+    }
+    created = client.post("/api/v1/flights", json=payload, headers=headers).json()
+    assert created["purchase_credential"] == "E12345678"
+    assert created["booking_reference"] == "ABCDEF"
+    assert created["ticket_number"] == "160-1234567890"
+    assert created["distance"] == "2580.50"
+
+    row = db.scalar(select(TransportRecord).where(TransportRecord.id == uuid.UUID(created["id"])))
+    assert row is not None
+    for enc, plain in (
+        ("purchase_credential_enc", "E12345678"),
+        ("booking_reference_enc", "ABCDEF"),
+        ("ticket_number_enc", "160-1234567890"),
+    ):
+        assert getattr(row, enc) != plain
+        assert decrypt_value(getattr(row, enc)) == plain
+
+    updated = client.patch(
+        f"/api/v1/flights/{created['id']}",
+        json={"booking_reference": None, "purchase_credential": None},
+        headers=headers,
+    )
+    assert updated.status_code == 200
+    assert updated.json()["booking_reference"] is None
+    assert updated.json()["purchase_credential"] is None
+    db.refresh(row)
+    assert row.booking_reference_enc is None
+    assert row.purchase_credential_enc is None

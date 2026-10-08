@@ -2,6 +2,7 @@ import uuid
 
 from sqlalchemy.orm import Session
 
+from app.core.crypto import encrypt_value
 from app.models.transport_record import TransportRecord
 from app.repositories.transport import TransportRepository
 from app.schemas.transport import FlightCreate, FlightUpdate
@@ -9,6 +10,10 @@ from app.schemas.transport import FlightCreate, FlightUpdate
 
 class RecordNotFoundError(Exception):
     pass
+
+
+# PNR、票号、购票证件号属敏感字段（spec #45/#96），一律加密存储。
+_SENSITIVE_FIELDS = ("booking_reference", "ticket_number", "purchase_credential")
 
 
 class FlightService:
@@ -37,15 +42,33 @@ class FlightService:
             raise RecordNotFoundError
         return record
 
+    @staticmethod
+    def _encrypt_sensitive(data: dict) -> dict[str, str | None]:
+        """Pop sensitive plaintext fields and return {field: ciphertext} for non-empty values."""
+        return {
+            field: encrypt_value(value)
+            for field in _SENSITIVE_FIELDS
+            if (value := data.pop(field, None))
+        }
+
     def create_flight(self, *, user_id: uuid.UUID, payload: FlightCreate) -> TransportRecord:
-        record = TransportRecord(user_id=user_id, type="flight", **payload.model_dump())
+        data = payload.model_dump()
+        enc = self._encrypt_sensitive(data)
+        record = TransportRecord(user_id=user_id, type="flight", **data)
+        for field, cipher in enc.items():
+            setattr(record, f"{field}_enc", cipher)
         return self.records.create(record)
 
     def update_flight(
         self, *, user_id: uuid.UUID, record_id: uuid.UUID, payload: FlightUpdate
     ) -> TransportRecord:
         record = self.get_flight(user_id=user_id, record_id=record_id)
-        for field, value in payload.model_dump(exclude_unset=True).items():
+        data = payload.model_dump(exclude_unset=True)
+        for field in _SENSITIVE_FIELDS:
+            if field in data:
+                value = data.pop(field)
+                setattr(record, f"{field}_enc", encrypt_value(value) if value else None)
+        for field, value in data.items():
             setattr(record, field, value)
         return self.records.save(record)
 
