@@ -32,7 +32,7 @@ export default function NewFlightPage() {
         <ArrowLeft className="h-4 w-4" />
         {t("common.back")}
       </Link>
-      <h1 className="text-xl font-semibold">{t("flights.add")}</h1>
+      <h1 className="text-xl font-semibold tracking-tight">{t("flights.add")}</h1>
       <FlightForm submitting={create.isPending} onSubmit={(data) => create.mutate(data)} />
     </div>
   );

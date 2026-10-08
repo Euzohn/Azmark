@@ -82,3 +82,26 @@ export interface TokenResponse {
   access_token: string;
   token_type: string;
 }
+
+export interface Airport {
+  iata: string;
+  icao: string | null;
+  name: string;
+  city: string | null;
+  country: string | null;
+  lat: number | null;
+  lon: number | null;
+}
+
+export interface Airline {
+  iata: string;
+  icao: string | null;
+  name: string;
+  country: string | null;
+}
+
+export interface FlightNumberLookup {
+  flight_number: string;
+  airline_code: string | null;
+  airline: Airline | null;
+}

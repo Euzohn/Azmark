@@ -7,15 +7,17 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import type { Flight } from "@/lib/types";
 
 function formatDateTime(value: string | null): string {
-  if (!value) return "—";
+  if (!value) return "-";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
+  if (Number.isNaN(date.getTime())) return "-";
   return date.toLocaleString(undefined, {
     year: "numeric",
     month: "2-digit",
@@ -50,7 +52,7 @@ export default function FlightsPage() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold">{t("flights.title")}</h1>
+          <h1 className="text-xl font-semibold tracking-tight">{t("flights.title")}</h1>
           {data ? (
             <p className="text-xs text-muted-foreground">
               {t("flights.total", { count: data.total })}
@@ -76,13 +78,35 @@ export default function FlightsPage() {
       </div>
 
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+        <div className="flex flex-col gap-3">
+          {Array.from({ length: 4 }, (_, index) => (
+            <Card key={index}>
+              <CardContent className="flex items-center gap-3 p-4">
+                <Skeleton className="h-5 w-5 shrink-0 rounded-full" />
+                <div className="flex flex-1 flex-col gap-2">
+                  <Skeleton className="h-4 w-2/5" />
+                  <Skeleton className="h-3 w-3/5" />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       ) : null}
 
       {data && data.items.length === 0 ? (
-        <p className="py-10 text-center text-sm text-muted-foreground">
-          {t("flights.empty")}
-        </p>
+        <EmptyState
+          icon={Plane}
+          title={t("flights.empty")}
+          hint={t("flights.emptyHint")}
+          action={
+            <Link href="/flights/new">
+              <Button variant="outline">
+                <Plus className="h-4 w-4" />
+                {t("flights.add")}
+              </Button>
+            </Link>
+          }
+        />
       ) : null}
 
       <div className="flex flex-col gap-3">

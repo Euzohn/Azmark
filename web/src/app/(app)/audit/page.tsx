@@ -1,7 +1,10 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { History } from "lucide-react";
 
+import { EmptyState } from "@/components/ui/empty-state";
+import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
 
@@ -39,14 +42,26 @@ export default function AuditPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-xl font-semibold">{t("audit.title")}</h1>
+      <h1 className="text-xl font-semibold tracking-tight">{t("audit.title")}</h1>
 
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+        <div className="overflow-hidden rounded-xl border border-border">
+          {Array.from({ length: 6 }, (_, index) => (
+            <div key={index} className="flex items-center gap-4 border-b border-border px-4 py-3">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-4 flex-1" />
+            </div>
+          ))}
+        </div>
       ) : null}
 
       {data && data.items.length === 0 ? (
-        <p className="py-10 text-center text-sm text-muted-foreground">{t("audit.empty")}</p>
+        <EmptyState
+          icon={History}
+          title={t("audit.empty")}
+          hint={t("audit.emptyHint")}
+        />
       ) : null}
 
       {data && data.items.length > 0 ? (
@@ -63,10 +78,10 @@ export default function AuditPage() {
               {data.items.map((log) => {
                 const label = ACTION_LABELS[log.action];
                 return (
-                  <tr key={log.id} className="border-t border-border">
+                  <tr key={log.id} className="border-t border-border transition-colors hover:bg-muted/50">
                     <td className="px-4 py-2">{label ? t(label) : log.action}</td>
                     <td className="px-4 py-2 text-muted-foreground">
-                      {log.resource_type ? `${log.resource_type}` : "—"}
+                      {log.resource_type ? `${log.resource_type}` : "-"}
                     </td>
                     <td className="px-4 py-2 text-muted-foreground">
                       {formatDateTime(log.created_at)}

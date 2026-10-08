@@ -1,9 +1,12 @@
 import { useAuth } from "@/lib/auth-store";
 import type {
+  Airline,
+  Airport,
   AuditLogList,
   Flight,
   FlightInput,
   FlightList,
+  FlightNumberLookup,
   TokenResponse,
   User,
 } from "@/lib/types";
@@ -93,6 +96,13 @@ export const api = {
   updateFlight: (id: string, data: FlightInput) =>
     request<Flight>(`/flights/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteFlight: (id: string) => request<void>(`/flights/${id}`, { method: "DELETE" }),
+
+  searchAirports: (query: string) =>
+    request<Airport[]>(`/reference/airports?q=${encodeURIComponent(query)}`),
+  searchAirlines: (query: string) =>
+    request<Airline[]>(`/reference/airlines?q=${encodeURIComponent(query)}`),
+  lookupFlightNumber: (number: string) =>
+    request<FlightNumberLookup>(`/reference/flight-lookup?number=${encodeURIComponent(number)}`),
 
   listAuditLogs: (params: { page?: number; page_size?: number } = {}) => {
     const query = new URLSearchParams();

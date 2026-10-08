@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import type { Flight, FlightInput } from "@/lib/types";
 
@@ -54,6 +56,47 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
   const set = (key: keyof typeof form, value: string) =>
     setForm((prev) => ({ ...prev, [key]: value }));
 
+  const fetchAirports = useCallback(async (query: string) => {
+    const airports = await api.searchAirports(query);
+    return airports.map((airport) => ({
+      value: airport.iata,
+      label: `${airport.iata} · ${airport.name}`,
+      hint: [airport.city, airport.country].filter(Boolean).join(", ") || undefined,
+    }));
+  }, []);
+
+  const fetchAirlines = useCallback(async (query: string) => {
+    const airlines = await api.searchAirlines(query);
+    return airlines.map((airline) => ({
+      value: airline.name,
+      label: `${airline.iata} · ${airline.name}`,
+      hint: airline.country ?? undefined,
+    }));
+  }, []);
+
+  // Infer the airline from the flight-number prefix (spec #38, local-only).
+  useEffect(() => {
+    const value = form.service_number.trim();
+    if (!/^[A-Za-z0-9]{2,3}\d{1,4}$/.test(value) || form.carrier.trim()) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      api
+        .lookupFlightNumber(value)
+        .then((result) => {
+          if (cancelled || !result.airline) return;
+          const name = result.airline.name;
+          setForm((prev) => (prev.carrier.trim() ? prev : { ...prev, carrier: name }));
+        })
+        .catch(() => {
+          // Lookup is best-effort; the user can always type the airline.
+        });
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [form.service_number, form.carrier]);
+
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const data: FlightInput = {
@@ -85,24 +128,30 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
         />
       </Field>
       <Field label={t("flights.carrier")}>
-        <Input
+        <Combobox
           value={form.carrier}
-          onChange={(e) => set("carrier", e.target.value)}
-          placeholder="Cathay Pacific"
+          onChange={(value) => set("carrier", value)}
+          fetchOptions={fetchAirlines}
+          placeholder={t("flights.airlineSearch")}
+          emptyText={t("flights.noResults")}
         />
       </Field>
       <Field label={t("flights.origin")}>
-        <Input
+        <Combobox
           value={form.origin}
-          onChange={(e) => set("origin", e.target.value)}
-          placeholder="HKG"
+          onChange={(value) => set("origin", value)}
+          fetchOptions={fetchAirports}
+          placeholder={t("flights.airportSearch")}
+          emptyText={t("flights.noResults")}
         />
       </Field>
       <Field label={t("flights.destination")}>
-        <Input
+        <Combobox
           value={form.destination}
-          onChange={(e) => set("destination", e.target.value)}
-          placeholder="SIN"
+          onChange={(value) => set("destination", value)}
+          fetchOptions={fetchAirports}
+          placeholder={t("flights.airportSearch")}
+          emptyText={t("flights.noResults")}
         />
       </Field>
       <Field label={t("flights.departureTime")}>

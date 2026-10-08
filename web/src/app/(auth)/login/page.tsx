@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { BrandMark } from "@/components/brand";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
@@ -39,7 +40,8 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-sm flex-col justify-center p-6">
+    <div className="mx-auto flex min-h-[100dvh] w-full max-w-sm flex-col justify-center p-6">
+      <BrandMark />
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">{t("auth.loginTitle")}</CardTitle>

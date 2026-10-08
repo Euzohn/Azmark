@@ -65,7 +65,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col md:flex-row">
       <aside className="hidden md:flex md:w-56 md:flex-col md:gap-1 md:border-r md:border-border md:p-4">
         <div className="mb-6 px-2">
-          <div className="text-lg font-semibold">{t("app.name")}</div>
+          <div className="text-lg font-semibold tracking-tight">{t("app.name")}</div>
           <div className="text-xs text-muted-foreground">{t("app.tagline")}</div>
         </div>
         <nav className="flex flex-col gap-1">
