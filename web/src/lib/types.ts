@@ -25,8 +25,10 @@ export interface Flight {
   carrier: string | null;
   service_number: string | null;
   seat: string | null;
-  terminal: string | null;
-  gate: string | null;
+  departure_terminal: string | null;
+  departure_gate: string | null;
+  arrival_terminal: string | null;
+  arrival_gate: string | null;
   booking_reference: string | null;
   ticket_number: string | null;
   purchase_credential: string | null;
@@ -52,8 +54,10 @@ export interface FlightInput {
   carrier?: string | null;
   service_number?: string | null;
   seat?: string | null;
-  terminal?: string | null;
-  gate?: string | null;
+  departure_terminal?: string | null;
+  departure_gate?: string | null;
+  arrival_terminal?: string | null;
+  arrival_gate?: string | null;
   booking_reference?: string | null;
   ticket_number?: string | null;
   purchase_credential?: string | null;
@@ -61,10 +65,48 @@ export interface FlightInput {
   currency?: string | null;
   distance?: string | null;
   notes?: string | null;
+  trip_id?: string | null;
 }
 
 export interface FlightList {
   items: Flight[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface Trip {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  cover_image: string | null;
+  origin: string | null;
+  destination: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TripInput {
+  name: string;
+  description?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  cover_image?: string | null;
+  origin?: string | null;
+  destination?: string | null;
+  status?: string;
+}
+
+export interface TripDetail extends Trip {
+  flights: Flight[];
+}
+
+export interface TripList {
+  items: Trip[];
   total: number;
   page: number;
   page_size: number;
@@ -95,7 +137,9 @@ export interface Airport {
   iata: string;
   icao: string | null;
   name: string;
+  name_zh: string | null;
   city: string | null;
+  city_zh: string | null;
   country: string | null;
   lat: number | null;
   lon: number | null;
@@ -105,6 +149,7 @@ export interface Airline {
   iata: string;
   icao: string | null;
   name: string;
+  name_zh: string | null;
   country: string | null;
 }
 
@@ -118,14 +163,18 @@ export interface FlightLookup {
   flight_number: string;
   airline_code: string | null;
   airline_name: string | null;
+  airline_name_zh: string | null;
   origin_iata: string | null;
   destination_iata: string | null;
   origin_name: string | null;
   destination_name: string | null;
   departure_time: string | null;
   arrival_time: string | null;
+  actual_departure_time: string | null;
+  actual_arrival_time: string | null;
   aircraft: string | null;
   status: string | null;
+  distance: number | null;
   source: string | null;
 }
 
@@ -136,4 +185,24 @@ export interface ProviderKeyStatus {
 
 export interface ProviderKeysRead {
   providers: ProviderKeyStatus[];
+}
+
+export interface AiSettingsRead {
+  provider: string;
+  model: string;
+  base_url: string | null;
+  configured: boolean;
+  temperature: number | null;
+  context_limit: number | null;
+  web_search: boolean;
+}
+
+export interface AiSettingsWrite {
+  provider: string;
+  model: string;
+  base_url?: string | null;
+  api_key?: string | null;
+  temperature?: number | null;
+  context_limit?: number | null;
+  web_search?: boolean;
 }

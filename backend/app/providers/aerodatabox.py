@@ -3,6 +3,12 @@
 Endpoint: GET {base}/flights/number/{number}/{date}. Requires a per-user API
 key stored encrypted at rest (spec #35, #45). Auth headers are sent only to
 this provider, never logged.
+
+Response (OpenAPI v1.15): departure/arrival are FlightAirportMovementContract
+with DateTimeContract objects {local, utc}: `scheduledTime` (planned),
+`revisedTime` (actual/estimated at gate), `runwayTime` (actual on runway),
+`predictedTime` (historical estimate). `greatCircleDistance.km` is the
+route distance. `aircraft.model` is a plain string.
 """
 
 from datetime import date, datetime
@@ -13,11 +19,15 @@ from app.core.config import settings
 from app.providers.base import FlightLookupResult, FlightProvider
 
 
-def _parse_time(value: str | None) -> datetime | None:
-    if not value:
+def _parse_datetime(value: object) -> datetime | None:
+    """AeroDataBox times are {local, utc}; prefer local (keeps zone offset)."""
+    if not isinstance(value, dict):
+        return None
+    raw = value.get("local") or value.get("utc")
+    if not raw:
         return None
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
     except ValueError:
         return None
 
@@ -75,7 +85,7 @@ class AeroDataBoxProvider(FlightProvider):
         dep_airport = departure.get("airport") or {}
         arr_airport = arrival.get("airport") or {}
         aircraft = flight.get("aircraft") or {}
-        model = aircraft.get("model") or {}
+        distance = flight.get("greatCircleDistance") or {}
         return FlightLookupResult(
             flight_number=flight_number,
             airline_code=airline.get("iata") or airline.get("icao"),
@@ -84,9 +94,16 @@ class AeroDataBoxProvider(FlightProvider):
             destination_iata=arr_airport.get("iata") or arr_airport.get("icao"),
             origin_name=dep_airport.get("name"),
             destination_name=arr_airport.get("name"),
-            departure_time=_parse_time(departure.get("time")),
-            arrival_time=_parse_time(arrival.get("time")),
-            aircraft=model.get("text") or model.get("code"),
+            departure_time=_parse_datetime(departure.get("scheduledTime")),
+            arrival_time=_parse_datetime(arrival.get("scheduledTime")),
+            actual_departure_time=_parse_datetime(
+                departure.get("runwayTime") or departure.get("revisedTime")
+            ),
+            actual_arrival_time=_parse_datetime(
+                arrival.get("runwayTime") or arrival.get("revisedTime")
+            ),
+            aircraft=aircraft.get("model") or aircraft.get("reg"),
             status=flight.get("status"),
+            distance=distance.get("km"),
             provider=self.name,
         )

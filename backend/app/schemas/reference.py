@@ -7,7 +7,9 @@ class AirportRead(BaseModel):
     iata: str
     icao: str | None = None
     name: str
+    name_zh: str | None = None
     city: str | None = None
+    city_zh: str | None = None
     country: str | None = None
     lat: float | None = None
     lon: float | None = None
@@ -19,6 +21,7 @@ class AirlineRead(BaseModel):
     iata: str
     icao: str | None = None
     name: str
+    name_zh: str | None = None
     country: str | None = None
 
 

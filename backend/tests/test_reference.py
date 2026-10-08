@@ -28,7 +28,21 @@ def test_search_airlines(client):
         "/api/v1/reference/airlines", params={"q": "cathay"}, headers=auth_headers(token)
     )
     assert response.status_code == 200
-    assert response.json()[0]["iata"] == "CX"
+    body = response.json()[0]
+    assert body["iata"] == "CX"
+    assert body["name"] == "Cathay Pacific"
+    assert body["name_zh"] == "国泰航空"
+
+
+def test_search_airports_include_zh_names(client):
+    token = register_and_login(client, "ref_airport_zh")["access_token"]
+    response = client.get(
+        "/api/v1/reference/airports", params={"q": "HKG"}, headers=auth_headers(token)
+    )
+    assert response.status_code == 200
+    body = response.json()[0]
+    assert body["name_zh"] == "香港国际机场"
+    assert body["city_zh"] == "香港"
 
 
 def test_flight_number_lookup(client):

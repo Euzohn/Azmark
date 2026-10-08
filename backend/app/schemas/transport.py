@@ -18,8 +18,10 @@ class FlightBase(BaseModel):
     carrier: str | None = Field(default=None, max_length=120)
     service_number: str | None = Field(default=None, max_length=40)
     seat: str | None = Field(default=None, max_length=10)
-    terminal: str | None = Field(default=None, max_length=20)
-    gate: str | None = Field(default=None, max_length=20)
+    departure_terminal: str | None = Field(default=None, max_length=20)
+    departure_gate: str | None = Field(default=None, max_length=20)
+    arrival_terminal: str | None = Field(default=None, max_length=20)
+    arrival_gate: str | None = Field(default=None, max_length=20)
     booking_reference: str | None = Field(default=None, max_length=64)
     ticket_number: str | None = Field(default=None, max_length=64)
     purchase_credential: str | None = Field(default=None, max_length=64)
@@ -27,10 +29,12 @@ class FlightBase(BaseModel):
     currency: str | None = Field(default=None, max_length=3)
     distance: Decimal | None = None
     notes: str | None = None
+    trip_id: uuid.UUID | None = None
 
 
 class FlightCreate(FlightBase):
-    pass
+    origin: str = Field(min_length=1, max_length=120)
+    destination: str = Field(min_length=1, max_length=120)
 
 
 class FlightUpdate(BaseModel):
@@ -46,8 +50,10 @@ class FlightUpdate(BaseModel):
     carrier: str | None = Field(default=None, max_length=120)
     service_number: str | None = Field(default=None, max_length=40)
     seat: str | None = Field(default=None, max_length=10)
-    terminal: str | None = Field(default=None, max_length=20)
-    gate: str | None = Field(default=None, max_length=20)
+    departure_terminal: str | None = Field(default=None, max_length=20)
+    departure_gate: str | None = Field(default=None, max_length=20)
+    arrival_terminal: str | None = Field(default=None, max_length=20)
+    arrival_gate: str | None = Field(default=None, max_length=20)
     booking_reference: str | None = Field(default=None, max_length=64)
     ticket_number: str | None = Field(default=None, max_length=64)
     purchase_credential: str | None = Field(default=None, max_length=64)
@@ -55,6 +61,7 @@ class FlightUpdate(BaseModel):
     currency: str | None = Field(default=None, max_length=3)
     distance: Decimal | None = None
     notes: str | None = None
+    trip_id: uuid.UUID | None = None
 
 
 class FlightRead(FlightBase):

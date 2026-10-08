@@ -119,6 +119,59 @@ export default function SettingsPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["provider-keys"] }),
   });
 
+  const { data: aiSettings } = useQuery({
+    queryKey: ["ai-settings"],
+    queryFn: api.getAiSettings,
+  });
+
+  const [aiForm, setAiForm] = useState({
+    provider: "",
+    model: "",
+    base_url: "",
+    api_key: "",
+    temperature: "",
+    context_limit: "",
+  });
+  const [aiSaved, setAiSaved] = useState(false);
+
+  const saveAi = useMutation({
+    mutationFn: (data: {
+      provider: string;
+      model: string;
+      base_url: string;
+      api_key: string;
+      temperature: string;
+      context_limit: string;
+    }) =>
+      api.setAiSettings({
+        provider: data.provider,
+        model: data.model,
+        base_url: data.base_url || null,
+        api_key: data.api_key || null,
+        temperature: data.temperature ? Number(data.temperature) : null,
+        context_limit: data.context_limit ? Number(data.context_limit) : null,
+      }),
+    onSuccess: () => {
+      setAiSaved(true);
+      setAiForm((prev) => ({ ...prev, api_key: "" }));
+      queryClient.invalidateQueries({ queryKey: ["ai-settings"] });
+    },
+  });
+
+  const removeAi = useMutation({
+    mutationFn: () => api.deleteAiSettings(),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["ai-settings"] }),
+  });
+
+  const AI_PROVIDERS = [
+    { value: "openai", label: "OpenAI" },
+    { value: "anthropic", label: "Anthropic" },
+    { value: "google", label: "Google" },
+    { value: "openai_compatible", label: "OpenAI Compatible" },
+    { value: "ollama", label: "Ollama" },
+    { value: "custom", label: "Custom" },
+  ];
+
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold">{t("settings.title")}</h1>
@@ -256,6 +309,114 @@ export default function SettingsPage() {
               ) : null}
             </div>
           ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("settings.ai")}</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <p className="text-xs text-muted-foreground">{t("settings.aiHint")}</p>
+          <form
+            className="grid gap-4 md:grid-cols-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setAiSaved(false);
+              if (!aiForm.provider || !aiForm.model) return;
+              saveAi.mutate(aiForm);
+            }}
+          >
+            <div>
+              <Label className="mb-1.5 block">{t("settings.aiProvider")}</Label>
+              <Select
+                value={aiForm.provider || aiSettings?.provider || ""}
+                onChange={(e) => setAiForm({ ...aiForm, provider: e.target.value })}
+              >
+                <option value="" disabled>
+                  —
+                </option>
+                {AI_PROVIDERS.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <Label className="mb-1.5 block">{t("settings.aiModel")}</Label>
+              <Input
+                value={aiForm.model || aiSettings?.model || ""}
+                onChange={(e) => setAiForm({ ...aiForm, model: e.target.value })}
+                placeholder="gpt-4o-mini / llama3 / claude-3-5-sonnet"
+              />
+            </div>
+            <div>
+              <Label className="mb-1.5 block">{t("settings.aiBaseUrl")}</Label>
+              <Input
+                value={aiForm.base_url || aiSettings?.base_url || ""}
+                onChange={(e) => setAiForm({ ...aiForm, base_url: e.target.value })}
+                placeholder="https://api.openai.com/v1"
+              />
+            </div>
+            <div>
+              <Label className="mb-1.5 block">{t("settings.aiApiKey")}</Label>
+              <Input
+                type="password"
+                autoComplete="off"
+                value={aiForm.api_key}
+                onChange={(e) => setAiForm({ ...aiForm, api_key: e.target.value })}
+                placeholder={aiSettings?.configured ? t("settings.aiKeyKeep") : ""}
+              />
+            </div>
+            <div>
+              <Label className="mb-1.5 block">{t("settings.aiTemperature")}</Label>
+              <Input
+                type="number"
+                step="0.1"
+                min="0"
+                max="2"
+                value={aiForm.temperature}
+                onChange={(e) => setAiForm({ ...aiForm, temperature: e.target.value })}
+                placeholder="0.3"
+              />
+            </div>
+            <div>
+              <Label className="mb-1.5 block">{t("settings.aiContextLimit")}</Label>
+              <Input
+                type="number"
+                step="1000"
+                min="1000"
+                value={aiForm.context_limit}
+                onChange={(e) => setAiForm({ ...aiForm, context_limit: e.target.value })}
+                placeholder="8000"
+              />
+            </div>
+            <div className="flex items-center gap-3 md:col-span-2">
+              <Button type="submit" disabled={saveAi.isPending}>
+                {t("common.save")}
+              </Button>
+              {aiSettings?.configured ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (window.confirm(t("common.delete"))) removeAi.mutate();
+                  }}
+                  disabled={removeAi.isPending}
+                >
+                  {t("common.delete")}
+                </Button>
+              ) : null}
+              {aiSettings?.configured ? (
+                <span className="text-sm text-primary">{t("settings.aiConfigured")}</span>
+              ) : null}
+              {aiSaved ? (
+                <span className="text-sm text-primary">{t("settings.saved")}</span>
+              ) : null}
+            </div>
+          </form>
         </CardContent>
       </Card>
 

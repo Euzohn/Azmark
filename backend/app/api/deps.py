@@ -62,7 +62,19 @@ def get_provider_keys_service(db: Session = Depends(get_db)):
     return ProviderKeyStore(db)
 
 
+def get_ai_settings_service(db: Session = Depends(get_db)):
+    from app.services.ai_settings import AiSettingsService
+
+    return AiSettingsService(db)
+
+
 def get_flight_enrichment_service(db: Session = Depends(get_db)):
     from app.services.flight_enrichment import FlightEnrichmentService
 
     return FlightEnrichmentService(db)
+
+
+def get_trip_service(db: Session = Depends(get_db)):
+    from app.services.trip import TripService
+
+    return TripService(db)

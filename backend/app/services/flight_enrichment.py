@@ -28,6 +28,7 @@ def _merge(local: dict, remote: FlightLookupResult | None) -> FlightLookupRespon
         flight_number=local["flight_number"],
         airline_code=local.get("airline_code"),
         airline_name=airline.get("name") if airline else None,
+        airline_name_zh=airline.get("name_zh") if airline else None,
         source="local",
     )
     if remote is not None:
@@ -40,8 +41,11 @@ def _merge(local: dict, remote: FlightLookupResult | None) -> FlightLookupRespon
         result.destination_name = remote.destination_name
         result.departure_time = remote.departure_time
         result.arrival_time = remote.arrival_time
+        result.actual_departure_time = remote.actual_departure_time
+        result.actual_arrival_time = remote.actual_arrival_time
         result.aircraft = remote.aircraft
         result.status = remote.status
+        result.distance = remote.distance
     return result
 
 

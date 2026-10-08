@@ -39,8 +39,10 @@ class TransportRecord(Base):
 
     # Flight-specific
     seat: Mapped[str | None] = mapped_column(String(10))
-    terminal: Mapped[str | None] = mapped_column(String(20))
-    gate: Mapped[str | None] = mapped_column(String(20))
+    departure_terminal: Mapped[str | None] = mapped_column(String(20))
+    departure_gate: Mapped[str | None] = mapped_column(String(20))
+    arrival_terminal: Mapped[str | None] = mapped_column(String(20))
+    arrival_gate: Mapped[str | None] = mapped_column(String(20))
 
     # PNR 预订编码与客票号属敏感字段（spec #45/#96），加密存储。
     booking_reference_enc: Mapped[str | None] = mapped_column(Text)
@@ -57,7 +59,9 @@ class TransportRecord(Base):
 
     notes: Mapped[str | None] = mapped_column(Text)
 
-    trip_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    trip_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("trips.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     @property
     def booking_reference(self) -> str | None:

@@ -14,12 +14,16 @@ class FlightLookupResponse(BaseModel):
     flight_number: str
     airline_code: str | None = None
     airline_name: str | None = None
+    airline_name_zh: str | None = None
     origin_iata: str | None = None
     destination_iata: str | None = None
     origin_name: str | None = None
     destination_name: str | None = None
     departure_time: datetime | None = None
     arrival_time: datetime | None = None
+    actual_departure_time: datetime | None = None
+    actual_arrival_time: datetime | None = None
     aircraft: str | None = None
     status: str | None = None
+    distance: float | None = None
     source: str | None = None

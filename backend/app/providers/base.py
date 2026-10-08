@@ -23,8 +23,11 @@ class FlightLookupResult:
     destination_name: str | None = None
     departure_time: datetime | None = None
     arrival_time: datetime | None = None
+    actual_departure_time: datetime | None = None
+    actual_arrival_time: datetime | None = None
     aircraft: str | None = None
     status: str | None = None
+    distance: float | None = None
     provider: str = ""
 
 

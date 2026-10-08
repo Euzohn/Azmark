@@ -10,8 +10,15 @@ SAMPLE_FLIGHT = {
     "flights": [
         {
             "number": "659",
-            "status": "scheduled",
+            "status": "Arrived",
             "flight": {"iata": "CX659", "icao": "CPA659", "number": "659"},
+            "greatCircleDistance": {
+                "km": 2556.0,
+                "mile": 1588.2,
+                "nm": 1380.1,
+                "meter": 2556000,
+                "feet": 8385827,
+            },
             "departure": {
                 "airport": {
                     "iata": "HKG",
@@ -20,7 +27,15 @@ SAMPLE_FLIGHT = {
                     "city": "Hong Kong",
                     "country": "China",
                 },
-                "time": "2026-10-09T09:00:00+08:00",
+                "scheduledTime": {
+                    "local": "2026-10-09T09:00:00+08:00",
+                    "utc": "2026-10-09T01:00:00Z",
+                },
+                "revisedTime": {
+                    "local": "2026-10-09T09:05:00+08:00",
+                    "utc": "2026-10-09T01:05:00Z",
+                },
+                "runwayTime": {"local": "2026-10-09T09:10:00+08:00", "utc": "2026-10-09T01:10:00Z"},
                 "terminal": "1",
                 "timezone": "Asia/Hong_Kong",
             },
@@ -32,15 +47,19 @@ SAMPLE_FLIGHT = {
                     "city": "Singapore",
                     "country": "Singapore",
                 },
-                "time": "2026-10-09T12:15:00+08:00",
+                "scheduledTime": {
+                    "local": "2026-10-09T12:15:00+08:00",
+                    "utc": "2026-10-09T04:15:00Z",
+                },
+                "revisedTime": {
+                    "local": "2026-10-09T12:20:00+08:00",
+                    "utc": "2026-10-09T04:20:00Z",
+                },
+                "runwayTime": {"local": "2026-10-09T12:25:00+08:00", "utc": "2026-10-09T04:25:00Z"},
                 "terminal": "4",
                 "timezone": "Asia/Singapore",
             },
-            "aircraft": {
-                "reg": "B-KPM",
-                "modeS": "780A13",
-                "model": {"code": "77W", "text": "Boeing 777-300ER"},
-            },
+            "aircraft": {"reg": "B-KPM", "modeS": "780A13", "model": "Boeing 777-300ER"},
             "airline": {"name": "Cathay Pacific", "iata": "CX", "icao": "CPA"},
         }
     ]
@@ -73,8 +92,11 @@ def test_parses_flight_and_headers():
     assert result.destination_name == "Singapore Changi Airport"
     assert result.departure_time.isoformat() == "2026-10-09T09:00:00+08:00"
     assert result.arrival_time.isoformat() == "2026-10-09T12:15:00+08:00"
+    assert result.actual_departure_time.isoformat() == "2026-10-09T09:10:00+08:00"
+    assert result.actual_arrival_time.isoformat() == "2026-10-09T12:25:00+08:00"
     assert result.aircraft == "Boeing 777-300ER"
-    assert result.status == "scheduled"
+    assert result.status == "Arrived"
+    assert result.distance == 2556.0
     assert result.provider == "aerodatabox"
     assert "/flights/number/CX659/2026-10-09" in captured["url"]
     assert captured["headers"]["X-RapidAPI-Key"] == "test-key"

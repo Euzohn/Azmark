@@ -1,10 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 import app.providers as providers
-from app.api.deps import get_audit_service, get_current_user, get_provider_keys_service
+from app.api.deps import (
+    get_ai_settings_service,
+    get_audit_service,
+    get_current_user,
+    get_provider_keys_service,
+)
 from app.models.audit_log import AuditAction
 from app.models.user import User
+from app.schemas.ai_settings import AiSettingsRead, AiSettingsWrite
 from app.schemas.settings import ProviderKeysRead, ProviderKeyStatus, ProviderKeyWrite
+from app.services.ai_settings import AiSettingsService
 from app.services.audit import AuditService
 from app.services.provider_keys import ProviderKeyStore
 
@@ -66,5 +73,49 @@ def delete_provider_key(
         user_id=current_user.id,
         resource_type="provider_key",
         resource_id=provider,
+        request=request,
+    )
+
+
+@router.get("/ai", response_model=AiSettingsRead)
+def get_ai_settings(
+    current_user: User = Depends(get_current_user),
+    service: AiSettingsService = Depends(get_ai_settings_service),
+) -> AiSettingsRead:
+    return service.get(user_id=current_user.id)
+
+
+@router.put("/ai", response_model=AiSettingsRead)
+def upsert_ai_settings(
+    payload: AiSettingsWrite,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    service: AiSettingsService = Depends(get_ai_settings_service),
+    audit: AuditService = Depends(get_audit_service),
+) -> AiSettingsRead:
+    result = service.upsert(user_id=current_user.id, payload=payload)
+    audit.log(
+        action=AuditAction.UPDATE_RECORD,
+        user_id=current_user.id,
+        resource_type="ai_settings",
+        resource_id="default",
+        request=request,
+    )
+    return result
+
+
+@router.delete("/ai", status_code=status.HTTP_204_NO_CONTENT)
+def delete_ai_settings(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    service: AiSettingsService = Depends(get_ai_settings_service),
+    audit: AuditService = Depends(get_audit_service),
+) -> None:
+    service.delete(user_id=current_user.id)
+    audit.log(
+        action=AuditAction.DELETE_RECORD,
+        user_id=current_user.id,
+        resource_type="ai_settings",
+        resource_id="default",
         request=request,
     )

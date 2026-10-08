@@ -1,6 +1,6 @@
 "use client";
 
-import { History, LogOut, Plane, Settings, type LucideIcon } from "lucide-react";
+import { Backpack, History, LogOut, Plane, Settings, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -20,6 +20,7 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
+  { href: "/trips", key: "nav.trips", icon: Backpack },
   { href: "/flights", key: "nav.flights", icon: Plane },
   { href: "/audit", key: "nav.audit", icon: History },
   { href: "/settings", key: "nav.settings", icon: Settings },

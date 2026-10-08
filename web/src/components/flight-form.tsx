@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 
 import { Loader2, Wand2 } from "lucide-react";
@@ -38,7 +39,7 @@ interface FlightFormProps {
 }
 
 export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [form, setForm] = useState({
     service_number: initial?.service_number ?? "",
     carrier: initial?.carrier ?? "",
@@ -49,8 +50,10 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
     actual_departure_time: toLocalInput(initial?.actual_departure_time),
     actual_arrival_time: toLocalInput(initial?.actual_arrival_time),
     seat: initial?.seat ?? "",
-    terminal: initial?.terminal ?? "",
-    gate: initial?.gate ?? "",
+    departure_terminal: initial?.departure_terminal ?? "",
+    departure_gate: initial?.departure_gate ?? "",
+    arrival_terminal: initial?.arrival_terminal ?? "",
+    arrival_gate: initial?.arrival_gate ?? "",
     status: initial?.status ?? "scheduled",
     price: initial?.price ?? "",
     currency: initial?.currency ?? "CNY",
@@ -59,6 +62,12 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
     booking_reference: initial?.booking_reference ?? "",
     purchase_credential: initial?.purchase_credential ?? "",
     notes: initial?.notes ?? "",
+    trip_id: initial?.trip_id ?? "",
+  });
+
+  const { data: trips } = useQuery({
+    queryKey: ["trips"],
+    queryFn: () => api.listTrips(),
   });
 
   const [lookupStatus, setLookupStatus] = useState<"idle" | "running" | "ok" | "local" | "error">(
@@ -69,23 +78,36 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
   const set = (key: keyof typeof form, value: string) =>
     setForm((prev) => ({ ...prev, [key]: value }));
 
-  const fetchAirports = useCallback(async (query: string) => {
-    const airports = await api.searchAirports(query);
-    return airports.map((airport) => ({
-      value: airport.iata,
-      label: `${airport.iata} · ${airport.name}`,
-      hint: [airport.city, airport.country].filter(Boolean).join(", ") || undefined,
-    }));
-  }, []);
+  const fetchAirports = useCallback(
+    async (query: string) => {
+      const airports = await api.searchAirports(query);
+      return airports.map((airport) => {
+        const name = locale === "zh-CN" ? (airport.name_zh ?? airport.name) : airport.name;
+        const city = locale === "zh-CN" ? (airport.city_zh ?? airport.city) : airport.city;
+        return {
+          value: airport.iata,
+          label: `${airport.iata} · ${name}`,
+          hint: [city, airport.country].filter(Boolean).join(", ") || undefined,
+        };
+      });
+    },
+    [locale],
+  );
 
-  const fetchAirlines = useCallback(async (query: string) => {
-    const airlines = await api.searchAirlines(query);
-    return airlines.map((airline) => ({
-      value: airline.name,
-      label: `${airline.iata} · ${airline.name}`,
-      hint: airline.country ?? undefined,
-    }));
-  }, []);
+  const fetchAirlines = useCallback(
+    async (query: string) => {
+      const airlines = await api.searchAirlines(query);
+      return airlines.map((airline) => {
+        const name = locale === "zh-CN" ? (airline.name_zh ?? airline.name) : airline.name;
+        return {
+          value: name,
+          label: `${airline.iata} · ${name}`,
+          hint: airline.country ?? undefined,
+        };
+      });
+    },
+    [locale],
+  );
 
   // Infer the airline from the flight-number prefix (spec #38, local-only).
   useEffect(() => {
@@ -97,7 +119,10 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
         .lookupFlightNumber(value)
         .then((result) => {
           if (cancelled || !result.airline) return;
-          const name = result.airline.name;
+          const name =
+            locale === "zh-CN"
+              ? result.airline.name_zh ?? result.airline.name
+              : result.airline.name;
           setForm((prev) => (prev.carrier.trim() ? prev : { ...prev, carrier: name }));
         })
         .catch(() => {
@@ -108,7 +133,7 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [form.service_number, form.carrier]);
+  }, [form.service_number, form.carrier, locale]);
 
   const runLookup = async () => {
     const number = form.service_number.trim();
@@ -119,7 +144,11 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
       const result = await api.lookupFlight({ flight_number: number, date: datePart });
       setForm((prev) => {
         const next = { ...prev };
-        if (result.airline_name && !next.carrier.trim()) next.carrier = result.airline_name;
+        const airlineName =
+          locale === "zh-CN"
+            ? (result.airline_name_zh ?? result.airline_name ?? "")
+            : result.airline_name ?? "";
+        if (airlineName && !next.carrier.trim()) next.carrier = airlineName;
         if (result.origin_iata && !next.origin.trim()) next.origin = result.origin_iata;
         if (result.destination_iata && !next.destination.trim())
           next.destination = result.destination_iata;
@@ -127,6 +156,11 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
           next.departure_time = toLocalInput(result.departure_time);
         if (result.arrival_time && !next.arrival_time)
           next.arrival_time = toLocalInput(result.arrival_time);
+        if (result.actual_departure_time && !next.actual_departure_time)
+          next.actual_departure_time = toLocalInput(result.actual_departure_time);
+        if (result.actual_arrival_time && !next.actual_arrival_time)
+          next.actual_arrival_time = toLocalInput(result.actual_arrival_time);
+        if (result.distance && !next.distance) next.distance = String(result.distance);
         return next;
       });
       if (result.source && result.source !== "local") {
@@ -140,8 +174,15 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
     }
   };
 
+  const [formError, setFormError] = useState<string | null>(null);
+
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setFormError(null);
+    if (!form.origin.trim() || !form.destination.trim()) {
+      setFormError(t("flights.requiredRoute"));
+      return;
+    }
     const data: FlightInput = {
       service_number: form.service_number || null,
       carrier: form.carrier || null,
@@ -152,8 +193,10 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
       actual_departure_time: fromLocalInput(form.actual_departure_time),
       actual_arrival_time: fromLocalInput(form.actual_arrival_time),
       seat: form.seat || null,
-      terminal: form.terminal || null,
-      gate: form.gate || null,
+      departure_terminal: form.departure_terminal || null,
+      departure_gate: form.departure_gate || null,
+      arrival_terminal: form.arrival_terminal || null,
+      arrival_gate: form.arrival_gate || null,
       status: form.status,
       price: form.price || null,
       currency: form.currency || null,
@@ -162,6 +205,7 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
       booking_reference: form.booking_reference || null,
       purchase_credential: form.purchase_credential || null,
       notes: form.notes || null,
+      trip_id: form.trip_id || null,
     };
     void onSubmit(data);
   };
@@ -222,7 +266,7 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
           emptyText={t("flights.noResults")}
         />
       </Field>
-      <Field label={t("flights.origin")}>
+      <Field label={t("flights.origin")} required>
         <Combobox
           value={form.origin}
           onChange={(value) => set("origin", value)}
@@ -231,7 +275,7 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
           emptyText={t("flights.noResults")}
         />
       </Field>
-      <Field label={t("flights.destination")}>
+      <Field label={t("flights.destination")} required>
         <Combobox
           value={form.destination}
           onChange={(value) => set("destination", value)}
@@ -278,11 +322,46 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
           <option value="cancelled">{t("flights.status.cancelled")}</option>
         </Select>
       </Field>
-      <Field label={t("flights.terminal")}>
-        <Input value={form.terminal} onChange={(e) => set("terminal", e.target.value)} />
+      <Field label={t("flights.trip")}>
+        <Select
+          value={form.trip_id}
+          onChange={(e) => set("trip_id", e.target.value)}
+        >
+          <option value="">{t("flights.tripNone")}</option>
+          {trips?.items.map((trip) => (
+            <option key={trip.id} value={trip.id}>
+              {trip.name || `${trip.origin ?? ""} → ${trip.destination ?? ""}`}
+            </option>
+          ))}
+        </Select>
       </Field>
-      <Field label={t("flights.gate")}>
-        <Input value={form.gate} onChange={(e) => set("gate", e.target.value)} />
+      <Field label={t("flights.departureTerminal")}>
+        <Input
+          value={form.departure_terminal}
+          onChange={(e) => set("departure_terminal", e.target.value)}
+          placeholder="T1"
+        />
+      </Field>
+      <Field label={t("flights.departureGate")}>
+        <Input
+          value={form.departure_gate}
+          onChange={(e) => set("departure_gate", e.target.value)}
+          placeholder="23"
+        />
+      </Field>
+      <Field label={t("flights.arrivalTerminal")}>
+        <Input
+          value={form.arrival_terminal}
+          onChange={(e) => set("arrival_terminal", e.target.value)}
+          placeholder="T4"
+        />
+      </Field>
+      <Field label={t("flights.arrivalGate")}>
+        <Input
+          value={form.arrival_gate}
+          onChange={(e) => set("arrival_gate", e.target.value)}
+          placeholder="B12"
+        />
       </Field>
       <Field label={t("flights.price")}>
         <Input
@@ -337,10 +416,11 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
           onChange={(e) => set("notes", e.target.value)}
         />
       </Field>
-      <div className="md:col-span-2">
+      <div className="flex items-center gap-3 md:col-span-2">
         <Button type="submit" disabled={submitting}>
           {t("common.save")}
         </Button>
+        {formError ? <span className="text-sm text-danger">{formError}</span> : null}
       </div>
     </form>
   );
@@ -348,16 +428,25 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
 
 function Field({
   label,
+  required,
   className,
   children,
 }: {
   label: string;
+  required?: boolean;
   className?: string;
   children: React.ReactNode;
 }) {
   return (
     <div className={className}>
-      <Label className="mb-1.5 block">{label}</Label>
+      <Label className="mb-1.5 block">
+        {label}
+        {required ? (
+          <span className="text-danger" aria-hidden="true">
+            *
+          </span>
+        ) : null}
+      </Label>
       {children}
     </div>
   );

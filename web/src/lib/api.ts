@@ -1,5 +1,7 @@
 import { useAuth } from "@/lib/auth-store";
 import type {
+  AiSettingsRead,
+  AiSettingsWrite,
   Airline,
   Airport,
   AuditLogList,
@@ -11,6 +13,10 @@ import type {
   ProviderKeysRead,
   ProviderKeyStatus,
   TokenResponse,
+  Trip,
+  TripDetail,
+  TripInput,
+  TripList,
   User,
 } from "@/lib/types";
 
@@ -100,6 +106,20 @@ export const api = {
     request<Flight>(`/flights/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteFlight: (id: string) => request<void>(`/flights/${id}`, { method: "DELETE" }),
 
+  listTrips: (params: { page?: number; page_size?: number } = {}) => {
+    const query = new URLSearchParams();
+    if (params.page) query.set("page", String(params.page));
+    if (params.page_size) query.set("page_size", String(params.page_size));
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return request<TripList>(`/trips${suffix}`);
+  },
+  createTrip: (data: TripInput) =>
+    request<Trip>("/trips", { method: "POST", body: JSON.stringify(data) }),
+  getTrip: (id: string) => request<TripDetail>(`/trips/${id}`),
+  updateTrip: (id: string, data: Partial<TripInput>) =>
+    request<Trip>(`/trips/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteTrip: (id: string) => request<void>(`/trips/${id}`, { method: "DELETE" }),
+
   searchAirports: (query: string) =>
     request<Airport[]>(`/reference/airports?q=${encodeURIComponent(query)}`),
   searchAirlines: (query: string) =>
@@ -117,6 +137,11 @@ export const api = {
     }),
   deleteProviderKey: (provider: string) =>
     request<void>(`/settings/provider-keys/${provider}`, { method: "DELETE" }),
+
+  getAiSettings: () => request<AiSettingsRead>("/settings/ai"),
+  setAiSettings: (data: AiSettingsWrite) =>
+    request<AiSettingsRead>("/settings/ai", { method: "PUT", body: JSON.stringify(data) }),
+  deleteAiSettings: () => request<void>("/settings/ai", { method: "DELETE" }),
 
   listAuditLogs: (params: { page?: number; page_size?: number } = {}) => {
     const query = new URLSearchParams();
