@@ -44,8 +44,8 @@ def _merge(local: dict, remote: FlightLookupResult | None) -> FlightLookupRespon
         result.actual_departure_time = remote.actual_departure_time
         result.actual_arrival_time = remote.actual_arrival_time
         result.aircraft = remote.aircraft
-        result.status = remote.status
-        result.distance = remote.distance
+        result.status = str(remote.status) if remote.status else None
+        result.distance = float(remote.distance) if remote.distance is not None else None
     return result
 
 
@@ -80,7 +80,7 @@ class FlightEnrichmentService:
                 provider_obj = providers.REGISTERED_PROVIDERS[name](api_key, client=client)
                 try:
                     remote = await provider_obj.lookup(number, date=date)
-                except (httpx.HTTPError, ValueError, KeyError, TypeError):
+                except Exception:
                     remote = None
                 if remote is not None:
                     return _merge(local, remote)

@@ -75,7 +75,7 @@ class AeroDataBoxProvider(FlightProvider):
             if not flights:
                 return None
             return self._parse(flights[0], flight_number)
-        except (ValueError, KeyError, TypeError):
+        except (ValueError, KeyError, TypeError, AttributeError):
             return None
 
     def _parse(self, flight: dict, flight_number: str) -> FlightLookupResult:
