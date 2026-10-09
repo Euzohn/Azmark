@@ -29,6 +29,11 @@ def _airlines() -> tuple[dict[str, Any], ...]:
 
 
 @lru_cache(maxsize=1)
+def _airports_by_iata() -> dict[str, dict[str, Any]]:
+    return {a["iata"]: a for a in _airports()}
+
+
+@lru_cache(maxsize=1)
 def _airlines_by_iata() -> dict[str, dict[str, Any]]:
     return {a["iata"]: a for a in _airlines()}
 
@@ -105,6 +110,11 @@ def search_airlines(query: str, *, limit: int = 10) -> list[dict[str, Any]]:
 def get_airline_by_iata(iata: str) -> dict[str, Any] | None:
     """Resolve a single airline by its IATA code (e.g. 'CX')."""
     return _airlines_by_iata().get(iata)
+
+
+def get_airport_by_iata(iata: str) -> dict[str, Any] | None:
+    """Resolve a single airport by its IATA code (e.g. 'HKG')."""
+    return _airports_by_iata().get(iata)
 
 
 def normalize_flight_number(number: str) -> str:

@@ -1,12 +1,25 @@
 "use client";
 
-import { Backpack, History, LogOut, Plane, Settings, type LucideIcon } from "lucide-react";
+import {
+  Backpack,
+  BarChart3,
+  Home,
+  History,
+  LogOut,
+  type LucideIcon,
+  Map as MapIcon,
+  MoreHorizontal,
+  Plane,
+  ScrollText,
+  Settings,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { LanguageToggle } from "@/components/language-toggle";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-store";
@@ -20,9 +33,27 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
+  { href: "/dashboard", key: "nav.dashboard", icon: Home },
   { href: "/trips", key: "nav.trips", icon: Backpack },
   { href: "/flights", key: "nav.flights", icon: Plane },
-  { href: "/audit", key: "nav.audit", icon: History },
+  { href: "/timeline", key: "nav.timeline", icon: History },
+  { href: "/map", key: "nav.map", icon: MapIcon },
+  { href: "/statistics", key: "nav.stats", icon: BarChart3 },
+  { href: "/audit", key: "nav.audit", icon: ScrollText },
+  { href: "/settings", key: "nav.settings", icon: Settings },
+];
+
+const MOBILE_MAIN: NavItem[] = [
+  { href: "/dashboard", key: "nav.dashboard", icon: Home },
+  { href: "/trips", key: "nav.trips", icon: Backpack },
+  { href: "/flights", key: "nav.flights", icon: Plane },
+  { href: "/map", key: "nav.map", icon: MapIcon },
+];
+
+const MOBILE_MORE: NavItem[] = [
+  { href: "/timeline", key: "nav.timeline", icon: History },
+  { href: "/statistics", key: "nav.stats", icon: BarChart3 },
+  { href: "/audit", key: "nav.audit", icon: ScrollText },
   { href: "/settings", key: "nav.settings", icon: Settings },
 ];
 
@@ -31,6 +62,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { token, user, setUser, clear, hasHydrated } = useAuth();
   const { t } = useI18n();
+  const [moreOpen, setMoreOpen] = useState(false);
 
   useEffect(() => {
     if (!hasHydrated) return;
@@ -70,10 +102,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   };
 
   const identity = user?.display_name ?? user?.username ?? "";
+  const moreActive = MOBILE_MORE.some((item) => pathname.startsWith(item.href));
 
   return (
     <div className="bg-glow mx-auto flex min-h-dvh w-full max-w-6xl flex-col md:flex-row">
-      <aside className="hidden md:sticky md:top-0 md:flex md:h-dvh md:w-60 md:shrink-0 md:flex-col md:gap-1 md:border-r md:border-border md:px-5 md:py-8">
+      <aside className="hidden md:sticky md:top-0 md:flex md:h-dvh md:w-60 md:shrink-0 md:flex-col md:gap-1 md:overflow-y-auto md:border-r md:border-border md:px-5 md:py-8">
         <div className="mb-8 flex items-center gap-3 px-2">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#c26b30] to-primary text-primary-foreground shadow-md shadow-primary/25">
             <Backpack className="h-5 w-5" strokeWidth={1.75} />
@@ -126,12 +159,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="flex items-center gap-1">
           <ThemeToggle />
           <LanguageToggle />
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={logout}
-            aria-label={t("auth.logout")}
-          >
+          <Button variant="ghost" size="icon" onClick={logout} aria-label={t("auth.logout")}>
             <LogOut className="h-4 w-4" />
           </Button>
         </div>
@@ -143,7 +171,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         className="fixed inset-x-0 bottom-0 z-20 flex border-t border-border bg-card/90 backdrop-blur-md md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        {NAV_ITEMS.map((item) => {
+        {MOBILE_MAIN.map((item) => {
           const Icon = item.icon;
           const active = pathname.startsWith(item.href);
           return (
@@ -167,7 +195,48 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Link>
           );
         })}
+        <button
+          type="button"
+          onClick={() => setMoreOpen(true)}
+          className={cn(
+            "flex min-h-14 flex-1 cursor-pointer flex-col items-center justify-center gap-1 py-2 text-xs transition-colors duration-150",
+            moreActive ? "text-primary" : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          <span
+            className={cn(
+              "flex h-8 w-14 items-center justify-center rounded-full transition-colors duration-150",
+              moreActive ? "bg-accent text-accent-foreground" : "text-inherit",
+            )}
+          >
+            <MoreHorizontal className="h-5 w-5" strokeWidth={moreActive ? 2 : 1.75} />
+          </span>
+          {t("nav.more")}
+        </button>
       </nav>
+
+      <BottomSheet open={moreOpen} onClose={() => setMoreOpen(false)} title={t("nav.moreTitle")}>
+        {MOBILE_MORE.map((item) => {
+          const Icon = item.icon;
+          const active = pathname.startsWith(item.href);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={() => setMoreOpen(false)}
+              className={cn(
+                "flex cursor-pointer items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors",
+                active
+                  ? "bg-accent text-accent-foreground"
+                  : "text-foreground hover:bg-accent/60",
+              )}
+            >
+              <Icon className="h-4 w-4" strokeWidth={active ? 2.25 : 1.75} />
+              {t(item.key)}
+            </Link>
+          );
+        })}
+      </BottomSheet>
     </div>
   );
 }

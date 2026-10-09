@@ -228,3 +228,61 @@ export interface AiSettingsWrite {
   context_limit?: number | null;
   web_search?: boolean;
 }
+
+export interface DashboardStats {
+  countries: number;
+  cities: number;
+  journeys: number;
+  distance_km: number;
+  flights: number;
+  trains: number;
+  trips: number;
+}
+
+export interface DashboardRead {
+  stats: DashboardStats;
+  recent: Flight[];
+  upcoming: Flight | null;
+}
+
+export interface BreakdownItem {
+  label: string;
+  name: string | null;
+  count: number;
+}
+
+export interface StatisticsRead {
+  by_month: BreakdownItem[];
+  by_airline: BreakdownItem[];
+  by_airport: BreakdownItem[];
+  by_aircraft: BreakdownItem[];
+}
+
+export interface MapPoint {
+  code: string | null;
+  name: string | null;
+  name_zh: string | null;
+  city: string | null;
+  city_zh: string | null;
+  country: string | null;
+  lat: number | null;
+  lon: number | null;
+}
+
+export interface MapRoute {
+  id: string;
+  type: string;
+  status: string;
+  service_number: string | null;
+  airline_code: string | null;
+  carrier: string | null;
+  departure_time: string | null;
+  origin: MapPoint;
+  destination: MapPoint;
+  distance_km: number | null;
+}
+
+export interface MapRoutesRead {
+  items: MapRoute[];
+  total: number;
+}

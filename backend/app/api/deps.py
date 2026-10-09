@@ -78,3 +78,9 @@ def get_trip_service(db: Session = Depends(get_db)):
     from app.services.trip import TripService
 
     return TripService(db)
+
+
+def get_dashboard_service(db: Session = Depends(get_db)):
+    from app.services.dashboard import DashboardService
+
+    return DashboardService(db)

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import uuid
 
 from sqlalchemy import func, or_, select
@@ -53,6 +55,24 @@ class TransportRepository:
                 TransportRecord.user_id == user_id,
             )
         )
+
+    def list_all(
+        self,
+        *,
+        user_id: uuid.UUID,
+        limit: int = 5000,
+    ) -> list[TransportRecord]:
+        """Return all records for a user ordered by departure time desc."""
+        stmt = (
+            select(TransportRecord)
+            .where(TransportRecord.user_id == user_id)
+            .order_by(
+                TransportRecord.departure_time.desc().nullslast(),
+                TransportRecord.created_at.desc(),
+            )
+            .limit(limit)
+        )
+        return list(self.db.scalars(stmt))
 
     def create(self, record: TransportRecord) -> TransportRecord:
         self.db.add(record)

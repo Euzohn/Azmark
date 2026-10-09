@@ -43,3 +43,14 @@ def get_airline(
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     return result
+
+
+@router.get("/airports/{iata}", response_model=AirportRead)
+def get_airport(
+    iata: str,
+    _: User = Depends(get_current_user),
+) -> AirportRead:
+    result = reference.get_airport_by_iata(iata.upper())
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return result

@@ -5,13 +5,16 @@ import type {
   Airline,
   Airport,
   AuditLogList,
+  DashboardRead,
   Flight,
   FlightInput,
   FlightList,
   FlightLookup,
   FlightNumberLookup,
+  MapRoutesRead,
   ProviderKeysRead,
   ProviderKeyStatus,
+  StatisticsRead,
   TokenResponse,
   Trip,
   TripDetail,
@@ -152,4 +155,9 @@ export const api = {
     const suffix = query.toString() ? `?${query.toString()}` : "";
     return request<AuditLogList>(`/audit-logs${suffix}`);
   },
+
+  getDashboard: () => request<DashboardRead>("/dashboard"),
+  getStatistics: () => request<StatisticsRead>("/statistics"),
+  getTimeline: () => request<Flight[]>("/timeline"),
+  getMapRoutes: () => request<MapRoutesRead>("/map/routes"),
 };
