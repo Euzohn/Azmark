@@ -32,6 +32,14 @@ function fromLocalInput(value: string): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
+// 航班日期已过 → 默认「已完成」，否则「计划中」。空/非法返回 null 表示不干预。
+function autoStatus(departure: string): string | null {
+  if (!departure) return null;
+  const date = new Date(departure);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.getTime() < Date.now() ? "completed" : "scheduled";
+}
+
 interface FlightFormProps {
   initial?: Flight;
   submitting?: boolean;
@@ -74,9 +82,25 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
     "idle",
   );
   const [lookupSource, setLookupSource] = useState<string | null>(null);
+  const [lookupDate, setLookupDate] = useState(
+    initial?.departure_time?.slice(0, 10) || new Date().toISOString().slice(0, 10),
+  );
+  const [statusTouched, setStatusTouched] = useState(Boolean(initial));
 
   const set = (key: keyof typeof form, value: string) =>
     setForm((prev) => ({ ...prev, [key]: value }));
+
+  // 变更起飞时间时同步推断状态（用户手动改过状态则不覆盖）。
+  const setDepartureTime = (value: string) => {
+    setForm((prev) => {
+      const next = { ...prev, departure_time: value };
+      if (!statusTouched) {
+        const status = autoStatus(value);
+        if (status) next.status = status;
+      }
+      return next;
+    });
+  };
 
   const fetchAirports = useCallback(
     async (query: string) => {
@@ -139,7 +163,7 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
     const number = form.service_number.trim();
     if (!/^[A-Za-z0-9]{2,3}\d{1,4}$/.test(number)) return;
     setLookupStatus("running");
-    const datePart = form.departure_time.slice(0, 10) || new Date().toISOString().slice(0, 10);
+    const datePart = lookupDate || new Date().toISOString().slice(0, 10);
     try {
       const result = await api.lookupFlight({ flight_number: number, date: datePart });
       setForm((prev) => {
@@ -152,8 +176,13 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
         if (result.origin_iata && !next.origin.trim()) next.origin = result.origin_iata;
         if (result.destination_iata && !next.destination.trim())
           next.destination = result.destination_iata;
-        if (result.departure_time && !next.departure_time)
+        if (result.departure_time && !next.departure_time) {
           next.departure_time = toLocalInput(result.departure_time);
+          if (!statusTouched) {
+            const status = autoStatus(next.departure_time);
+            if (status) next.status = status;
+          }
+        }
         if (result.arrival_time && !next.arrival_time)
           next.arrival_time = toLocalInput(result.arrival_time);
         if (result.actual_departure_time && !next.actual_departure_time)
@@ -257,6 +286,13 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
           </p>
         ) : null}
       </Field>
+      <Field label={t("flights.lookupDate")}>
+        <Input
+          type="date"
+          value={lookupDate}
+          onChange={(e) => setLookupDate(e.target.value)}
+        />
+      </Field>
       <Field label={t("flights.carrier")}>
         <Combobox
           value={form.carrier}
@@ -288,7 +324,7 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
         <Input
           type="datetime-local"
           value={form.departure_time}
-          onChange={(e) => set("departure_time", e.target.value)}
+          onChange={(e) => setDepartureTime(e.target.value)}
         />
       </Field>
       <Field label={t("flights.arrivalTime")}>
@@ -316,7 +352,13 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
         <Input value={form.seat} onChange={(e) => set("seat", e.target.value)} placeholder="32A" />
       </Field>
       <Field label={t("flights.status")}>
-        <Select value={form.status} onChange={(e) => set("status", e.target.value)}>
+        <Select
+          value={form.status}
+          onChange={(e) => {
+            setStatusTouched(true);
+            set("status", e.target.value);
+          }}
+        >
           <option value="scheduled">{t("flights.status.scheduled")}</option>
           <option value="completed">{t("flights.status.completed")}</option>
           <option value="cancelled">{t("flights.status.cancelled")}</option>
