@@ -12,11 +12,14 @@ route distance. `aircraft.model` is a plain string.
 """
 
 from datetime import date, datetime
+from logging import getLogger
 
 import httpx
 
 from app.core.config import settings
 from app.providers.base import FlightLookupResult, FlightProvider
+
+logger = getLogger(__name__)
 
 
 def _parse_datetime(value: object) -> datetime | None:
@@ -67,15 +70,24 @@ class AeroDataBoxProvider(FlightProvider):
             if self._client is None:
                 await client.aclose()
         if response.status_code == 404:
+            logger.info("AeroDataBox: no flight for %s on %s (404)", flight_number, date)
             return None
         response.raise_for_status()
         try:
             payload = response.json()
             flights = payload.get("flights") or []
+            logger.info(
+                "AeroDataBox: status=%s flights=%d payload=%s",
+                response.status_code,
+                len(flights),
+                str(payload)[:2000],
+            )
             if not flights:
+                logger.warning("AeroDataBox: empty flights list for %s", flight_number)
                 return None
             return self._parse(flights[0], flight_number)
-        except (ValueError, KeyError, TypeError, AttributeError):
+        except (ValueError, KeyError, TypeError, AttributeError) as exc:
+            logger.warning("AeroDataBox: parse failed: %s", exc)
             return None
 
     def _parse(self, flight: dict, flight_number: str) -> FlightLookupResult:

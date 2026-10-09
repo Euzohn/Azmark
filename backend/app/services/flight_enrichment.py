@@ -7,6 +7,7 @@ they degrade to the local airline result.
 
 import uuid
 from datetime import date
+from logging import getLogger
 
 import httpx
 from sqlalchemy.orm import Session
@@ -16,6 +17,8 @@ from app.providers.base import FlightLookupResult
 from app.schemas.flight_lookup import FlightLookupResponse
 from app.services import reference
 from app.services.provider_keys import ProviderKeyStore
+
+logger = getLogger(__name__)
 
 
 class ProviderNotFoundError(Exception):
@@ -72,6 +75,12 @@ class FlightEnrichmentService:
             if provider
             else [name for name in providers.REGISTERED_PROVIDERS if name in available]
         )
+        if not order:
+            logger.info(
+                "FlightLookup: no provider key configured (user=%s) — local fallback for %s",
+                user_id,
+                number,
+            )
         async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
             for name in order:
                 api_key = available.get(name)
@@ -80,8 +89,17 @@ class FlightEnrichmentService:
                 provider_obj = providers.REGISTERED_PROVIDERS[name](api_key, client=client)
                 try:
                     remote = await provider_obj.lookup(number, date=date)
-                except Exception:
+                except Exception as exc:
+                    logger.warning(
+                        "FlightLookup: provider %s raised %r for %s — local fallback",
+                        name,
+                        exc,
+                        number,
+                    )
                     remote = None
                 if remote is not None:
+                    logger.info("FlightLookup: %s returned a result for %s", name, number)
                     return _merge(local, remote)
+                logger.info("FlightLookup: %s returned no result for %s", name, number)
+        logger.info("FlightLookup: local-only result for %s", number)
         return _merge(local, None)
