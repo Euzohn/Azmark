@@ -5,7 +5,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { useQuery } from "@tanstack/react-query";
 import { MapIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { GeoJSONSource, Map as MLMap, Marker, Popup } from "maplibre-gl";
+import type { GeoJSONSource, Map as MLMap, Marker, Popup, StyleSpecification } from "maplibre-gl";
 
 import { useTheme } from "@/components/theme-provider";
 import { Card } from "@/components/ui/card";
@@ -15,15 +15,20 @@ import { api } from "@/lib/api";
 import { greatCircle, type LonLat } from "@/lib/geo";
 import { useI18n } from "@/lib/i18n";
 
-const TILES_LIGHT =
-  process.env.NEXT_PUBLIC_MAP_TILES_LIGHT ??
-  "https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png";
-const TILES_DARK =
-  process.env.NEXT_PUBLIC_MAP_TILES_DARK ??
-  "https://basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png";
+// Basemap defaults to OpenFreeMap — a free, keyless, no-watermark vector map.
+// Override per build with:
+//   NEXT_PUBLIC_MAP_STYLE_LIGHT / NEXT_PUBLIC_MAP_STYLE_DARK  (vector style URLs)
+//   NEXT_PUBLIC_MAP_TILES_LIGHT / NEXT_PUBLIC_MAP_TILES_DARK  (raster {z}/{x}/{y} templates)
+// The raster override wins when set, which is handy for region-specific providers.
+const STYLE_LIGHT =
+  process.env.NEXT_PUBLIC_MAP_STYLE_LIGHT ?? "https://tiles.openfreemap.org/styles/positron";
+const STYLE_DARK =
+  process.env.NEXT_PUBLIC_MAP_STYLE_DARK ?? "https://tiles.openfreemap.org/styles/dark";
+const TILES_LIGHT = process.env.NEXT_PUBLIC_MAP_TILES_LIGHT;
+const TILES_DARK = process.env.NEXT_PUBLIC_MAP_TILES_DARK;
 
 const ATTRIBUTION =
-  '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/attributions">CARTO</a>';
+  '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
 function isDarkTheme(theme: string): boolean {
   if (theme === "dark") return true;
@@ -32,6 +37,23 @@ function isDarkTheme(theme: string): boolean {
     typeof window !== "undefined" &&
     window.matchMedia("(prefers-color-scheme: dark)").matches
   );
+}
+
+function rasterStyle(tiles: string): StyleSpecification {
+  return {
+    version: 8,
+    sources: {
+      basemap: { type: "raster", tiles: [tiles], tileSize: 256, attribution: ATTRIBUTION },
+    },
+    layers: [{ id: "basemap", type: "raster", source: "basemap" }],
+  };
+}
+
+function styleFor(theme: string): string | StyleSpecification {
+  const dark = isDarkTheme(theme);
+  const tiles = dark ? TILES_DARK : TILES_LIGHT;
+  if (tiles) return rasterStyle(tiles);
+  return dark ? STYLE_DARK : STYLE_LIGHT;
 }
 
 function pointOf(code: string | null, lat: number | null, lon: number | null): LonLat | null {
@@ -45,8 +67,10 @@ export default function MapPage() {
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MLMap | null>(null);
+  const libRef = useRef<typeof import("maplibre-gl") | null>(null);
   const popupRef = useRef<Popup | null>(null);
   const markersRef = useRef<Marker[]>([]);
+  const interactionsBoundRef = useRef(false);
   const themeRef = useRef(theme);
   const [ready, setReady] = useState(false);
 
@@ -64,37 +88,28 @@ export default function MapPage() {
       ),
     [data],
   );
+  const showMap = !isLoading && routes.length > 0;
 
-  // Keep the latest theme available to the (mount-only) map effect.
+  // Keep the latest theme available to the (mount-only) map effects.
   useEffect(() => {
     themeRef.current = theme;
   }, [theme]);
 
-  // Initialise the map once (client-only).
+  // Initialise the map once the container is on screen (client-only).
   useEffect(() => {
-    let cancelled = false;
+    if (!showMap) return;
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || mapRef.current) return;
+    let cancelled = false;
 
     void (async () => {
       const maplibregl = await import("maplibre-gl");
       if (cancelled || !containerRef.current) return;
+      libRef.current = maplibregl;
 
-      const dark = isDarkTheme(themeRef.current);
       const map = new maplibregl.Map({
         container,
-        style: {
-          version: 8,
-          sources: {
-            basemap: {
-              type: "raster",
-              tiles: [dark ? TILES_DARK : TILES_LIGHT],
-              tileSize: 256,
-              attribution: ATTRIBUTION,
-            },
-          },
-          layers: [{ id: "basemap", type: "raster", source: "basemap" }],
-        },
+        style: styleFor(themeRef.current),
         center: [30, 25],
         zoom: 1.3,
         attributionControl: { compact: true },
@@ -107,38 +122,33 @@ export default function MapPage() {
 
     return () => {
       cancelled = true;
+      interactionsBoundRef.current = false;
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
       popupRef.current?.remove();
+      popupRef.current = null;
       mapRef.current?.remove();
       mapRef.current = null;
       setReady(false);
     };
-  }, []);
+  }, [showMap]);
 
-  // Swap basemap tiles when the colour theme changes.
+  // Swap the basemap when the colour theme changes.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
-    const source = map.getSource("basemap") as
-      | (GeoJSONSource & { setTiles?: (tiles: string[]) => void })
-      | undefined;
-    source?.setTiles?.([isDarkTheme(theme) ? TILES_DARK : TILES_LIGHT]);
+    map.setStyle(styleFor(theme));
   }, [theme, ready]);
 
-  // Draw routes + airport markers whenever the data changes.
+  // Draw routes whenever the data changes or a (new) style finishes loading.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !ready) return;
+    const maplibregl = libRef.current;
+    if (!map || !maplibregl || !ready) return;
 
-    void (async () => {
-      const maplibregl = await import("maplibre-gl");
-      if (mapRef.current !== map) return;
-
-      markersRef.current.forEach((marker) => marker.remove());
-      markersRef.current = [];
-
-      const lineFeatures = routes.map((route) => {
+    const draw = () => {
+      const current = routes;
+      const lineFeatures = current.map((route) => {
         const from = pointOf(route.origin.code, route.origin.lat, route.origin.lon)!;
         const to = pointOf(route.destination.code, route.destination.lat, route.destination.lon)!;
         return {
@@ -155,7 +165,7 @@ export default function MapPage() {
       });
 
       const airportMap = new Map<string, LonLat>();
-      for (const route of routes) {
+      for (const route of current) {
         const from = pointOf(route.origin.code, route.origin.lat, route.origin.lon);
         const to = pointOf(route.destination.code, route.destination.lat, route.destination.lon);
         if (from && route.origin.code) airportMap.set(route.origin.code, from);
@@ -170,10 +180,10 @@ export default function MapPage() {
       const lineData = { type: "FeatureCollection" as const, features: lineFeatures };
       const pointData = { type: "FeatureCollection" as const, features: pointFeatures };
 
-      if (map.getSource("routes")) {
-        (map.getSource("routes") as GeoJSONSource).setData(lineData);
-        (map.getSource("airports") as GeoJSONSource).setData(pointData);
-      } else {
+      const dark = isDarkTheme(themeRef.current);
+      const accent = dark ? "#e3995c" : "#9a4b1a";
+
+      if (!map.getSource("routes")) {
         map.addSource("routes", { type: "geojson", data: lineData });
         map.addSource("airports", { type: "geojson", data: pointData });
         map.addLayer({
@@ -181,11 +191,7 @@ export default function MapPage() {
           type: "line",
           source: "routes",
           layout: { "line-cap": "round", "line-join": "round" },
-          paint: {
-            "line-color": isDarkTheme(themeRef.current) ? "#e3995c" : "#9a4b1a",
-            "line-width": 1.6,
-            "line-opacity": 0.75,
-          },
+          paint: { "line-color": accent, "line-width": 1.6, "line-opacity": 0.75 },
         });
         map.addLayer({
           id: "airports-point",
@@ -193,43 +199,51 @@ export default function MapPage() {
           source: "airports",
           paint: {
             "circle-radius": 3.5,
-            "circle-color": isDarkTheme(themeRef.current) ? "#e3995c" : "#9a4b1a",
-            "circle-stroke-color": isDarkTheme(themeRef.current) ? "#16130e" : "#faf6ef",
+            "circle-color": accent,
+            "circle-stroke-color": dark ? "#16130e" : "#faf6ef",
             "circle-stroke-width": 1.5,
           },
         });
 
-        map.on("click", "routes-line", (event) => {
-          const feature = event.features?.[0];
-          if (!feature) return;
-          const props = feature.properties as Record<string, string>;
-          const node = document.createElement("div");
-          node.className = "text-xs leading-relaxed";
-          const title = document.createElement("div");
-          title.className = "font-semibold";
-          title.textContent = `${props.origin} → ${props.destination}`;
-          node.appendChild(title);
-          const sub = [props.service, props.carrier].filter(Boolean).join(" · ");
-          if (sub) {
-            const subNode = document.createElement("div");
-            subNode.textContent = sub;
-            node.appendChild(subNode);
-          }
-          popupRef.current?.remove();
-          popupRef.current = new maplibregl.Popup({ closeButton: false, offset: 8 })
-            .setLngLat(event.lngLat)
-            .setDOMContent(node)
-            .addTo(map);
-        });
-        map.on("mouseenter", "routes-line", () => {
-          map.getCanvas().style.cursor = "pointer";
-        });
-        map.on("mouseleave", "routes-line", () => {
-          map.getCanvas().style.cursor = "";
-        });
+        if (!interactionsBoundRef.current) {
+          interactionsBoundRef.current = true;
+          map.on("click", "routes-line", (event) => {
+            const feature = event.features?.[0];
+            if (!feature) return;
+            const props = feature.properties as Record<string, string>;
+            const node = document.createElement("div");
+            node.className = "text-xs leading-relaxed";
+            const title = document.createElement("div");
+            title.className = "font-semibold";
+            title.textContent = `${props.origin} → ${props.destination}`;
+            node.appendChild(title);
+            const sub = [props.service, props.carrier].filter(Boolean).join(" · ");
+            if (sub) {
+              const subNode = document.createElement("div");
+              subNode.textContent = sub;
+              node.appendChild(subNode);
+            }
+            popupRef.current?.remove();
+            popupRef.current = new maplibregl.Popup({ closeButton: false, offset: 8 })
+              .setLngLat(event.lngLat)
+              .setDOMContent(node)
+              .addTo(map);
+          });
+          map.on("mouseenter", "routes-line", () => {
+            map.getCanvas().style.cursor = "pointer";
+          });
+          map.on("mouseleave", "routes-line", () => {
+            map.getCanvas().style.cursor = "";
+          });
+        }
+      } else {
+        (map.getSource("routes") as GeoJSONSource).setData(lineData);
+        (map.getSource("airports") as GeoJSONSource).setData(pointData);
       }
 
       // airport code labels
+      markersRef.current.forEach((marker) => marker.remove());
+      markersRef.current = [];
       for (const [code, coords] of airportMap.entries()) {
         const el = document.createElement("div");
         el.className =
@@ -264,7 +278,13 @@ export default function MapPage() {
           { padding: 64, maxZoom: 6, duration: 600 },
         );
       }
-    })();
+    };
+
+    draw();
+    map.on("style.load", draw);
+    return () => {
+      map.off("style.load", draw);
+    };
   }, [routes, ready]);
 
   return (
@@ -284,13 +304,13 @@ export default function MapPage() {
         <EmptyState icon={MapIcon} title={t("map.empty")} hint={t("map.emptyHint")} />
       ) : null}
 
-      {!isLoading && routes.length > 0 ? (
+      {showMap ? (
         <Card className="overflow-hidden p-0">
           <div ref={containerRef} className="h-[60vh] w-full" />
         </Card>
       ) : null}
 
-      {!isLoading && routes.length > 0 ? (
+      {showMap ? (
         <p className="text-xs text-muted-foreground">{t("map.greatCircleNote")}</p>
       ) : null}
     </div>
