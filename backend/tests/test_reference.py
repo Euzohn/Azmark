@@ -34,6 +34,20 @@ def test_search_airlines(client):
     assert body["name_zh"] == "国泰航空"
 
 
+def test_airline_name_override(client):
+    """OpenFlights is stale for some carriers; overrides must win (spec: Scoot)."""
+    token = register_and_login(client, "ref_override")["access_token"]
+    headers = auth_headers(token)
+
+    response = client.get("/api/v1/reference/airlines/TR", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["name"] == "Scoot"
+
+    response = client.get("/api/v1/reference/airlines/AZ", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["name"] == "ITA Airways"
+
+
 def test_search_airports_include_zh_names(client):
     token = register_and_login(client, "ref_airport_zh")["access_token"]
     response = client.get(

@@ -26,6 +26,13 @@ IATA_RE = re.compile(r"^[A-Z0-9]{3}$")
 AIRLINE_IATA_RE = re.compile(r"^[A-Z0-9]{2}$")
 USER_AGENT = "Azmark-reference-builder (+https://github.com/)"
 
+# OpenFlights 数据更新时间较旧，部分航司已改名/被并入。这里维护字段覆盖，
+# 保证重建数据后仍显示当前正确信息（IATA 代码不变）。
+AIRLINE_OVERRIDES: dict[str, dict[str, str]] = {
+    "TR": {"name": "Scoot"},  # 酷航（原 Tiger Airways，2012 年更名）
+    "AZ": {"name": "ITA Airways", "icao": "ITY"},  # 意大利航空（原 Alitalia）
+}
+
 # 常用航司/机场中文名（数据层提供，前端按 locale 显示；未收录的回退英文）。
 # 来源为公开通用译名；维护到这里，方便一键重建。
 AIRLINE_ZH = {
@@ -371,7 +378,10 @@ def build_airlines() -> list[dict]:
             continue
         if iata in by_iata:
             continue  # controlled duplicates: keep the first (primary) holder
-        icao = icao.upper()
+        override = AIRLINE_OVERRIDES.get(iata, {})
+        if override.get("name"):
+            name = override["name"]
+        icao = (override.get("icao") or icao).upper()
         by_iata[iata] = {
             "iata": iata,
             "icao": icao if re.match(r"^[A-Z0-9]{3}$", icao) else None,
