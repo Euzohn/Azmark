@@ -114,18 +114,22 @@ def test_purchase_credential_encrypted_at_rest(client, db):
     payload = {
         **FLIGHT,
         "purchase_credential": "E12345678",
+        "purchase_credential_type": "passport",
         "booking_reference": "ABCDEF",
         "ticket_number": "160-1234567890",
         "distance": "2580.5",
     }
     created = client.post("/api/v1/flights", json=payload, headers=headers).json()
     assert created["purchase_credential"] == "E12345678"
+    assert created["purchase_credential_type"] == "passport"
     assert created["booking_reference"] == "ABCDEF"
     assert created["ticket_number"] == "160-1234567890"
     assert created["distance"] == "2580.50"
 
     row = db.scalar(select(TransportRecord).where(TransportRecord.id == uuid.UUID(created["id"])))
     assert row is not None
+    # 证件类型是分类值，非敏感，明文存储。
+    assert row.purchase_credential_type == "passport"
     for enc, plain in (
         ("purchase_credential_enc", "E12345678"),
         ("booking_reference_enc", "ABCDEF"),

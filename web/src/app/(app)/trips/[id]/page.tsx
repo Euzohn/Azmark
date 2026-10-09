@@ -5,6 +5,7 @@ import { ArrowLeft, Plane, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 
+import { AirlineName } from "@/components/airline-name";
 import { TripForm } from "@/components/trip-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -135,7 +136,8 @@ export default function TripDetailPage() {
                       </div>
                       <div className="truncate text-xs text-muted-foreground">
                         {formatDateTime(flight.departure_time)}
-                        {flight.carrier ? ` · ${flight.carrier}` : ""}
+                        {" · "}
+                        <AirlineName code={flight.airline_code} fallback={flight.carrier} />
                         {flight.seat ? ` · ${flight.seat}` : ""}
                       </div>
                     </div>

@@ -5,6 +5,7 @@ import { Plane, Plus, Search, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
+import { AirlineName } from "@/components/airline-name";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -122,7 +123,8 @@ export default function FlightsPage() {
                   </div>
                   <div className="truncate text-xs text-muted-foreground">
                     {formatDateTime(flight.departure_time)}
-                    {flight.carrier ? ` · ${flight.carrier}` : ""}
+                    {" · "}
+                    <AirlineName code={flight.airline_code} fallback={flight.carrier} />
                     {flight.seat ? ` · ${flight.seat}` : ""}
                   </div>
                 </div>

@@ -102,6 +102,11 @@ def search_airlines(query: str, *, limit: int = 10) -> list[dict[str, Any]]:
     return [airline for _, _, airline in scored[:limit]]
 
 
+def get_airline_by_iata(iata: str) -> dict[str, Any] | None:
+    """Resolve a single airline by its IATA code (e.g. 'CX')."""
+    return _airlines_by_iata().get(iata)
+
+
 def normalize_flight_number(number: str) -> str:
     return re.sub(r"[\s-]", "", number).upper()
 

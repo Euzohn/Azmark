@@ -9,6 +9,7 @@ export interface ComboboxOption {
   value: string;
   label: string;
   hint?: string;
+  data?: Record<string, string>;
 }
 
 interface ComboboxProps {

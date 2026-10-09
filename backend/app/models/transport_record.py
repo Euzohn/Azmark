@@ -35,6 +35,7 @@ class TransportRecord(Base):
     destination: Mapped[str | None] = mapped_column(String(120))
 
     carrier: Mapped[str | None] = mapped_column(String(120))
+    airline_code: Mapped[str | None] = mapped_column(String(3))
     service_number: Mapped[str | None] = mapped_column(String(40))
 
     # Flight-specific
@@ -43,10 +44,17 @@ class TransportRecord(Base):
     departure_gate: Mapped[str | None] = mapped_column(String(20))
     arrival_terminal: Mapped[str | None] = mapped_column(String(20))
     arrival_gate: Mapped[str | None] = mapped_column(String(20))
+    check_in_desk: Mapped[str | None] = mapped_column(String(20))
+    baggage_belt: Mapped[str | None] = mapped_column(String(20))
+    aircraft_model: Mapped[str | None] = mapped_column(String(60))
+    aircraft_reg: Mapped[str | None] = mapped_column(String(20))
 
     # PNR 预订编码与客票号属敏感字段（spec #45/#96），加密存储。
     booking_reference_enc: Mapped[str | None] = mapped_column(Text)
     ticket_number_enc: Mapped[str | None] = mapped_column(Text)
+
+    # 购票证件类型（身份证/护照/…）为分类值，非敏感，明文存储。
+    purchase_credential_type: Mapped[str | None] = mapped_column(String(20))
 
     # 购票证件号（身份证/护照）属敏感 PII（spec #45/#96），加密存储。
     purchase_credential_enc: Mapped[str | None] = mapped_column(Text)

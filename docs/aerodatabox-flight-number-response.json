@@ -1,0 +1,221 @@
+{
+  "_source": "AeroDataBox RapidAPI — GET /flights/number/{number}/{date}",
+  "_endpoint": "https://aerodatabox.p.rapidapi.com/flights/number/{flightNumber}/{YYYY-MM-DD}",
+  "_auth": "Headers: X-RapidAPI-Key, X-RapidAPI-Host",
+  "_params": "withAircraftImage, withTracking, withCrew, withFlightNumberOffset (all false)",
+  "_response_shape": "Top-level JSON array (NOT {flights: [...]})",
+  "_captured": "2026-10-09",
+  "_azmark_mapping": {
+    "_note": "Which raw fields the backend extracts into TransportRecord / FlightLookupResult",
+    "airline.iata": "airline_code",
+    "airline.name": "carrier (display fallback)",
+    "departure.airport.iata": "origin",
+    "arrival.airport.iata": "destination",
+    "departure.airport.name": "origin_name (lookup only)",
+    "arrival.airport.name": "destination_name (lookup only)",
+    "departure.scheduledTime.local": "departure_time",
+    "arrival.scheduledTime.local": "arrival_time",
+    "departure.runwayTime/revisedTime": "actual_departure_time",
+    "arrival.runwayTime/revisedTime": "actual_arrival_time",
+    "departure.terminal": "departure_terminal",
+    "departure.gate": "departure_gate",
+    "arrival.terminal": "arrival_terminal",
+    "arrival.gate": "arrival_gate",
+    "departure.checkInDesk": "check_in_desk",
+    "arrival.baggageBelt": "baggage_belt",
+    "aircraft.model": "aircraft_model",
+    "aircraft.reg": "aircraft_reg",
+    "departure.airport.timeZone": "departure_timezone",
+    "arrival.airport.timeZone": "arrival_timezone",
+    "greatCircleDistance.km": "distance",
+    "status": "status (lookup only; record status is user-set)",
+    "_not_mapped_yet": ["departure.runway", "departure.checkInDesk (mapped)", "callSign", "codeshareStatus", "isCargo", "aircraft.modeS"]
+  },
+
+  "examples": [
+    {
+      "query": { "flight_number": "CX659", "date": "2026-10-09" },
+      "status_code": 200,
+      "response": [
+        {
+          "greatCircleDistance": {
+            "meter": 2555450.13,
+            "km": 2555.45,
+            "mile": 1587.88,
+            "nm": 1379.83,
+            "feet": 8384022.74
+          },
+          "departure": {
+            "airport": {
+              "icao": "VHHH",
+              "iata": "HKG",
+              "name": "Hong Kong Chek Lap Kok",
+              "shortName": "Chek Lap Kok",
+              "municipalityName": "Hong Kong",
+              "location": { "lat": 22.3089, "lon": 113.915 },
+              "countryCode": "HK",
+              "timeZone": "Asia/Shanghai"
+            },
+            "scheduledTime": {
+              "utc": "2026-10-08 17:45Z",
+              "local": "2026-10-09 01:45+08:00"
+            },
+            "revisedTime": {
+              "utc": "2026-10-08 17:45Z",
+              "local": "2026-10-09 01:45+08:00"
+            },
+            "runwayTime": {
+              "utc": "2026-10-08 18:04Z",
+              "local": "2026-10-09 02:04+08:00"
+            },
+            "terminal": "1",
+            "checkInDesk": "C",
+            "gate": "48",
+            "runway": "07L",
+            "quality": ["Basic", "Live"]
+          },
+          "arrival": {
+            "airport": {
+              "icao": "WSSS",
+              "iata": "SIN",
+              "name": "Singapore Changi",
+              "shortName": "Changi",
+              "municipalityName": "Singapore",
+              "location": { "lat": 1.35019, "lon": 103.994 },
+              "countryCode": "SG",
+              "timeZone": "Asia/Singapore"
+            },
+            "scheduledTime": {
+              "utc": "2026-10-08 21:30Z",
+              "local": "2026-10-09 05:30+08:00"
+            },
+            "revisedTime": {
+              "utc": "2026-10-08 21:19Z",
+              "local": "2026-10-09 05:19+08:00"
+            },
+            "terminal": "4",
+            "baggageBelt": "2",
+            "quality": ["Basic", "Live"]
+          },
+          "lastUpdatedUtc": "2026-10-08 21:26Z",
+          "number": "CX 659",
+          "callSign": "CPA659",
+          "status": "Arrived",
+          "codeshareStatus": "IsOperator",
+          "isCargo": false,
+          "aircraft": {
+            "reg": "B-HWM",
+            "modeS": "780A5A",
+            "model": "Airbus A330-300"
+          },
+          "airline": {
+            "name": "Cathay Pacific",
+            "iata": "CX",
+            "icao": "CPA"
+          }
+        }
+      ]
+    },
+    {
+      "query": { "flight_number": "MU5137", "date": "2026-10-09" },
+      "status_code": 200,
+      "response": [
+        {
+          "departure": {
+            "airport": {
+              "name": "Shanghai"
+            },
+            "quality": []
+          },
+          "arrival": {
+            "airport": {
+              "icao": "ZBAD",
+              "iata": "PKX",
+              "name": "Beijing Daxing",
+              "shortName": "Daxing",
+              "municipalityName": "Beijing",
+              "location": { "lat": 39.509167, "lon": 116.41055 },
+              "countryCode": "CN",
+              "timeZone": "Asia/Shanghai"
+            },
+            "scheduledTime": {
+              "utc": "2026-10-09 04:20Z",
+              "local": "2026-10-09 12:20+08:00"
+            },
+            "quality": ["Basic"]
+          },
+          "lastUpdatedUtc": "2026-06-17 07:35Z",
+          "number": "MU 5137",
+          "status": "Unknown",
+          "codeshareStatus": "Unknown",
+          "isCargo": false,
+          "aircraft": {
+            "model": "Airbus A321"
+          },
+          "airline": {
+            "name": "China Eastern Airlines",
+            "iata": "MU",
+            "icao": "CES"
+          }
+        }
+      ]
+    }
+  ],
+
+  "field_catalog": {
+    "greatCircleDistance": {
+      "km": "float — route distance in kilometers",
+      "mile": "float",
+      "nm": "float — nautical miles",
+      "meter": "float",
+      "feet": "float"
+    },
+    "departure": {
+      "airport": {
+        "icao": "string — ICAO code (4-letter)",
+        "iata": "string — IATA code (3-letter)",
+        "name": "string — full airport name",
+        "shortName": "string — short name",
+        "municipalityName": "string — city",
+        "location": { "lat": "float", "lon": "float" },
+        "countryCode": "string — ISO 2-letter",
+        "timeZone": "string — IANA tz"
+      },
+      "scheduledTime": { "utc": "string", "local": "string" },
+      "revisedTime": { "utc": "string", "local": "string" },
+      "runwayTime": { "utc": "string", "local": "string" },
+      "predictedTime": { "utc": "string", "local": "string" },
+      "terminal": "string",
+      "gate": "string",
+      "checkInDesk": "string",
+      "baggageBelt": "string (arrival only)",
+      "runway": "string — runway identifier",
+      "quality": "string[] — data quality tags e.g. ['Basic', 'Live']"
+    },
+    "arrival": "same structure as departure; baggageBelt instead of checkInDesk",
+    "lastUpdatedUtc": "string — last data update timestamp",
+    "number": "string — formatted flight number e.g. 'CX 659'",
+    "callSign": "string — ICAO callsign e.g. 'CPA659'",
+    "status": "string — flight status: Arrived / Scheduled / Departed / EnRoute / Delayed / Cancelled / Diverted / Unknown",
+    "codeshareStatus": "string — IsOperator / IsCodeshare / Unknown",
+    "isCargo": "boolean",
+    "aircraft": {
+      "reg": "string — registration tail number",
+      "modeS": "string — Mode S transponder hex",
+      "model": "string — aircraft model e.g. 'Airbus A330-300'"
+    },
+    "airline": {
+      "name": "string — airline name",
+      "iata": "string — IATA code",
+      "icao": "string — ICAO code"
+    }
+  },
+
+  "time_formats": {
+    "note": "Times use space separator (not T): '2026-10-09 01:45+08:00' for local, '2026-10-08 17:45Z' for UTC",
+    "scheduledTime": "Planned schedule",
+    "revisedTime": "Updated/estimated actual (gate time)",
+    "runwayTime": "Actual runway time (takeoff/touchdown)",
+    "predictedTime": "Historical prediction"
+  }
+}

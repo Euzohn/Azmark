@@ -25,6 +25,16 @@ class FlightLookupResult:
     arrival_time: datetime | None = None
     actual_departure_time: datetime | None = None
     actual_arrival_time: datetime | None = None
+    departure_terminal: str | None = None
+    departure_gate: str | None = None
+    arrival_terminal: str | None = None
+    arrival_gate: str | None = None
+    check_in_desk: str | None = None
+    baggage_belt: str | None = None
+    aircraft_model: str | None = None
+    aircraft_reg: str | None = None
+    departure_timezone: str | None = None
+    arrival_timezone: str | None = None
     aircraft: str | None = None
     status: str | None = None
     distance: float | None = None

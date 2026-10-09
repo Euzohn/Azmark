@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.api.deps import get_current_user
 from app.models.user import User
@@ -32,3 +32,14 @@ def flight_lookup(
     _: User = Depends(get_current_user),
 ) -> FlightNumberLookup:
     return reference.lookup_flight_number(number)
+
+
+@router.get("/airlines/{iata}", response_model=AirlineRead)
+def get_airline(
+    iata: str,
+    _: User = Depends(get_current_user),
+) -> AirlineRead:
+    result = reference.get_airline_by_iata(iata.upper())
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return result

@@ -25,6 +25,7 @@ SAMPLE_FLIGHT = [
                 "name": "Hong Kong International Airport",
                 "city": "Hong Kong",
                 "country": "China",
+                "timeZone": "Asia/Hong_Kong",
             },
             "scheduledTime": {
                 "local": "2026-10-09 09:00+08:00",
@@ -39,7 +40,9 @@ SAMPLE_FLIGHT = [
                 "utc": "2026-10-09 01:10Z",
             },
             "terminal": "1",
-            "timezone": "Asia/Hong_Kong",
+            "gate": "48",
+            "checkInDesk": "C",
+            "runway": "07L",
         },
         "arrival": {
             "airport": {
@@ -48,6 +51,7 @@ SAMPLE_FLIGHT = [
                 "name": "Singapore Changi Airport",
                 "city": "Singapore",
                 "country": "Singapore",
+                "timeZone": "Asia/Singapore",
             },
             "scheduledTime": {
                 "local": "2026-10-09 12:15+08:00",
@@ -62,7 +66,8 @@ SAMPLE_FLIGHT = [
                 "utc": "2026-10-09 04:25Z",
             },
             "terminal": "4",
-            "timezone": "Asia/Singapore",
+            "gate": "B2",
+            "baggageBelt": "2",
         },
         "aircraft": {"reg": "B-KPM", "modeS": "780A13", "model": "Boeing 777-300ER"},
         "airline": {"name": "Cathay Pacific", "iata": "CX", "icao": "CPA"},
@@ -98,6 +103,16 @@ def test_parses_flight_and_headers():
     assert result.arrival_time.isoformat() == "2026-10-09T12:15:00+08:00"
     assert result.actual_departure_time.isoformat() == "2026-10-09T09:10:00+08:00"
     assert result.actual_arrival_time.isoformat() == "2026-10-09T12:25:00+08:00"
+    assert result.departure_terminal == "1"
+    assert result.departure_gate == "48"
+    assert result.arrival_terminal == "4"
+    assert result.arrival_gate == "B2"
+    assert result.check_in_desk == "C"
+    assert result.baggage_belt == "2"
+    assert result.aircraft_model == "Boeing 777-300ER"
+    assert result.aircraft_reg == "B-KPM"
+    assert result.departure_timezone == "Asia/Hong_Kong"
+    assert result.arrival_timezone == "Asia/Singapore"
     assert result.aircraft == "Boeing 777-300ER"
     assert result.status == "Arrived"
     assert result.distance == 2556.0

@@ -22,6 +22,12 @@ from app.providers.base import FlightLookupResult, FlightProvider
 logger = getLogger(__name__)
 
 
+def _as_str(value: object) -> str | None:
+    if value is None:
+        return None
+    return str(value)
+
+
 def _parse_datetime(value: object) -> datetime | None:
     """AeroDataBox times are {local, utc}; prefer local (keeps zone offset)."""
     if not isinstance(value, dict):
@@ -117,6 +123,16 @@ class AeroDataBoxProvider(FlightProvider):
             actual_arrival_time=_parse_datetime(
                 arrival.get("runwayTime") or arrival.get("revisedTime")
             ),
+            departure_terminal=_as_str(departure.get("terminal")),
+            departure_gate=_as_str(departure.get("gate")),
+            arrival_terminal=_as_str(arrival.get("terminal")),
+            arrival_gate=_as_str(arrival.get("gate")),
+            check_in_desk=_as_str(departure.get("checkInDesk")),
+            baggage_belt=_as_str(arrival.get("baggageBelt")),
+            aircraft_model=_as_str(aircraft.get("model")),
+            aircraft_reg=_as_str(aircraft.get("reg")),
+            departure_timezone=_as_str(dep_airport.get("timeZone")),
+            arrival_timezone=_as_str(arr_airport.get("timeZone")),
             aircraft=aircraft.get("model") or aircraft.get("reg"),
             status=flight.get("status"),
             distance=distance.get("km"),
