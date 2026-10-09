@@ -29,10 +29,11 @@ const NAV_ITEMS: NavItem[] = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { token, user, setUser, clear } = useAuth();
+  const { token, user, setUser, clear, hasHydrated } = useAuth();
   const { t } = useI18n();
 
   useEffect(() => {
+    if (!hasHydrated) return;
     if (!token) {
       router.replace("/login");
       return;
@@ -45,7 +46,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           // interceptor clears auth on 401
         });
     }
-  }, [token, user, router, setUser]);
+  }, [hasHydrated, token, user, router, setUser]);
+
+  if (!hasHydrated) {
+    return (
+      <div className="flex min-h-screen items-center justify-center text-muted-foreground">
+        {t("common.loading")}
+      </div>
+    );
+  }
 
   if (!token) {
     return (
