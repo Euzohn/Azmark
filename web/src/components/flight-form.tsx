@@ -277,290 +277,333 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2">
-      <Field label={t("flights.serviceNumber")}>
-        <div className="flex gap-2">
-          <Input
-            value={form.service_number}
-            onChange={(e) => set("service_number", e.target.value)}
-            placeholder="CX659"
-            className="flex-1"
-          />
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            onClick={() => void runLookup()}
-            disabled={
-              lookupStatus === "running" ||
-              !/^[A-Za-z0-9]{2,3}\d{1,4}$/.test(form.service_number.trim())
-            }
-            title={t("flights.lookup")}
-            aria-label={t("flights.lookup")}
-          >
-            {lookupStatus === "running" ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Wand2 className="h-4 w-4" />
-            )}
-          </Button>
-        </div>
-        {lookupStatus !== "idle" ? (
-          <p className="mt-1.5 text-xs text-muted-foreground">
-            {lookupStatus === "running" ? t("flights.lookupRunning") : null}
-            {lookupStatus === "ok"
-              ? t("flights.lookupRemote", { source: lookupSource ?? "" })
-              : null}
-            {lookupStatus === "local" ? (
-              <>
-                {t("flights.lookupLocal")}{" "}
-                <Link href="/settings" className="text-primary hover:underline">
-                  {t("nav.settings")}
-                </Link>
-              </>
+    <form onSubmit={handleSubmit} className="flex flex-col gap-8">
+      <Section title={t("flights.section.flight")}>
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field label={t("flights.serviceNumber")}>
+            <div className="flex gap-2">
+              <Input
+                value={form.service_number}
+                onChange={(e) => set("service_number", e.target.value)}
+                placeholder="CX659"
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => void runLookup()}
+                disabled={
+                  lookupStatus === "running" ||
+                  !/^[A-Za-z0-9]{2,3}\d{1,4}$/.test(form.service_number.trim())
+                }
+                title={t("flights.lookup")}
+                aria-label={t("flights.lookup")}
+              >
+                {lookupStatus === "running" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Wand2 className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+            {lookupStatus !== "idle" ? (
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                {lookupStatus === "running" ? t("flights.lookupRunning") : null}
+                {lookupStatus === "ok"
+                  ? t("flights.lookupRemote", { source: lookupSource ?? "" })
+                  : null}
+                {lookupStatus === "local" ? (
+                  <>
+                    {t("flights.lookupLocal")}{" "}
+                    <Link href="/settings" className="text-primary hover:underline">
+                      {t("nav.settings")}
+                    </Link>
+                  </>
+                ) : null}
+                {lookupStatus === "error" ? t("flights.lookupFailed") : null}
+              </p>
             ) : null}
-            {lookupStatus === "error" ? t("flights.lookupFailed") : null}
-          </p>
-        ) : null}
-      </Field>
-      <Field label={t("flights.lookupDate")}>
-        <Input
-          type="date"
-          value={lookupDate}
-          onChange={(e) => setLookupDate(e.target.value)}
-        />
-      </Field>
-      <Field label={t("flights.carrier")}>
-        <Combobox
-          value={form.carrier}
-          onChange={(value) => set("carrier", value)}
-          onSelect={(option) => {
-            const iata = option.data?.iata;
-            if (iata) set("airline_code", iata);
-          }}
-          fetchOptions={fetchAirlines}
-          placeholder={t("flights.airlineSearch")}
-          emptyText={t("flights.noResults")}
-        />
-      </Field>
-      <Field label={t("flights.origin")} required>
-        <Combobox
-          value={form.origin}
-          onChange={(value) => set("origin", value)}
-          fetchOptions={fetchAirports}
-          placeholder={t("flights.airportSearch")}
-          emptyText={t("flights.noResults")}
-        />
-      </Field>
-      <Field label={t("flights.destination")} required>
-        <Combobox
-          value={form.destination}
-          onChange={(value) => set("destination", value)}
-          fetchOptions={fetchAirports}
-          placeholder={t("flights.airportSearch")}
-          emptyText={t("flights.noResults")}
-        />
-      </Field>
-      <Field label={t("flights.departureTime")}>
-        <Input
-          type="datetime-local"
-          value={form.departure_time}
-          onChange={(e) => setDepartureTime(e.target.value)}
-        />
-      </Field>
-      <Field label={t("flights.arrivalTime")}>
-        <Input
-          type="datetime-local"
-          value={form.arrival_time}
-          onChange={(e) => set("arrival_time", e.target.value)}
-        />
-      </Field>
-      <Field label={t("flights.actualDepartureTime")}>
-        <Input
-          type="datetime-local"
-          value={form.actual_departure_time}
-          onChange={(e) => set("actual_departure_time", e.target.value)}
-        />
-      </Field>
-      <Field label={t("flights.actualArrivalTime")}>
-        <Input
-          type="datetime-local"
-          value={form.actual_arrival_time}
-          onChange={(e) => set("actual_arrival_time", e.target.value)}
-        />
-      </Field>
-      <Field label={t("flights.seat")}>
-        <Input value={form.seat} onChange={(e) => set("seat", e.target.value)} placeholder="32A" />
-      </Field>
-      <Field label={t("flights.status")}>
-        <Select
-          value={form.status}
-          onChange={(e) => {
-            setStatusTouched(true);
-            set("status", e.target.value);
-          }}
-        >
-          <option value="scheduled">{t("flights.status.scheduled")}</option>
-          <option value="completed">{t("flights.status.completed")}</option>
-          <option value="cancelled">{t("flights.status.cancelled")}</option>
-        </Select>
-      </Field>
-      <Field label={t("flights.trip")}>
-        <Select
-          value={form.trip_id}
-          onChange={(e) => set("trip_id", e.target.value)}
-        >
-          <option value="">{t("flights.tripNone")}</option>
-          {trips?.items.map((trip) => (
-            <option key={trip.id} value={trip.id}>
-              {trip.name || `${trip.origin ?? ""} → ${trip.destination ?? ""}`}
-            </option>
-          ))}
-        </Select>
-      </Field>
-      <Field label={t("flights.departureTerminal")}>
-        <Input
-          value={form.departure_terminal}
-          onChange={(e) => set("departure_terminal", e.target.value)}
-          placeholder="T1"
-        />
-      </Field>
-      <Field label={t("flights.departureGate")}>
-        <Input
-          value={form.departure_gate}
-          onChange={(e) => set("departure_gate", e.target.value)}
-          placeholder="23"
-        />
-      </Field>
-      <Field label={t("flights.arrivalTerminal")}>
-        <Input
-          value={form.arrival_terminal}
-          onChange={(e) => set("arrival_terminal", e.target.value)}
-          placeholder="T4"
-        />
-      </Field>
-      <Field label={t("flights.arrivalGate")}>
-        <Input
-          value={form.arrival_gate}
-          onChange={(e) => set("arrival_gate", e.target.value)}
-          placeholder="B12"
-        />
-      </Field>
-      <Field label={t("flights.checkInDesk")}>
-        <Input
-          value={form.check_in_desk}
-          onChange={(e) => set("check_in_desk", e.target.value)}
-          placeholder="C"
-        />
-      </Field>
-      <Field label={t("flights.baggageBelt")}>
-        <Input
-          value={form.baggage_belt}
-          onChange={(e) => set("baggage_belt", e.target.value)}
-          placeholder="2"
-        />
-      </Field>
-      <Field label={t("flights.aircraftModel")}>
-        <Input
-          value={form.aircraft_model}
-          onChange={(e) => set("aircraft_model", e.target.value)}
-          placeholder="Airbus A330-300"
-        />
-      </Field>
-      <Field label={t("flights.aircraftReg")}>
-        <Input
-          value={form.aircraft_reg}
-          onChange={(e) => set("aircraft_reg", e.target.value)}
-          placeholder="B-HWM"
-        />
-      </Field>
-      <Field label={t("flights.departureTimezone")}>
-        <Input
-          value={form.departure_timezone}
-          onChange={(e) => set("departure_timezone", e.target.value)}
-          placeholder="Asia/Shanghai"
-        />
-      </Field>
-      <Field label={t("flights.arrivalTimezone")}>
-        <Input
-          value={form.arrival_timezone}
-          onChange={(e) => set("arrival_timezone", e.target.value)}
-          placeholder="Asia/Singapore"
-        />
-      </Field>
-      <Field label={t("flights.price")}>
-        <Input
-          type="number"
-          step="0.01"
-          value={form.price}
-          onChange={(e) => set("price", e.target.value)}
-        />
-      </Field>
-      <Field label={t("flights.currency")}>
-        <Input
-          value={form.currency}
-          maxLength={3}
-          onChange={(e) => set("currency", e.target.value.toUpperCase())}
-        />
-      </Field>
-      <Field label={t("flights.distance")}>
-        <Input
-          type="number"
-          step="0.01"
-          min="0"
-          value={form.distance}
-          onChange={(e) => set("distance", e.target.value)}
-        />
-      </Field>
-      <Field label={t("flights.ticketNumber")}>
-        <Input
-          value={form.ticket_number}
-          onChange={(e) => set("ticket_number", e.target.value)}
-          placeholder="160-1234567890"
-        />
-      </Field>
-      <Field label={t("flights.purchaseCredentialType")}>
-        <Select
-          value={form.purchase_credential_type}
-          onChange={(e) => set("purchase_credential_type", e.target.value)}
-        >
-          <option value="">{t("flights.credentialType.none")}</option>
-          <option value="id_card">{t("flights.credentialType.id_card")}</option>
-          <option value="passport">{t("flights.credentialType.passport")}</option>
-          <option value="hk_macau_permit">{t("flights.credentialType.hk_macau_permit")}</option>
-          <option value="taiwan_permit">{t("flights.credentialType.taiwan_permit")}</option>
-          <option value="other">{t("flights.credentialType.other")}</option>
-        </Select>
-      </Field>
-      <Field label={t("flights.purchaseCredential")}>
-        <Input
-          value={form.purchase_credential}
-          onChange={(e) => set("purchase_credential", e.target.value)}
-          placeholder="E12345678"
-        />
-      </Field>
-      <Field label={t("flights.bookingReference")} className="md:col-span-2">
-        <Input
-          value={form.booking_reference}
-          onChange={(e) => set("booking_reference", e.target.value)}
-          placeholder="ABCDEF"
-          maxLength={6}
-        />
-      </Field>
-      <Field label={t("flights.notes")} className="md:col-span-2">
-        <Textarea
-          rows={3}
-          value={form.notes}
-          onChange={(e) => set("notes", e.target.value)}
-        />
-      </Field>
-      <div className="flex items-center gap-3 md:col-span-2">
-        <Button type="submit" disabled={submitting}>
-          {t("common.save")}
-        </Button>
-        {formError ? <span className="text-sm text-danger">{formError}</span> : null}
-      </div>
+          </Field>
+          <Field label={t("flights.lookupDate")}>
+            <Input
+              type="date"
+              value={lookupDate}
+              onChange={(e) => setLookupDate(e.target.value)}
+            />
+          </Field>
+          <Field label={t("flights.carrier")}>
+            <Combobox
+              value={form.carrier}
+              onChange={(value) => set("carrier", value)}
+              onSelect={(option) => {
+                const iata = option.data?.iata;
+                if (iata) set("airline_code", iata);
+              }}
+              fetchOptions={fetchAirlines}
+              placeholder={t("flights.airlineSearch")}
+              emptyText={t("flights.noResults")}
+            />
+          </Field>
+          <Field label={t("flights.origin")} required>
+            <Combobox
+              value={form.origin}
+              onChange={(value) => set("origin", value)}
+              fetchOptions={fetchAirports}
+              placeholder={t("flights.airportSearch")}
+              emptyText={t("flights.noResults")}
+            />
+          </Field>
+          <Field label={t("flights.destination")} required>
+            <Combobox
+              value={form.destination}
+              onChange={(value) => set("destination", value)}
+              fetchOptions={fetchAirports}
+              placeholder={t("flights.airportSearch")}
+              emptyText={t("flights.noResults")}
+            />
+          </Field>
+          <Field label={t("flights.trip")}>
+            <Select value={form.trip_id} onChange={(e) => set("trip_id", e.target.value)}>
+              <option value="">{t("flights.tripNone")}</option>
+              {trips?.items.map((trip) => (
+                <option key={trip.id} value={trip.id}>
+                  {trip.name || `${trip.origin ?? ""} → ${trip.destination ?? ""}`}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label={t("flights.status")}>
+            <Select
+              value={form.status}
+              onChange={(e) => {
+                setStatusTouched(true);
+                set("status", e.target.value);
+              }}
+            >
+              <option value="scheduled">{t("flights.status.scheduled")}</option>
+              <option value="completed">{t("flights.status.completed")}</option>
+              <option value="cancelled">{t("flights.status.cancelled")}</option>
+            </Select>
+          </Field>
+        </div>
+      </Section>
+
+      <Section title={t("flights.section.schedule")}>
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field label={t("flights.departureTime")}>
+            <Input
+              type="datetime-local"
+              value={form.departure_time}
+              onChange={(e) => setDepartureTime(e.target.value)}
+            />
+          </Field>
+          <Field label={t("flights.arrivalTime")}>
+            <Input
+              type="datetime-local"
+              value={form.arrival_time}
+              onChange={(e) => set("arrival_time", e.target.value)}
+            />
+          </Field>
+          <Field label={t("flights.actualDepartureTime")}>
+            <Input
+              type="datetime-local"
+              value={form.actual_departure_time}
+              onChange={(e) => set("actual_departure_time", e.target.value)}
+            />
+          </Field>
+          <Field label={t("flights.actualArrivalTime")}>
+            <Input
+              type="datetime-local"
+              value={form.actual_arrival_time}
+              onChange={(e) => set("actual_arrival_time", e.target.value)}
+            />
+          </Field>
+          <Field label={t("flights.departureTimezone")}>
+            <Input
+              value={form.departure_timezone}
+              onChange={(e) => set("departure_timezone", e.target.value)}
+              placeholder="Asia/Shanghai"
+            />
+          </Field>
+          <Field label={t("flights.arrivalTimezone")}>
+            <Input
+              value={form.arrival_timezone}
+              onChange={(e) => set("arrival_timezone", e.target.value)}
+              placeholder="Asia/Singapore"
+            />
+          </Field>
+        </div>
+      </Section>
+
+      <Section title={t("flights.section.airport")}>
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field label={t("flights.departureTerminal")}>
+            <Input
+              value={form.departure_terminal}
+              onChange={(e) => set("departure_terminal", e.target.value)}
+              placeholder="T1"
+            />
+          </Field>
+          <Field label={t("flights.departureGate")}>
+            <Input
+              value={form.departure_gate}
+              onChange={(e) => set("departure_gate", e.target.value)}
+              placeholder="23"
+            />
+          </Field>
+          <Field label={t("flights.arrivalTerminal")}>
+            <Input
+              value={form.arrival_terminal}
+              onChange={(e) => set("arrival_terminal", e.target.value)}
+              placeholder="T4"
+            />
+          </Field>
+          <Field label={t("flights.arrivalGate")}>
+            <Input
+              value={form.arrival_gate}
+              onChange={(e) => set("arrival_gate", e.target.value)}
+              placeholder="B12"
+            />
+          </Field>
+          <Field label={t("flights.checkInDesk")}>
+            <Input
+              value={form.check_in_desk}
+              onChange={(e) => set("check_in_desk", e.target.value)}
+              placeholder="C"
+            />
+          </Field>
+          <Field label={t("flights.baggageBelt")}>
+            <Input
+              value={form.baggage_belt}
+              onChange={(e) => set("baggage_belt", e.target.value)}
+              placeholder="2"
+            />
+          </Field>
+        </div>
+      </Section>
+
+      <Section title={t("flights.section.aircraft")}>
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field label={t("flights.aircraftModel")}>
+            <Input
+              value={form.aircraft_model}
+              onChange={(e) => set("aircraft_model", e.target.value)}
+              placeholder="Airbus A330-300"
+            />
+          </Field>
+          <Field label={t("flights.aircraftReg")}>
+            <Input
+              value={form.aircraft_reg}
+              onChange={(e) => set("aircraft_reg", e.target.value)}
+              placeholder="B-HWM"
+            />
+          </Field>
+          <Field label={t("flights.seat")}>
+            <Input value={form.seat} onChange={(e) => set("seat", e.target.value)} placeholder="32A" />
+          </Field>
+        </div>
+      </Section>
+
+      <Section title={t("flights.section.ticket")}>
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field label={t("flights.price")}>
+            <Input
+              type="number"
+              step="0.01"
+              value={form.price}
+              onChange={(e) => set("price", e.target.value)}
+            />
+          </Field>
+          <Field label={t("flights.currency")}>
+            <Input
+              value={form.currency}
+              maxLength={3}
+              onChange={(e) => set("currency", e.target.value.toUpperCase())}
+            />
+          </Field>
+          <Field label={t("flights.distance")}>
+            <Input
+              type="number"
+              step="0.01"
+              min="0"
+              value={form.distance}
+              onChange={(e) => set("distance", e.target.value)}
+            />
+          </Field>
+          <Field label={t("flights.ticketNumber")}>
+            <Input
+              value={form.ticket_number}
+              onChange={(e) => set("ticket_number", e.target.value)}
+              placeholder="160-1234567890"
+            />
+          </Field>
+          <Field label={t("flights.purchaseCredentialType")}>
+            <Select
+              value={form.purchase_credential_type}
+              onChange={(e) => set("purchase_credential_type", e.target.value)}
+            >
+              <option value="">{t("flights.credentialType.none")}</option>
+              <option value="id_card">{t("flights.credentialType.id_card")}</option>
+              <option value="passport">{t("flights.credentialType.passport")}</option>
+              <option value="hk_macau_permit">{t("flights.credentialType.hk_macau_permit")}</option>
+              <option value="taiwan_permit">{t("flights.credentialType.taiwan_permit")}</option>
+              <option value="other">{t("flights.credentialType.other")}</option>
+            </Select>
+          </Field>
+          <Field label={t("flights.purchaseCredential")}>
+            <Input
+              value={form.purchase_credential}
+              onChange={(e) => set("purchase_credential", e.target.value)}
+              placeholder="E12345678"
+            />
+          </Field>
+          <Field label={t("flights.bookingReference")} className="md:col-span-2">
+            <Input
+              value={form.booking_reference}
+              onChange={(e) => set("booking_reference", e.target.value)}
+              placeholder="ABCDEF"
+              maxLength={6}
+            />
+          </Field>
+        </div>
+      </Section>
+
+      <Section title={t("flights.section.notes")}>
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field label={t("flights.notes")} className="md:col-span-2">
+            <Textarea
+              rows={3}
+              value={form.notes}
+              onChange={(e) => set("notes", e.target.value)}
+            />
+          </Field>
+          <div className="flex items-center gap-3 md:col-span-2">
+            <Button type="submit" disabled={submitting}>
+              {t("common.save")}
+            </Button>
+            {formError ? <span className="text-sm text-danger">{formError}</span> : null}
+          </div>
+        </div>
+      </Section>
     </form>
+  );
+}
+
+function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="flex flex-col gap-4">
+      <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        {title}
+      </h2>
+      {children}
+    </section>
   );
 }
 

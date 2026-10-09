@@ -1,11 +1,12 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plane, Plus, Search, Trash2 } from "lucide-react";
+import { ArrowRight, Plane, Plus, Search, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
 import { AirlineName } from "@/components/airline-name";
+import { FlightStatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -50,12 +51,14 @@ export default function FlightsPage() {
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-3">
+    <div className="flex flex-col gap-5">
+      <div className="flex items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">{t("flights.title")}</h1>
+          <h1 className="font-display text-3xl font-semibold tracking-tight">
+            {t("flights.title")}
+          </h1>
           {data ? (
-            <p className="text-xs text-muted-foreground">
+            <p className="mt-1 text-sm text-muted-foreground">
               {t("flights.total", { count: data.total })}
             </p>
           ) : null}
@@ -69,9 +72,9 @@ export default function FlightsPage() {
       </div>
 
       <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          className="pl-9"
+          className="pl-10"
           placeholder={t("flights.searchPlaceholder")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -82,12 +85,13 @@ export default function FlightsPage() {
         <div className="flex flex-col gap-3">
           {Array.from({ length: 4 }, (_, index) => (
             <Card key={index}>
-              <CardContent className="flex items-center gap-3 p-4">
-                <Skeleton className="h-5 w-5 shrink-0 rounded-full" />
+              <CardContent className="flex items-center gap-4 p-4">
+                <Skeleton className="h-11 w-11 shrink-0 rounded-full" />
                 <div className="flex flex-1 flex-col gap-2">
-                  <Skeleton className="h-4 w-2/5" />
+                  <Skeleton className="h-5 w-2/5" />
                   <Skeleton className="h-3 w-3/5" />
                 </div>
+                <Skeleton className="h-6 w-16 rounded-full" />
               </CardContent>
             </Card>
           ))}
@@ -112,16 +116,31 @@ export default function FlightsPage() {
 
       <div className="flex flex-col gap-3">
         {data?.items.map((flight) => (
-          <Card key={flight.id}>
-            <CardContent className="flex items-center justify-between gap-3 p-4">
-              <Link href={`/flights/${flight.id}`} className="flex min-w-0 flex-1 items-center gap-3">
-                <Plane className="h-5 w-5 shrink-0 text-primary" />
+          <Card key={flight.id} className="group">
+            <CardContent className="flex items-center gap-4 p-4">
+              <Link
+                href={`/flights/${flight.id}`}
+                className="flex min-w-0 flex-1 items-center gap-4"
+              >
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
+                  <Plane className="h-5 w-5" strokeWidth={1.75} />
+                </div>
                 <div className="min-w-0">
-                  <div className="truncate font-medium">
-                    {flight.origin ?? "—"} → {flight.destination ?? "—"}
-                    {flight.service_number ? ` · ${flight.service_number}` : ""}
+                  <div className="flex items-center gap-2 truncate">
+                    <span className="font-display text-lg font-semibold tracking-tight">
+                      {flight.origin ?? "—"}
+                    </span>
+                    <ArrowRight className="h-4 w-4 shrink-0 text-primary" strokeWidth={2.25} />
+                    <span className="font-display text-lg font-semibold tracking-tight">
+                      {flight.destination ?? "—"}
+                    </span>
+                    {flight.service_number ? (
+                      <span className="ml-1 shrink-0 text-xs font-medium text-muted-foreground">
+                        {flight.service_number}
+                      </span>
+                    ) : null}
                   </div>
-                  <div className="truncate text-xs text-muted-foreground">
+                  <div className="mt-0.5 truncate text-xs text-muted-foreground">
                     {formatDateTime(flight.departure_time)}
                     {" · "}
                     <AirlineName code={flight.airline_code} fallback={flight.carrier} />
@@ -129,14 +148,17 @@ export default function FlightsPage() {
                   </div>
                 </div>
               </Link>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => handleDelete(flight)}
-                aria-label={t("common.delete")}
-              >
-                <Trash2 className="h-4 w-4 text-danger" />
-              </Button>
+              <div className="flex shrink-0 items-center gap-1">
+                <FlightStatusBadge status={flight.status} />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => handleDelete(flight)}
+                  aria-label={t("common.delete")}
+                >
+                  <Trash2 className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-danger" />
+                </Button>
+              </div>
             </CardContent>
           </Card>
         ))}

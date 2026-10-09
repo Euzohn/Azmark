@@ -4,53 +4,118 @@
 
 :root {
   color-scheme: light;
-  --background: #fafaf9;
-  --foreground: #1c1917;
+
+  --background: #faf6ef;
+  --foreground: #211a12;
+
   --card: #ffffff;
-  --muted: #f5f5f4;
-  --muted-foreground: #57534e;
-  --border: #e7e5e4;
-  --primary: #0f766e;
-  --primary-foreground: #ffffff;
-  --accent: #f0fdfa;
-  --danger: #b91c1c;
+  --card-foreground: #211a12;
+
+  --muted: #f0e8dc;
+  --muted-foreground: #7a6f60;
+
+  --border: #e5dccb;
+
+  --primary: #9a4b1a;
+  --primary-foreground: #fffaf1;
+
+  --accent: #f6ead8;
+  --accent-foreground: #7d3d10;
+
+  --danger: #b3261e;
+  --danger-foreground: #ffffff;
+
+  --success: #3e7d4f;
+  --success-foreground: #ffffff;
+
+  --warning: #a9780d;
+  --warning-foreground: #ffffff;
+
+  --ring: #9a4b1a;
 }
 
 .dark {
   color-scheme: dark;
-  --background: #0c0a09;
-  --foreground: #f5f5f4;
-  --card: #1c1917;
-  --muted: #292524;
-  --muted-foreground: #a8a29e;
-  --border: #292524;
-  --primary: #2dd4bf;
-  --primary-foreground: #042f2e;
-  --accent: #134e4a;
-  --danger: #f87171;
+
+  --background: #16130e;
+  --foreground: #f2e9da;
+
+  --card: #211c15;
+  --card-foreground: #f2e9da;
+
+  --muted: #2c251c;
+  --muted-foreground: #a99b86;
+
+  --border: #322a1e;
+
+  --primary: #e3995c;
+  --primary-foreground: #271202;
+
+  --accent: #3d2f1c;
+  --accent-foreground: #f2c99b;
+
+  --danger: #f06b5f;
+  --danger-foreground: #230503;
+
+  --success: #8ec399;
+  --success-foreground: #0a1f10;
+
+  --warning: #d9b057;
+  --warning-foreground: #241a02;
+
+  --ring: #e3995c;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-border: var(--border);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
   --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-ring: var(--ring);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-display: var(--font-playfair), "Playfair Display", Georgia, "Times New Roman", ui-serif,
+    "Songti SC", "Noto Serif SC", serif;
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--primary) 22%, transparent);
+  background: color-mix(in srgb, var(--primary) 24%, transparent);
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family:
-    var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* 温暖的光晕，模拟手账纸面被台灯照亮的质感 */
+.bg-glow {
+  background-image: radial-gradient(
+    1000px 520px at 50% -140px,
+    color-mix(in srgb, var(--primary) 9%, transparent),
+    transparent 68%
+  );
 }

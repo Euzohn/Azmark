@@ -42,7 +42,7 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="mx-auto flex min-h-[100dvh] w-full max-w-sm flex-col justify-center p-6">
+    <div className="bg-glow mx-auto flex min-h-[100dvh] w-full max-w-sm flex-col justify-center p-6">
       <BrandMark />
       <Card>
         <CardHeader>

@@ -1,22 +1,17 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Backpack, Plus, Trash2 } from "lucide-react";
+import { ArrowRight, Backpack, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 
+import { TripStatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
-import { useI18n, type TranslationKey } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n";
 import type { Trip } from "@/lib/types";
-
-const STATUS_KEYS: Record<string, TranslationKey> = {
-  planned: "trips.status.planned",
-  ongoing: "trips.status.ongoing",
-  completed: "trips.status.completed",
-};
 
 function formatDate(value: string | null): string {
   if (!value) return "";
@@ -45,12 +40,14 @@ export default function TripsPage() {
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-3">
+    <div className="flex flex-col gap-5">
+      <div className="flex items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">{t("trips.title")}</h1>
+          <h1 className="font-display text-3xl font-semibold tracking-tight">
+            {t("trips.title")}
+          </h1>
           {data ? (
-            <p className="text-xs text-muted-foreground">
+            <p className="mt-1 text-sm text-muted-foreground">
               {t("trips.total", { count: data.total })}
             </p>
           ) : null}
@@ -64,15 +61,12 @@ export default function TripsPage() {
       </div>
 
       {isLoading ? (
-        <div className="flex flex-col gap-3">
-          {Array.from({ length: 3 }, (_, index) => (
+        <div className="grid gap-3 md:grid-cols-2">
+          {Array.from({ length: 4 }, (_, index) => (
             <Card key={index}>
-              <CardContent className="flex items-center gap-3 p-4">
-                <Skeleton className="h-5 w-5 shrink-0 rounded-full" />
-                <div className="flex flex-1 flex-col gap-2">
-                  <Skeleton className="h-4 w-2/5" />
-                  <Skeleton className="h-3 w-1/3" />
-                </div>
+              <CardContent className="flex flex-col gap-3 p-5">
+                <Skeleton className="h-5 w-1/2" />
+                <Skeleton className="h-3 w-2/3" />
               </CardContent>
             </Card>
           ))}
@@ -95,39 +89,59 @@ export default function TripsPage() {
         />
       ) : null}
 
-      <div className="flex flex-col gap-3">
+      <div className="grid gap-3 md:grid-cols-2">
         {data?.items.map((trip) => {
           const start = formatDate(trip.start_date);
           const end = formatDate(trip.end_date);
           const dates = start && end ? t("trips.dates", { start, end }) : null;
           return (
             <Card key={trip.id}>
-              <CardContent className="flex items-center justify-between gap-3 p-4">
-                <Link
-                  href={`/trips/${trip.id}`}
-                  className="flex min-w-0 flex-1 items-center gap-3"
-                >
-                  <Backpack className="h-5 w-5 shrink-0 text-primary" />
-                  <div className="min-w-0">
-                    <div className="truncate font-medium">
-                      {trip.origin ?? ""}
-                      {trip.origin && trip.destination ? " → " : ""}
-                      {trip.destination ?? ""}
-                      {trip.name ? ` · ${trip.name}` : ""}
+              <CardContent className="p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <Link
+                    href={`/trips/${trip.id}`}
+                    className="flex min-w-0 flex-1 items-start gap-3"
+                  >
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
+                      <Backpack className="h-5 w-5" strokeWidth={1.75} />
                     </div>
-                    <div className="truncate text-xs text-muted-foreground">
-                      {dates || t(STATUS_KEYS[trip.status] ?? "trips.status.planned")}
+                    <div className="min-w-0">
+                      <div className="truncate font-display text-lg font-semibold tracking-tight">
+                        {trip.name || "—"}
+                      </div>
+                      {(trip.origin || trip.destination) && (
+                        <div className="mt-0.5 flex items-center gap-1.5 text-sm text-muted-foreground">
+                          {trip.origin}
+                          {trip.origin && trip.destination ? (
+                            <ArrowRight className="h-3.5 w-3.5 text-primary" strokeWidth={2.25} />
+                          ) : null}
+                          {trip.destination}
+                        </div>
+                      )}
                     </div>
+                  </Link>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <TripStatusBadge status={trip.status} />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDelete(trip)}
+                      aria-label={t("common.delete")}
+                    >
+                      <Trash2 className="h-4 w-4 text-muted-foreground" />
+                    </Button>
                   </div>
-                </Link>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => handleDelete(trip)}
-                  aria-label={t("common.delete")}
-                >
-                  <Trash2 className="h-4 w-4 text-danger" />
-                </Button>
+                </div>
+                {trip.description ? (
+                  <p className="mt-3 line-clamp-2 text-sm text-muted-foreground">
+                    {trip.description}
+                  </p>
+                ) : null}
+                {dates ? (
+                  <p className="mt-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    {dates}
+                  </p>
+                ) : null}
               </CardContent>
             </Card>
           );

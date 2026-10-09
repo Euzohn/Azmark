@@ -58,7 +58,9 @@ export default function FlightDetailPage() {
         {t("common.back")}
       </Link>
       <div className="flex items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold tracking-tight">{t("flights.edit")}</h1>
+        <h1 className="font-display text-3xl font-semibold tracking-tight">
+          {t("flights.edit")}
+        </h1>
         <Button
           variant="danger"
           size="sm"

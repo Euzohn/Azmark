@@ -32,7 +32,7 @@ export default function NewTripPage() {
         <ArrowLeft className="h-4 w-4" />
         {t("common.back")}
       </Link>
-      <h1 className="text-xl font-semibold tracking-tight">{t("trips.add")}</h1>
+      <h1 className="font-display text-3xl font-semibold tracking-tight">{t("trips.add")}</h1>
       <TripForm submitting={create.isPending} onSubmit={(data) => create.mutate(data)} />
     </div>
   );

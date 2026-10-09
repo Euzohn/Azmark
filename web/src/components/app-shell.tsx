@@ -72,11 +72,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const identity = user?.display_name ?? user?.username ?? "";
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col md:flex-row">
-      <aside className="hidden md:flex md:w-56 md:flex-col md:gap-1 md:border-r md:border-border md:p-4">
-        <div className="mb-6 px-2">
-          <div className="text-lg font-semibold tracking-tight">{t("app.name")}</div>
-          <div className="text-xs text-muted-foreground">{t("app.tagline")}</div>
+    <div className="bg-glow mx-auto flex min-h-dvh w-full max-w-6xl flex-col md:flex-row">
+      <aside className="hidden md:flex md:w-60 md:shrink-0 md:flex-col md:gap-1 md:border-r md:border-border md:px-5 md:py-8">
+        <div className="mb-8 flex items-center gap-3 px-2">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#c26b30] to-primary text-primary-foreground shadow-md shadow-primary/25">
+            <Backpack className="h-5 w-5" strokeWidth={1.75} />
+          </div>
+          <div>
+            <div className="font-display text-xl font-semibold leading-none tracking-tight">
+              {t("app.name")}
+            </div>
+            <div className="mt-1 text-[11px] text-muted-foreground">{t("app.tagline")}</div>
+          </div>
         </div>
         <nav className="flex flex-col gap-1">
           {NAV_ITEMS.map((item) => (
@@ -89,8 +96,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
         <div className="mt-auto flex flex-col gap-3 pt-6">
-          <div className="px-2 text-xs text-muted-foreground">{identity}</div>
-          <div className="flex items-center gap-1">
+          <div className="rounded-2xl border border-border bg-card px-3 py-2.5">
+            <div className="truncate text-sm font-medium text-foreground">{identity}</div>
+            <div className="truncate text-[11px] text-muted-foreground">{user?.username}</div>
+          </div>
+          <div className="flex items-center justify-center gap-1">
             <ThemeToggle />
             <LanguageToggle />
             <Button
@@ -106,8 +116,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <header className="flex items-center justify-between border-b border-border px-4 py-3 md:hidden">
-        <span className="font-semibold">{t("app.name")}</span>
+      <header className="sticky top-0 z-20 flex items-center justify-between border-b border-border bg-background/90 px-4 py-3 backdrop-blur-md md:hidden">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[#c26b30] to-primary text-primary-foreground">
+            <Backpack className="h-4 w-4" strokeWidth={1.75} />
+          </div>
+          <span className="font-display text-lg font-semibold tracking-tight">{t("app.name")}</span>
+        </div>
         <div className="flex items-center gap-1">
           <ThemeToggle />
           <LanguageToggle />
@@ -122,10 +137,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main className="flex-1 p-4 pb-24 md:p-8 md:pb-8">{children}</main>
+      <main className="flex-1 px-4 pb-28 pt-5 md:px-8 md:pb-10 md:pt-8">{children}</main>
 
       <nav
-        className="fixed inset-x-0 bottom-0 z-10 flex border-t border-border bg-card md:hidden"
+        className="fixed inset-x-0 bottom-0 z-20 flex border-t border-border bg-card/90 backdrop-blur-md md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         {NAV_ITEMS.map((item) => {
@@ -136,11 +151,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex min-h-12 flex-1 flex-col items-center justify-center gap-1 py-2 text-xs",
-                active ? "text-primary" : "text-muted-foreground",
+                "flex min-h-14 flex-1 cursor-pointer flex-col items-center justify-center gap-1 py-2 text-xs transition-colors duration-150",
+                active ? "text-primary" : "text-muted-foreground hover:text-foreground",
               )}
             >
-              <Icon className="h-5 w-5" />
+              <span
+                className={cn(
+                  "flex h-8 w-14 items-center justify-center rounded-full transition-colors duration-150",
+                  active ? "bg-accent text-accent-foreground" : "text-inherit",
+                )}
+              >
+                <Icon className="h-5 w-5" strokeWidth={active ? 2 : 1.75} />
+              </span>
               {t(item.key)}
             </Link>
           );
@@ -164,11 +186,13 @@ function NavLink({
     <Link
       href={item.href}
       className={cn(
-        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm",
-        active ? "bg-muted font-medium text-primary" : "text-muted-foreground hover:bg-muted",
+        "flex cursor-pointer items-center gap-3 rounded-full px-4 py-2.5 text-sm font-medium transition-colors duration-150",
+        active
+          ? "bg-primary text-primary-foreground shadow-sm shadow-primary/25"
+          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
       )}
     >
-      <Icon className="h-4 w-4" />
+      <Icon className="h-4 w-4" strokeWidth={active ? 2.25 : 1.75} />
       {label}
     </Link>
   );

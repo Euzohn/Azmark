@@ -42,10 +42,10 @@ export default function AuditPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-xl font-semibold tracking-tight">{t("audit.title")}</h1>
+      <h1 className="font-display text-3xl font-semibold tracking-tight">{t("audit.title")}</h1>
 
       {isLoading ? (
-        <div className="overflow-hidden rounded-xl border border-border">
+        <div className="overflow-hidden rounded-2xl border border-border bg-card">
           {Array.from({ length: 6 }, (_, index) => (
             <div key={index} className="flex items-center gap-4 border-b border-border px-4 py-3">
               <Skeleton className="h-4 w-24" />
@@ -65,25 +65,25 @@ export default function AuditPage() {
       ) : null}
 
       {data && data.items.length > 0 ? (
-        <div className="overflow-x-auto rounded-xl border border-border">
+        <div className="overflow-x-auto rounded-2xl border border-border bg-card">
           <table className="w-full text-left text-sm">
-            <thead className="bg-muted text-xs uppercase text-muted-foreground">
+            <thead className="bg-muted/70 text-xs uppercase tracking-wider text-muted-foreground">
               <tr>
-                <th className="px-4 py-2 font-medium">{t("audit.action")}</th>
-                <th className="px-4 py-2 font-medium">{t("audit.resource")}</th>
-                <th className="px-4 py-2 font-medium">{t("audit.time")}</th>
+                <th className="px-5 py-3 font-semibold">{t("audit.action")}</th>
+                <th className="px-5 py-3 font-semibold">{t("audit.resource")}</th>
+                <th className="px-5 py-3 font-semibold">{t("audit.time")}</th>
               </tr>
             </thead>
             <tbody>
               {data.items.map((log) => {
                 const label = ACTION_LABELS[log.action];
                 return (
-                  <tr key={log.id} className="border-t border-border transition-colors hover:bg-muted/50">
-                    <td className="px-4 py-2">{label ? t(label) : log.action}</td>
-                    <td className="px-4 py-2 text-muted-foreground">
+                  <tr key={log.id} className="border-t border-border transition-colors hover:bg-muted/40">
+                    <td className="px-5 py-3 font-medium">{label ? t(label) : log.action}</td>
+                    <td className="px-5 py-3 text-muted-foreground">
                       {log.resource_type ? `${log.resource_type}` : "-"}
                     </td>
-                    <td className="px-4 py-2 text-muted-foreground">
+                    <td className="px-5 py-3 text-muted-foreground">
                       {formatDateTime(log.created_at)}
                     </td>
                   </tr>

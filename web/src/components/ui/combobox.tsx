@@ -141,7 +141,7 @@ export function Combobox({
         onKeyDown={handleKeyDown}
       />
       {open && (options.length > 0 || showEmpty) ? (
-        <ul className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-border bg-card py-1 text-sm shadow-lg">
+        <ul className="absolute z-20 mt-1.5 max-h-64 w-full overflow-auto rounded-xl border border-border bg-card p-1 text-sm shadow-lg">
           {options.length === 0 ? (
             <li className="px-3 py-2 text-muted-foreground">{emptyText}</li>
           ) : (
@@ -152,11 +152,11 @@ export function Combobox({
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => choose(option)}
                   className={cn(
-                    "flex w-full flex-col items-start px-3 py-2 text-left",
-                    index === highlight ? "bg-muted" : "hover:bg-muted",
+                    "flex w-full cursor-pointer flex-col items-start rounded-lg px-3 py-2 text-left transition-colors duration-150",
+                    index === highlight ? "bg-accent text-accent-foreground" : "hover:bg-muted",
                   )}
                 >
-                  <span>{option.label}</span>
+                  <span className="font-medium">{option.label}</span>
                   {option.hint ? (
                     <span className="text-xs text-muted-foreground">{option.hint}</span>
                   ) : null}

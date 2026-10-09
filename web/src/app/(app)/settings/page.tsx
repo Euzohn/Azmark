@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { KeyRound, Trash2 } from "lucide-react";
 import { useState } from "react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -174,7 +175,9 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold">{t("settings.title")}</h1>
+      <h1 className="font-display text-3xl font-semibold tracking-tight">
+        {t("settings.title")}
+      </h1>
 
       <Card>
         <CardHeader>
@@ -253,11 +256,9 @@ export default function SettingsPage() {
                   {item.provider === "aerodatabox" ? "AeroDataBox" : item.provider}
                 </span>
                 {item.configured ? (
-                  <span className="text-xs text-primary">{t("settings.providerKeyConfigured")}</span>
+                  <Badge variant="success">{t("settings.providerKeyConfigured")}</Badge>
                 ) : (
-                  <span className="text-xs text-muted-foreground">
-                    {t("settings.providerKeyNotConfigured")}
-                  </span>
+                  <Badge variant="neutral">{t("settings.providerKeyNotConfigured")}</Badge>
                 )}
               </div>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
