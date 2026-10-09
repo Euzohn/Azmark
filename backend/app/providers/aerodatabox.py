@@ -75,7 +75,10 @@ class AeroDataBoxProvider(FlightProvider):
         response.raise_for_status()
         try:
             payload = response.json()
-            flights = payload.get("flights") or []
+            if isinstance(payload, list):
+                flights = payload
+            else:
+                flights = (payload or {}).get("flights") or []
             logger.info(
                 "AeroDataBox: status=%s flights=%d payload=%s",
                 response.status_code,

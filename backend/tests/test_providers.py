@@ -6,64 +6,68 @@ import pytest
 
 from app.providers.aerodatabox import AeroDataBoxProvider
 
-SAMPLE_FLIGHT = {
-    "flights": [
-        {
-            "number": "659",
-            "status": "Arrived",
-            "flight": {"iata": "CX659", "icao": "CPA659", "number": "659"},
-            "greatCircleDistance": {
-                "km": 2556.0,
-                "mile": 1588.2,
-                "nm": 1380.1,
-                "meter": 2556000,
-                "feet": 8385827,
+SAMPLE_FLIGHT = [
+    {
+        "number": "659",
+        "status": "Arrived",
+        "flight": {"iata": "CX659", "icao": "CPA659", "number": "659"},
+        "greatCircleDistance": {
+            "km": 2556.0,
+            "mile": 1588.2,
+            "nm": 1380.1,
+            "meter": 2556000,
+            "feet": 8385827,
+        },
+        "departure": {
+            "airport": {
+                "iata": "HKG",
+                "icao": "VHHH",
+                "name": "Hong Kong International Airport",
+                "city": "Hong Kong",
+                "country": "China",
             },
-            "departure": {
-                "airport": {
-                    "iata": "HKG",
-                    "icao": "VHHH",
-                    "name": "Hong Kong International Airport",
-                    "city": "Hong Kong",
-                    "country": "China",
-                },
-                "scheduledTime": {
-                    "local": "2026-10-09T09:00:00+08:00",
-                    "utc": "2026-10-09T01:00:00Z",
-                },
-                "revisedTime": {
-                    "local": "2026-10-09T09:05:00+08:00",
-                    "utc": "2026-10-09T01:05:00Z",
-                },
-                "runwayTime": {"local": "2026-10-09T09:10:00+08:00", "utc": "2026-10-09T01:10:00Z"},
-                "terminal": "1",
-                "timezone": "Asia/Hong_Kong",
+            "scheduledTime": {
+                "local": "2026-10-09 09:00+08:00",
+                "utc": "2026-10-09 01:00Z",
             },
-            "arrival": {
-                "airport": {
-                    "iata": "SIN",
-                    "icao": "WSSS",
-                    "name": "Singapore Changi Airport",
-                    "city": "Singapore",
-                    "country": "Singapore",
-                },
-                "scheduledTime": {
-                    "local": "2026-10-09T12:15:00+08:00",
-                    "utc": "2026-10-09T04:15:00Z",
-                },
-                "revisedTime": {
-                    "local": "2026-10-09T12:20:00+08:00",
-                    "utc": "2026-10-09T04:20:00Z",
-                },
-                "runwayTime": {"local": "2026-10-09T12:25:00+08:00", "utc": "2026-10-09T04:25:00Z"},
-                "terminal": "4",
-                "timezone": "Asia/Singapore",
+            "revisedTime": {
+                "local": "2026-10-09 09:05+08:00",
+                "utc": "2026-10-09 01:05Z",
             },
-            "aircraft": {"reg": "B-KPM", "modeS": "780A13", "model": "Boeing 777-300ER"},
-            "airline": {"name": "Cathay Pacific", "iata": "CX", "icao": "CPA"},
-        }
-    ]
-}
+            "runwayTime": {
+                "local": "2026-10-09 09:10+08:00",
+                "utc": "2026-10-09 01:10Z",
+            },
+            "terminal": "1",
+            "timezone": "Asia/Hong_Kong",
+        },
+        "arrival": {
+            "airport": {
+                "iata": "SIN",
+                "icao": "WSSS",
+                "name": "Singapore Changi Airport",
+                "city": "Singapore",
+                "country": "Singapore",
+            },
+            "scheduledTime": {
+                "local": "2026-10-09 12:15+08:00",
+                "utc": "2026-10-09 04:15Z",
+            },
+            "revisedTime": {
+                "local": "2026-10-09 12:20+08:00",
+                "utc": "2026-10-09 04:20Z",
+            },
+            "runwayTime": {
+                "local": "2026-10-09 12:25+08:00",
+                "utc": "2026-10-09 04:25Z",
+            },
+            "terminal": "4",
+            "timezone": "Asia/Singapore",
+        },
+        "aircraft": {"reg": "B-KPM", "modeS": "780A13", "model": "Boeing 777-300ER"},
+        "airline": {"name": "Cathay Pacific", "iata": "CX", "icao": "CPA"},
+    }
+]
 
 
 async def _lookup(handler, flight_number: str = "CX659"):
@@ -110,8 +114,17 @@ def test_404_returns_none():
 
 
 def test_empty_flights_returns_none():
-    result = asyncio.run(_lookup(lambda request: httpx.Response(200, json={"flights": []})))
+    result = asyncio.run(_lookup(lambda request: httpx.Response(200, json=[])))
     assert result is None
+
+
+def test_dict_format_still_parsed():
+    """Backward-compat: some AeroDataBox endpoints wrap flights in a dict."""
+    result = asyncio.run(
+        _lookup(lambda request: httpx.Response(200, json={"flights": SAMPLE_FLIGHT}))
+    )
+    assert result is not None
+    assert result.flight_number == "CX659"
 
 
 def test_malformed_payload_returns_none():
