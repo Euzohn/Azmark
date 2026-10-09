@@ -73,7 +73,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="bg-glow mx-auto flex min-h-dvh w-full max-w-6xl flex-col md:flex-row">
-      <aside className="hidden md:flex md:w-60 md:shrink-0 md:flex-col md:gap-1 md:border-r md:border-border md:px-5 md:py-8">
+      <aside className="hidden md:sticky md:top-0 md:flex md:h-dvh md:w-60 md:shrink-0 md:flex-col md:gap-1 md:border-r md:border-border md:px-5 md:py-8">
         <div className="mb-8 flex items-center gap-3 px-2">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#c26b30] to-primary text-primary-foreground shadow-md shadow-primary/25">
             <Backpack className="h-5 w-5" strokeWidth={1.75} />

@@ -5,6 +5,7 @@ import { ArrowRight, Plane, Plus, Search, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
+import { AirlineLogo } from "@/components/airline-logo";
 import { AirlineName } from "@/components/airline-name";
 import { FlightStatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -122,9 +123,7 @@ export default function FlightsPage() {
                 href={`/flights/${flight.id}`}
                 className="flex min-w-0 flex-1 items-center gap-4"
               >
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
-                  <Plane className="h-5 w-5" strokeWidth={1.75} />
-                </div>
+                <AirlineLogo code={flight.airline_code} className="h-11 w-11" />
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 truncate">
                     <span className="font-display text-lg font-semibold tracking-tight">

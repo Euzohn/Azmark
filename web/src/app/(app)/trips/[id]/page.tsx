@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, Plane, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 
+import { AirlineLogo } from "@/components/airline-logo";
 import { AirlineName } from "@/components/airline-name";
 import { FlightStatusBadge, TripStatusBadge } from "@/components/status-badge";
 import { TripForm } from "@/components/trip-form";
@@ -155,9 +156,7 @@ export default function TripDetailPage() {
                     href={`/flights/${flight.id}`}
                     className="flex min-w-0 flex-1 items-center gap-4"
                   >
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
-                      <Plane className="h-5 w-5" strokeWidth={1.75} />
-                    </div>
+                    <AirlineLogo code={flight.airline_code} className="h-10 w-10" />
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-display text-base font-semibold tracking-tight">
