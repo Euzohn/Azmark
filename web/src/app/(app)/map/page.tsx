@@ -107,6 +107,13 @@ export default function MapPage() {
       if (cancelled || !containerRef.current) return;
       libRef.current = maplibregl;
 
+      // Webpack can only emit the worker as an asset when the specifier is a
+      // literal; MapLibre's internal runtime URL is dynamic and 404s in prod,
+      // so point it at the emitted file explicitly (vector tiles need it).
+      maplibregl.setWorkerUrl(
+        new URL("maplibre-gl/dist/maplibre-gl-worker.mjs", import.meta.url).href,
+      );
+
       const map = new maplibregl.Map({
         container,
         style: styleFor(themeRef.current),
