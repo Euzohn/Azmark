@@ -183,6 +183,7 @@ AIRLINE_ALLIANCES: dict[str, tuple[str, ...]] = {
         "TH",
         "TK",
         "UA",
+        "ZH",
     ),
     "skyteam": (
         "AF",
