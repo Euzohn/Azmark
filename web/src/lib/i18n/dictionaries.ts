@@ -183,7 +183,7 @@ export const dictionaries = {
 
     "dashboard.title": "总览",
     "dashboard.greeting": "你好，{name}",
-    "dashboard.stats.countries": "国家",
+    "dashboard.stats.countries": "国家/地区",
     "dashboard.stats.cities": "城市",
     "dashboard.stats.journeys": "旅程",
     "dashboard.stats.distance": "总里程",
@@ -404,7 +404,7 @@ export const dictionaries = {
 
     "dashboard.title": "Home",
     "dashboard.greeting": "Hello, {name}",
-    "dashboard.stats.countries": "Countries",
+    "dashboard.stats.countries": "Countries/Regions",
     "dashboard.stats.cities": "Cities",
     "dashboard.stats.journeys": "Journeys",
     "dashboard.stats.distance": "Distance",
