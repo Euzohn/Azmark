@@ -20,7 +20,7 @@ export function haversineKm(a: LonLat, b: LonLat): number {
  * jump more than 180°, letting MapLibre draw a continuous line across the
  * antimeridian instead of taking the long way around.
  */
-export function greatCircle(a: LonLat, b: LonLat, steps = 64): LonLat[] {
+export function greatCircle(a: LonLat, b: LonLat, steps = 96, minSagDeg = 2): LonLat[] {
   const [lon1, lat1] = a;
   const [lon2, lat2] = b;
   const φ1 = toRad(lat1);
@@ -46,7 +46,7 @@ export function greatCircle(a: LonLat, b: LonLat, steps = 64): LonLat[] {
 
   if (d === 0) return [a, b];
 
-  const points: LonLat[] = [];
+  const slerp: LonLat[] = [];
   for (let i = 0; i <= steps; i += 1) {
     const f = i / steps;
     const A = Math.sin((1 - f) * d) / Math.sin(d);
@@ -54,10 +54,40 @@ export function greatCircle(a: LonLat, b: LonLat, steps = 64): LonLat[] {
     const x = A * Math.cos(φ1) * Math.cos(λ1) + B * Math.cos(φ2) * Math.cos(λ2);
     const y = A * Math.cos(φ1) * Math.sin(λ1) + B * Math.cos(φ2) * Math.sin(λ2);
     const z = A * Math.sin(φ1) + B * Math.sin(φ2);
-    points.push([
+    slerp.push([
       toDeg(Math.atan2(y, x)),
       toDeg(Math.atan2(z, Math.sqrt(x * x + y * y))),
     ]);
   }
-  return points;
+
+  // Most short/medium-haul flights follow a great circle so close to the
+  // chord that the arc would read as a straight line on the map. Guarantee a
+  // minimum visible sag by scaling each point's perpendicular distance to the
+  // chord, keeping long-haul routes their true (already large) arc.
+  if (minSagDeg <= 0) return slerp;
+
+  const [lonA, latA] = slerp[0]!;
+  const [lonB, latB] = slerp[slerp.length - 1]!;
+  const dx = lonB - lonA;
+  const dy = latB - latA;
+  const denom = dx * dx + dy * dy || 1;
+
+  let maxOff = 0;
+  const proj: { f: number; ox: number; oy: number }[] = [];
+  for (const [lon, lat] of slerp) {
+    const tx = lon - lonA;
+    const ty = lat - latA;
+    const f = (tx * dx + ty * dy) / denom;
+    const ox = tx - f * dx;
+    const oy = ty - f * dy;
+    proj.push({ f, ox, oy });
+    maxOff = Math.max(maxOff, Math.hypot(ox, oy));
+  }
+  const scale = maxOff > 0 ? Math.max(1, minSagDeg / maxOff) : 1;
+  if (scale <= 1) return slerp;
+
+  return proj.map(({ f, ox, oy }) => [
+    lonA + f * dx + ox * scale,
+    latA + f * dy + oy * scale,
+  ]);
 }
