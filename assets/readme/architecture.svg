@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="380" viewBox="0 0 1200 380" role="img" aria-labelledby="archTitle archDesc">
+  <title id="archTitle">Azmark 部署架构：同源代理，仅 web 对外</title>
+  <desc id="archDesc">浏览器只访问 web（端口 3000），web 通过 compose 内部网络把 /api 请求转发到 api，api 再连接 postgres 与 redis。api、postgres、redis 均不发布宿主机端口。</desc>
+
+  <!-- canvas -->
+  <rect width="1200" height="380" rx="24" fill="#faf6ef"/>
+
+  <!-- heading -->
+  <text x="64" y="52" font-family="Georgia, 'Songti SC', 'Noto Serif SC', serif" font-size="30" font-weight="700" fill="#211a12">部署架构</text>
+  <text x="64" y="80" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" fill="#7a6f60">同源代理 · 仅 web 对外 · 内部网络隔离</text>
+
+  <!-- ===== internal network boundary ===== -->
+  <rect x="540" y="104" width="600" height="248" rx="18" fill="none" stroke="#9a4b1a" stroke-width="1.6" stroke-dasharray="7 7"/>
+  <text x="560" y="128" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="600" fill="#9a4b1a">compose 内部网络</text>
+
+  <!-- ===== browser ===== -->
+  <g id="browser">
+    <rect x="64" y="180" width="180" height="120" rx="12" fill="#ffffff" stroke="#e5dccb" stroke-width="1.5"/>
+    <rect x="64" y="180" width="180" height="28" rx="12" fill="#f6ead8"/>
+    <rect x="64" y="194" width="180" height="14" fill="#f6ead8"/>
+    <circle cx="80" cy="194" r="3.5" fill="#cbb89c"/>
+    <circle cx="94" cy="194" r="3.5" fill="#cbb89c"/>
+    <circle cx="108" cy="194" r="3.5" fill="#cbb89c"/>
+    <text x="154" y="252" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif" font-size="22" font-weight="600" fill="#211a12">浏览器</text>
+    <text x="154" y="278" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15" fill="#7a6f60">:3000</text>
+  </g>
+
+  <!-- arrow browser -> web -->
+  <g stroke="#211a12" stroke-width="1.8" fill="none">
+    <line x1="248" y1="240" x2="318" y2="240" marker-end="url(#arrow)"/>
+  </g>
+  <text x="283" y="230" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15" fill="#7a6f60">HTTPS</text>
+
+  <!-- ===== web ===== -->
+  <g id="web">
+    <rect x="324" y="172" width="200" height="140" rx="12" fill="#ffffff" stroke="#e5dccb" stroke-width="1.5"/>
+    <text x="424" y="222" text-anchor="middle" font-family="Georgia, 'Songti SC', 'Noto Serif SC', serif" font-size="30" font-weight="700" fill="#211a12">web</text>
+    <text x="424" y="248" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" fill="#7a6f60">Next.js · :3000</text>
+    <!-- exposed port badge -->
+    <rect x="346" y="270" width="156" height="26" rx="13" fill="#9a4b1a"/>
+    <text x="424" y="288" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="600" fill="#fffaf1">唯一对外端口</text>
+  </g>
+
+  <!-- arrow web -> api (crosses boundary) -->
+  <g stroke="#211a12" stroke-width="1.8" fill="none">
+    <line x1="528" y1="240" x2="598" y2="240" marker-end="url(#arrow)"/>
+  </g>
+  <text x="563" y="230" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" fill="#7a6f60">/api/*</text>
+
+  <!-- ===== api ===== -->
+  <g id="api">
+    <rect x="604" y="172" width="200" height="140" rx="12" fill="#ffffff" stroke="#e5dccb" stroke-width="1.5"/>
+    <text x="704" y="222" text-anchor="middle" font-family="Georgia, 'Songti SC', 'Noto Serif SC', serif" font-size="30" font-weight="700" fill="#211a12">api</text>
+    <text x="704" y="248" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" fill="#7a6f60">FastAPI · :8000</text>
+    <text x="704" y="288" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" fill="#7a6f60">user_id 隔离 · 字段加密</text>
+  </g>
+
+  <!-- arrows api -> postgres / redis -->
+  <g stroke="#211a12" stroke-width="1.6" fill="none">
+    <line x1="808" y1="210" x2="878" y2="180" marker-end="url(#arrow)"/>
+    <line x1="808" y1="274" x2="878" y2="304" marker-end="url(#arrow)"/>
+  </g>
+
+  <!-- ===== postgres ===== -->
+  <g id="postgres">
+    <rect x="884" y="150" width="220" height="74" rx="10" fill="#ffffff" stroke="#e5dccb" stroke-width="1.5"/>
+    <text x="994" y="184" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif" font-size="20" font-weight="600" fill="#211a12">postgres</text>
+    <text x="994" y="208" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15" fill="#7a6f60">PostgreSQL + PostGIS</text>
+  </g>
+
+  <!-- ===== redis ===== -->
+  <g id="redis">
+    <rect x="884" y="260" width="220" height="74" rx="10" fill="#ffffff" stroke="#e5dccb" stroke-width="1.5"/>
+    <text x="994" y="294" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif" font-size="20" font-weight="600" fill="#211a12">redis</text>
+    <text x="994" y="318" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15" fill="#7a6f60">缓存 · 队列</text>
+  </g>
+
+  <!-- ===== defs: arrowhead ===== -->
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#211a12"/>
+    </marker>
+  </defs>
+
+  <!-- security note -->
+  <text x="64" y="370" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15" fill="#7a6f60">postgres / redis / api 不发布宿主机端口 — 仅 web 经内部网络访问 api</text>
+</svg>
