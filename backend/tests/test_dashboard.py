@@ -85,6 +85,23 @@ def test_statistics_breakdowns(client):
     assert any(item["label"] == "Airbus A330-300" for item in body["by_aircraft"])
 
 
+def test_statistics_by_alliance(client):
+    token = register_and_login(client, "stats_alliance")["access_token"]
+    headers = auth_headers(token)
+
+    client.post("/api/v1/flights", json=FLIGHT_HKG_SIN, headers=headers)  # CX -> oneworld
+    client.post("/api/v1/flights", json=FLIGHT_SIN_PEK, headers=headers)  # SQ -> star_alliance
+
+    response = client.get("/api/v1/statistics", headers=headers)
+    assert response.status_code == 200
+    body = response.json()
+
+    assert body["by_alliance"]
+    by_alliance = {item["label"]: item["count"] for item in body["by_alliance"]}
+    assert by_alliance["star_alliance"] == 1
+    assert by_alliance["oneworld"] == 1
+
+
 def test_timeline(client):
     token = register_and_login(client, "tl_user")["access_token"]
     headers = auth_headers(token)

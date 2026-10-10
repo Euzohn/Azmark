@@ -39,6 +39,7 @@ class TransportRecord(Base):
     service_number: Mapped[str | None] = mapped_column(String(40))
 
     # Flight-specific
+    cabin_class: Mapped[str | None] = mapped_column(String(20))
     seat: Mapped[str | None] = mapped_column(String(10))
     departure_terminal: Mapped[str | None] = mapped_column(String(20))
     departure_gate: Mapped[str | None] = mapped_column(String(20))

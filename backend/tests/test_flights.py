@@ -17,6 +17,28 @@ FLIGHT = {
 }
 
 
+def test_cabin_class_roundtrip(client):
+    token = register_and_login(client, "cabin_user")["access_token"]
+    headers = auth_headers(token)
+
+    created = client.post(
+        "/api/v1/flights", json={**FLIGHT, "cabin_class": "business"}, headers=headers
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["cabin_class"] == "business"
+
+    updated = client.patch(
+        f"/api/v1/flights/{created.json()['id']}",
+        json={"cabin_class": "premium_economy"},
+        headers=headers,
+    )
+    assert updated.status_code == 200
+    assert updated.json()["cabin_class"] == "premium_economy"
+
+    listed = client.get("/api/v1/flights", headers=headers).json()
+    assert listed["items"][0]["cabin_class"] == "premium_economy"
+
+
 def test_create_and_list_flight(client):
     token = register_and_login(client, "flighter")["access_token"]
     headers = auth_headers(token)

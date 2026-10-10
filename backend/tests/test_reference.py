@@ -32,6 +32,24 @@ def test_search_airlines(client):
     assert body["iata"] == "CX"
     assert body["name"] == "Cathay Pacific"
     assert body["name_zh"] == "国泰航空"
+    assert body["alliance"] == "oneworld"
+
+
+def test_airline_alliance_field(client):
+    token = register_and_login(client, "ref_alliance")["access_token"]
+    headers = auth_headers(token)
+
+    sq = client.get("/api/v1/reference/airlines/SQ", headers=headers)
+    assert sq.status_code == 200
+    assert sq.json()["alliance"] == "star_alliance"
+
+    af = client.get("/api/v1/reference/airlines/AF", headers=headers)
+    assert af.status_code == 200
+    assert af.json()["alliance"] == "skyteam"
+
+    tr = client.get("/api/v1/reference/airlines/TR", headers=headers)
+    assert tr.status_code == 200
+    assert tr.json()["alliance"] is None
 
 
 def test_airline_name_override(client):

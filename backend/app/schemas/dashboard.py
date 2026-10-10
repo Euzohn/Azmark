@@ -35,6 +35,7 @@ class BreakdownItem(BaseModel):
 class StatisticsRead(BaseModel):
     by_month: list[BreakdownItem]
     by_airline: list[BreakdownItem]
+    by_alliance: list[BreakdownItem]
     by_airport: list[BreakdownItem]
     by_aircraft: list[BreakdownItem]
 

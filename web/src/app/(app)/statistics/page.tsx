@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import { useI18n, type TranslationKey } from "@/lib/i18n";
 import type { BreakdownItem } from "@/lib/types";
 
 function BarList({
@@ -57,6 +57,19 @@ function monthLabel(label: string): string {
   return `${year}/${month}`;
 }
 
+function allianceLabel(label: string): TranslationKey | null {
+  switch (label) {
+    case "star_alliance":
+      return "alliance.star_alliance";
+    case "skyteam":
+      return "alliance.skyteam";
+    case "oneworld":
+      return "alliance.oneworld";
+    default:
+      return null;
+  }
+}
+
 export default function StatisticsPage() {
   const { t } = useI18n();
 
@@ -69,6 +82,7 @@ export default function StatisticsPage() {
     data &&
     data.by_month.length === 0 &&
     data.by_airline.length === 0 &&
+    data.by_alliance.length === 0 &&
     data.by_airport.length === 0 &&
     data.by_aircraft.length === 0;
 
@@ -76,6 +90,7 @@ export default function StatisticsPage() {
     ? [
         { title: t("stats.byMonth"), items: data.by_month },
         { title: t("stats.byAirline"), items: data.by_airline, leading: true },
+        { title: t("stats.byAlliance"), items: data.by_alliance },
         { title: t("stats.byAirport"), items: data.by_airport },
         { title: t("stats.byAircraft"), items: data.by_aircraft },
       ]
@@ -114,14 +129,16 @@ export default function StatisticsPage() {
                 </CardHeader>
                 <CardContent>
                   <BarList
-                    items={
-                      section.title === t("stats.byMonth")
-                        ? section.items.map((item) => ({
-                            ...item,
-                            label: monthLabel(item.label),
-                          }))
-                        : section.items
-                    }
+                    items={section.items.map((item) => {
+                      if (section.title === t("stats.byMonth")) {
+                        return { ...item, label: monthLabel(item.label) };
+                      }
+                      const allianceKey = allianceLabel(item.label);
+                      if (allianceKey) {
+                        return { ...item, label: t(allianceKey) };
+                      }
+                      return item;
+                    })}
                     renderLeading={
                       section.leading
                         ? (item) => <AirlineLogo code={item.label} className="h-8 w-8" />

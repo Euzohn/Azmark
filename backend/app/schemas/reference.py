@@ -23,6 +23,7 @@ class AirlineRead(BaseModel):
     name: str
     name_zh: str | None = None
     country: str | None = None
+    alliance: str | None = None
 
 
 class FlightNumberLookup(BaseModel):

@@ -25,6 +25,7 @@ export interface Flight {
   carrier: string | null;
   airline_code: string | null;
   service_number: string | null;
+  cabin_class: string | null;
   seat: string | null;
   departure_terminal: string | null;
   departure_gate: string | null;
@@ -60,6 +61,7 @@ export interface FlightInput {
   carrier?: string | null;
   airline_code?: string | null;
   service_number?: string | null;
+  cabin_class?: string | null;
   seat?: string | null;
   departure_terminal?: string | null;
   departure_gate?: string | null;
@@ -163,6 +165,7 @@ export interface Airline {
   name: string;
   name_zh: string | null;
   country: string | null;
+  alliance: string | null;
 }
 
 export interface FlightNumberLookup {
@@ -254,6 +257,7 @@ export interface BreakdownItem {
 export interface StatisticsRead {
   by_month: BreakdownItem[];
   by_airline: BreakdownItem[];
+  by_alliance: BreakdownItem[];
   by_airport: BreakdownItem[];
   by_aircraft: BreakdownItem[];
 }

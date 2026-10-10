@@ -133,6 +133,7 @@ class DashboardService:
 
         months: Counter[str] = Counter()
         airlines: Counter[str] = Counter()
+        alliances: Counter[str] = Counter()
         airports: Counter[str] = Counter()
         aircraft: Counter[str] = Counter()
 
@@ -142,6 +143,11 @@ class DashboardService:
             key = record.airline_code or record.carrier
             if key:
                 airlines[key] += 1
+                if record.airline_code:
+                    airline = reference.get_airline_by_iata(record.airline_code)
+                    alliance = airline.get("alliance") if airline else None
+                    if alliance:
+                        alliances[alliance] += 1
             for code in (record.origin, record.destination):
                 if code:
                     airports[code] += 1
@@ -180,6 +186,9 @@ class DashboardService:
                 key=lambda item: item.label,
             ),
             by_airline=by_airline,
+            by_alliance=[
+                BreakdownItem(label=code, count=count) for code, count in alliances.most_common()
+            ],
             by_airport=by_airport,
             by_aircraft=[
                 BreakdownItem(label=model, count=count) for model, count in aircraft.most_common()

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Loader2, Wand2 } from "lucide-react";
 import Link from "next/link";
 
+import { AllianceBadge } from "@/components/alliance-badge";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
@@ -59,6 +60,7 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
     actual_departure_time: toLocalInput(initial?.actual_departure_time),
     actual_arrival_time: toLocalInput(initial?.actual_arrival_time),
     seat: initial?.seat ?? "",
+    cabin_class: initial?.cabin_class ?? "",
     departure_terminal: initial?.departure_terminal ?? "",
     departure_gate: initial?.departure_gate ?? "",
     arrival_terminal: initial?.arrival_terminal ?? "",
@@ -252,6 +254,7 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
       actual_departure_time: fromLocalInput(form.actual_departure_time),
       actual_arrival_time: fromLocalInput(form.actual_arrival_time),
       seat: form.seat || null,
+      cabin_class: form.cabin_class || null,
       departure_terminal: form.departure_terminal || null,
       departure_gate: form.departure_gate || null,
       arrival_terminal: form.arrival_terminal || null,
@@ -344,6 +347,11 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
               placeholder={t("flights.airlineSearch")}
               emptyText={t("flights.noResults")}
             />
+            {form.airline_code ? (
+              <div className="mt-1.5">
+                <AllianceBadge code={form.airline_code} />
+              </div>
+            ) : null}
           </Field>
           <Field label={t("flights.origin")} required>
             <Combobox
@@ -498,6 +506,18 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
               onChange={(e) => set("aircraft_reg", e.target.value)}
               placeholder="B-HWM"
             />
+          </Field>
+          <Field label={t("flights.cabinClass")}>
+            <Select
+              value={form.cabin_class}
+              onChange={(e) => set("cabin_class", e.target.value)}
+            >
+              <option value="">{t("flights.credentialType.none")}</option>
+              <option value="economy">{t("flights.cabin.economy")}</option>
+              <option value="premium_economy">{t("flights.cabin.premium_economy")}</option>
+              <option value="business">{t("flights.cabin.business")}</option>
+              <option value="first">{t("flights.cabin.first")}</option>
+            </Select>
           </Field>
           <Field label={t("flights.seat")}>
             <Input value={form.seat} onChange={(e) => set("seat", e.target.value)} placeholder="32A" />

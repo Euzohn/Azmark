@@ -153,6 +153,73 @@ AIRLINE_ZH = {
     "LY": "以色列航空",
 }
 
+# 三大航空联盟成员（对应方案 #38 的联盟标注）。名单为常用主流成员，
+# 以 IATA 码为键，方便 build_airlines() 反查补入 alliance 字段。
+AIRLINE_ALLIANCES: dict[str, tuple[str, ...]] = {
+    "star_alliance": (
+        "A3",
+        "AC",
+        "AD",
+        "AI",
+        "AV",
+        "BR",
+        "CA",
+        "CM",
+        "ET",
+        "LO",
+        "LH",
+        "LX",
+        "MS",
+        "NH",
+        "NZ",
+        "OS",
+        "OU",
+        "OZ",
+        "SA",
+        "SK",
+        "SN",
+        "SQ",
+        "TA",
+        "TH",
+        "TK",
+        "UA",
+    ),
+    "skyteam": (
+        "AF",
+        "AM",
+        "AR",
+        "CI",
+        "CZ",
+        "DL",
+        "GA",
+        "KE",
+        "KL",
+        "KQ",
+        "ME",
+        "MF",
+        "MU",
+        "RO",
+        "SU",
+        "SV",
+        "VN",
+    ),
+    "oneworld": (
+        "AA",
+        "AS",
+        "AY",
+        "BA",
+        "CX",
+        "FI",
+        "IB",
+        "JL",
+        "LA",
+        "MH",
+        "QF",
+        "QR",
+        "RJ",
+    ),
+}
+
 # IATA -> (机场名中文, 城市中文)
 AIRPORT_ZH = {
     "PEK": ("北京首都国际机场", "北京"),
@@ -388,6 +455,10 @@ def build_airlines() -> list[dict]:
             "name": name,
             "name_zh": AIRLINE_ZH.get(iata),
             "country": clean(country),
+            "alliance": next(
+                (key for key, codes in AIRLINE_ALLIANCES.items() if iata in codes),
+                None,
+            ),
         }
     airlines = sorted(by_iata.values(), key=lambda a: a["iata"])
     print(f"airlines: {len(airlines)} kept (active with IATA)")

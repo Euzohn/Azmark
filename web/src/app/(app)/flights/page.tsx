@@ -7,6 +7,7 @@ import { useState } from "react";
 
 import { AirlineLogo } from "@/components/airline-logo";
 import { AirlineName } from "@/components/airline-name";
+import { AllianceBadge } from "@/components/alliance-badge";
 import { FlightStatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,7 +15,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import { useI18n, type TranslationKey } from "@/lib/i18n";
 import type { Flight } from "@/lib/types";
 
 function formatDateTime(value: string | null): string {
@@ -28,6 +29,22 @@ function formatDateTime(value: string | null): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function cabinLabel(value: string | null): TranslationKey | null {
+  if (!value) return null;
+  switch (value) {
+    case "economy":
+      return "flights.cabin.economy";
+    case "premium_economy":
+      return "flights.cabin.premium_economy";
+    case "business":
+      return "flights.cabin.business";
+    case "first":
+      return "flights.cabin.first";
+    default:
+      return null;
+  }
 }
 
 export default function FlightsPage() {
@@ -139,12 +156,22 @@ export default function FlightsPage() {
                       </span>
                     ) : null}
                   </div>
-                  <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                    {formatDateTime(flight.departure_time)}
-                    {" · "}
-                    <AirlineName code={flight.airline_code} fallback={flight.carrier} />
-                    {flight.seat ? ` · ${flight.seat}` : ""}
+                  <div className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-muted-foreground">
+                    <span className="truncate">
+                      {formatDateTime(flight.departure_time)}
+                      {" · "}
+                      <AirlineName code={flight.airline_code} fallback={flight.carrier} />
+                    </span>
+                    {flight.seat ? <span className="shrink-0">· {flight.seat}</span> : null}
+                    {cabinLabel(flight.cabin_class) ? (
+                      <span className="shrink-0">· {t(cabinLabel(flight.cabin_class)!)}</span>
+                    ) : null}
                   </div>
+                  {flight.airline_code ? (
+                    <div className="mt-1">
+                      <AllianceBadge code={flight.airline_code} />
+                    </div>
+                  ) : null}
                 </div>
               </Link>
               <div className="flex shrink-0 items-center gap-1">
