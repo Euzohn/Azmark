@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -20,6 +21,11 @@ class TransportRepository:
         user_id: uuid.UUID,
         record_type: str = "flight",
         search: str | None = None,
+        status: str | None = None,
+        cabin_class: str | None = None,
+        trip_id: uuid.UUID | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[list[TransportRecord], int]:
@@ -34,6 +40,16 @@ class TransportRepository:
                     TransportRecord.carrier.ilike(like),
                 )
             )
+        if status:
+            filters.append(TransportRecord.status == status)
+        if cabin_class:
+            filters.append(TransportRecord.cabin_class == cabin_class)
+        if trip_id is not None:
+            filters.append(TransportRecord.trip_id == trip_id)
+        if date_from is not None:
+            filters.append(func.date(TransportRecord.departure_time) >= date_from)
+        if date_to is not None:
+            filters.append(func.date(TransportRecord.departure_time) <= date_to)
 
         total = self.db.scalar(select(func.count()).select_from(TransportRecord).where(*filters))
         stmt = (

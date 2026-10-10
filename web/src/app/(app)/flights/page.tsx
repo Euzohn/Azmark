@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Plane, Plus, Search, Trash2 } from "lucide-react";
+import { ArrowRight, Plane, Plus, Search, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -13,10 +13,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
-import type { Flight } from "@/lib/types";
+import type { Flight, FlightFilters } from "@/lib/types";
 
 function formatDateTime(value: string | null): string {
   if (!value) return "-";
@@ -51,10 +52,29 @@ export default function FlightsPage() {
   const { t } = useI18n();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [cabinFilter, setCabinFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [tripFilter, setTripFilter] = useState("");
+
+  const filters: FlightFilters = {
+    search: search || undefined,
+    status: statusFilter || undefined,
+    cabin_class: cabinFilter || undefined,
+    trip_id: tripFilter || undefined,
+    date_from: dateFrom || undefined,
+    date_to: dateTo || undefined,
+  };
+
+  const { data: trips } = useQuery({
+    queryKey: ["trips"],
+    queryFn: () => api.listTrips(),
+  });
 
   const { data, isLoading } = useQuery({
-    queryKey: ["flights", search],
-    queryFn: () => api.listFlights({ search: search || undefined }),
+    queryKey: ["flights", filters],
+    queryFn: () => api.listFlights(filters),
   });
 
   const remove = useMutation({
@@ -66,6 +86,18 @@ export default function FlightsPage() {
     if (window.confirm(t("flights.deleteConfirm"))) {
       remove.mutate(flight.id);
     }
+  };
+
+  const hasFilters = Boolean(
+    statusFilter || cabinFilter || tripFilter || dateFrom || dateTo,
+  );
+
+  const resetFilters = () => {
+    setStatusFilter("");
+    setCabinFilter("");
+    setTripFilter("");
+    setDateFrom("");
+    setDateTo("");
   };
 
   return (
@@ -89,14 +121,72 @@ export default function FlightsPage() {
         </Link>
       </div>
 
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          className="pl-10"
-          placeholder={t("flights.searchPlaceholder")}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+      <div className="flex flex-col gap-3">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="pl-10"
+            placeholder={t("flights.searchPlaceholder")}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="w-auto text-sm"
+          >
+            <option value="">{t("flights.filter.status")}: {t("flights.filter.all")}</option>
+            <option value="scheduled">{t("flights.status.scheduled")}</option>
+            <option value="completed">{t("flights.status.completed")}</option>
+            <option value="cancelled">{t("flights.status.cancelled")}</option>
+          </Select>
+          <Select
+            value={cabinFilter}
+            onChange={(e) => setCabinFilter(e.target.value)}
+            className="w-auto text-sm"
+          >
+            <option value="">{t("flights.filter.cabinClass")}: {t("flights.filter.all")}</option>
+            <option value="economy">{t("flights.cabin.economy")}</option>
+            <option value="premium_economy">{t("flights.cabin.premium_economy")}</option>
+            <option value="business">{t("flights.cabin.business")}</option>
+            <option value="first">{t("flights.cabin.first")}</option>
+          </Select>
+          <Select
+            value={tripFilter}
+            onChange={(e) => setTripFilter(e.target.value)}
+            className="w-auto text-sm"
+          >
+            <option value="">{t("flights.filter.trip")}: {t("flights.filter.all")}</option>
+            {trips?.items.map((trip) => (
+              <option key={trip.id} value={trip.id}>
+                {trip.name || `${trip.origin ?? ""} → ${trip.destination ?? ""}`}
+              </option>
+            ))}
+          </Select>
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="w-auto text-sm"
+            placeholder={t("flights.filter.dateFrom")}
+          />
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="w-auto text-sm"
+            placeholder={t("flights.filter.dateTo")}
+          />
+          {hasFilters ? (
+            <Button variant="ghost" size="sm" onClick={resetFilters}>
+              <X className="h-3.5 w-3.5" />
+              {t("flights.filter.reset")}
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       {isLoading ? (

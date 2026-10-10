@@ -44,6 +44,12 @@ def get_flight_service(db: Session = Depends(get_db)):
     return FlightService(db)
 
 
+def get_train_service(db: Session = Depends(get_db)):
+    from app.services.transport import TrainService
+
+    return TrainService(db)
+
+
 def get_auth_service(db: Session = Depends(get_db)):
     from app.services.auth import AuthService
 

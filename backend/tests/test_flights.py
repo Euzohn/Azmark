@@ -171,3 +171,65 @@ def test_purchase_credential_encrypted_at_rest(client, db):
     db.refresh(row)
     assert row.booking_reference_enc is None
     assert row.purchase_credential_enc is None
+
+
+def test_flight_advanced_filters(client):
+    token = register_and_login(client, "filter_user")["access_token"]
+    headers = auth_headers(token)
+
+    client.post(
+        "/api/v1/flights",
+        json={
+            "origin": "HKG",
+            "destination": "SIN",
+            "service_number": "CX659",
+            "status": "scheduled",
+            "cabin_class": "economy",
+            "departure_time": "2026-09-26T01:45:00Z",
+        },
+        headers=headers,
+    )
+    client.post(
+        "/api/v1/flights",
+        json={
+            "origin": "PEK",
+            "destination": "NRT",
+            "service_number": "CA123",
+            "status": "completed",
+            "cabin_class": "business",
+            "departure_time": "2026-03-01T02:00:00Z",
+        },
+        headers=headers,
+    )
+    trip = client.post(
+        "/api/v1/trips",
+        json={"name": "Japan", "start_date": "2026-03-01", "end_date": "2026-03-08"},
+        headers=headers,
+    ).json()
+    client.post(
+        "/api/v1/flights",
+        json={
+            "origin": "PEK",
+            "destination": "HND",
+            "service_number": "CA456",
+            "status": "scheduled",
+            "cabin_class": "business",
+            "departure_time": "2026-03-02T02:00:00Z",
+            "trip_id": trip["id"],
+        },
+        headers=headers,
+    )
+
+    def total(**params):
+        response = client.get("/api/v1/flights", params=params, headers=headers)
+        assert response.status_code == 200, response.text
+        return response.json()["total"]
+
+    assert total(status="scheduled") == 2
+    assert total(status="completed") == 1
+    assert total(cabin_class="business") == 2
+    assert total(date_from="2026-03-01", date_to="2026-03-31") == 2
+    assert total(trip_id=trip["id"]) == 1
+    # Combined filters intersect.
+    assert total(status="scheduled", cabin_class="business") == 1
+    assert total(status="scheduled", date_from="2026-09-01") == 1

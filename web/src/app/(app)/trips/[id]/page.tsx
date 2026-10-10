@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, Plane, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Plane, Plus, Trash2, TrainFront } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 
@@ -132,9 +132,9 @@ export default function TripDetailPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="flex flex-col gap-3">
           <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            {t("trips.flights")} · {data.flights.length}
+            {t("trips.records")} · {data.records.length}
           </h2>
-          {data.flights.length === 0 ? (
+          {data.records.length === 0 ? (
             <EmptyState
               icon={Plane}
               title={t("trips.noFlights")}
@@ -149,41 +149,55 @@ export default function TripDetailPage() {
               }
             />
           ) : (
-            data.flights.map((flight) => (
-              <Card key={flight.id}>
-                <CardContent className="flex items-center gap-4 p-4">
-                  <Link
-                    href={`/flights/${flight.id}`}
-                    className="flex min-w-0 flex-1 items-center gap-4"
-                  >
-                    <AirlineLogo code={flight.airline_code} className="h-10 w-10" />
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-display text-base font-semibold tracking-tight">
-                          {flight.origin ?? "—"}
+            data.records.map((record) => {
+              const isTrain = record.type === "train";
+              const detailHref = isTrain ? `/trains/${record.id}` : `/flights/${record.id}`;
+              return (
+                <Card key={record.id}>
+                  <CardContent className="flex items-center gap-4 p-4">
+                    <Link
+                      href={detailHref}
+                      className="flex min-w-0 flex-1 items-center gap-4"
+                    >
+                      {isTrain ? (
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-muted-foreground">
+                          <TrainFront className="h-4 w-4" strokeWidth={1.75} />
                         </span>
-                        <ArrowRight className="h-3.5 w-3.5 text-primary" strokeWidth={2.25} />
-                        <span className="font-display text-base font-semibold tracking-tight">
-                          {flight.destination ?? "—"}
-                        </span>
-                        {flight.service_number ? (
-                          <span className="ml-1 text-xs font-medium text-muted-foreground">
-                            {flight.service_number}
+                      ) : (
+                        <AirlineLogo code={record.airline_code} className="h-10 w-10" />
+                      )}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-display text-base font-semibold tracking-tight">
+                            {record.origin ?? "—"}
                           </span>
-                        ) : null}
+                          <ArrowRight className="h-3.5 w-3.5 text-primary" strokeWidth={2.25} />
+                          <span className="font-display text-base font-semibold tracking-tight">
+                            {record.destination ?? "—"}
+                          </span>
+                          {record.service_number ? (
+                            <span className="ml-1 text-xs font-medium text-muted-foreground">
+                              {record.service_number}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                          {formatDateTime(record.departure_time)}
+                          {" · "}
+                          {isTrain ? (
+                            record.carrier
+                          ) : (
+                            <AirlineName code={record.airline_code} fallback={record.carrier} />
+                          )}
+                          {record.seat ? ` · ${record.seat}` : ""}
+                        </div>
                       </div>
-                      <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                        {formatDateTime(flight.departure_time)}
-                        {" · "}
-                        <AirlineName code={flight.airline_code} fallback={flight.carrier} />
-                        {flight.seat ? ` · ${flight.seat}` : ""}
-                      </div>
-                    </div>
-                  </Link>
-                  <FlightStatusBadge status={flight.status} />
-                </CardContent>
-              </Card>
-            ))
+                    </Link>
+                    <FlightStatusBadge status={record.status} />
+                  </CardContent>
+                </Card>
+              );
+            })
           )}
         </div>
 

@@ -53,9 +53,9 @@ def get_trip(
         trip = service.get_trip(user_id=current_user.id, trip_id=trip_id)
     except TripNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
-    flights = service.list_flights(user_id=current_user.id, trip_id=trip_id)
+    records = service.list_records(user_id=current_user.id, trip_id=trip_id)
     return TripDetail.model_validate(trip, from_attributes=True).model_copy(
-        update={"flights": flights}
+        update={"records": records}
     )
 
 

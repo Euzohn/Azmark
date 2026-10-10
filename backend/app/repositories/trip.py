@@ -66,13 +66,13 @@ class TripRepository:
         )
         self.db.commit()
 
-    def list_flights(self, *, user_id: uuid.UUID, trip_id: uuid.UUID) -> list[TransportRecord]:
+    def list_records(self, *, user_id: uuid.UUID, trip_id: uuid.UUID) -> list[TransportRecord]:
+        """All transport records in the trip, any type (spec #15/#16)."""
         stmt = (
             select(TransportRecord)
             .where(
                 TransportRecord.user_id == user_id,
                 TransportRecord.trip_id == trip_id,
-                TransportRecord.type == "flight",
             )
             .order_by(
                 TransportRecord.departure_time.asc().nullslast(),

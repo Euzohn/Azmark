@@ -43,7 +43,7 @@ def test_create_and_list_trip(client):
 
 
 def test_trip_grouping_flights(client):
-    """Flights carry trip_id and appear in TripDetail (spec #15/#16 decision)."""
+    """Records carry trip_id and appear in TripDetail (spec #15/#16 decision)."""
     token = register_and_login(client, "trip_group")["access_token"]
     headers = auth_headers(token)
 
@@ -58,7 +58,31 @@ def test_trip_grouping_flights(client):
     assert response.status_code == 200
     body = response.json()
     assert body["id"] == trip["id"]
-    assert [f["id"] for f in body["flights"]] == [flight.json()["id"]]
+    assert [r["id"] for r in body["records"]] == [flight.json()["id"]]
+
+
+def test_trip_grouping_includes_trains(client):
+    """Trip records are not restricted to flights (spec #15)."""
+    token = register_and_login(client, "trip_group_train")["access_token"]
+    headers = auth_headers(token)
+
+    trip = client.post("/api/v1/trips", json=TRIP, headers=headers).json()
+    client.post("/api/v1/flights", json={**_make_flight(), "trip_id": trip["id"]}, headers=headers)
+    train = client.post(
+        "/api/v1/trains",
+        json={
+            "origin": "北京南",
+            "destination": "上海",
+            "service_number": "G1",
+            "trip_id": trip["id"],
+        },
+        headers=headers,
+    )
+    assert train.status_code == 201, train.text
+
+    body = client.get(f"/api/v1/trips/{trip['id']}", headers=headers).json()
+    types = sorted(r["type"] for r in body["records"])
+    assert types == ["flight", "train"]
 
 
 def test_update_and_delete_trip(client):

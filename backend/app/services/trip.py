@@ -31,8 +31,8 @@ class TripService:
             raise TripNotFoundError
         return trip
 
-    def list_flights(self, *, user_id: uuid.UUID, trip_id: uuid.UUID) -> list[TransportRecord]:
-        return self.trips.list_flights(user_id=user_id, trip_id=trip_id)
+    def list_records(self, *, user_id: uuid.UUID, trip_id: uuid.UUID) -> list[TransportRecord]:
+        return self.trips.list_records(user_id=user_id, trip_id=trip_id)
 
     def create_trip(self, *, user_id: uuid.UUID, payload: TripCreate) -> Trip:
         trip = Trip(user_id=user_id, **payload.model_dump())

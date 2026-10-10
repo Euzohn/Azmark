@@ -49,7 +49,9 @@ class TripRead(TripBase):
 
 
 class TripDetail(TripRead):
-    flights: list[FlightRead] = []
+    """Trip plus every transport record grouped under it (flights + trains)."""
+
+    records: list[FlightRead] = []
 
 
 class TripList(BaseModel):

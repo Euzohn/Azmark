@@ -89,6 +89,93 @@ export interface FlightList {
   page_size: number;
 }
 
+export interface Train {
+  id: string;
+  user_id: string;
+  type: string;
+  status: string;
+  departure_time: string | null;
+  arrival_time: string | null;
+  actual_departure_time: string | null;
+  actual_arrival_time: string | null;
+  departure_timezone: string | null;
+  arrival_timezone: string | null;
+  origin: string | null;
+  destination: string | null;
+  carrier: string | null;
+  service_number: string | null;
+  cabin_class: string | null;
+  seat: string | null;
+  train_type: string | null;
+  carriage: string | null;
+  seat_type: string | null;
+  ticket_type: string | null;
+  departure_gate: string | null;
+  arrival_gate: string | null;
+  booking_reference: string | null;
+  ticket_number: string | null;
+  purchase_credential_type: string | null;
+  purchase_credential: string | null;
+  price: string | null;
+  currency: string | null;
+  distance: string | null;
+  notes: string | null;
+  trip_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TrainInput {
+  status?: string;
+  departure_time?: string | null;
+  arrival_time?: string | null;
+  actual_departure_time?: string | null;
+  actual_arrival_time?: string | null;
+  departure_timezone?: string | null;
+  arrival_timezone?: string | null;
+  origin?: string | null;
+  destination?: string | null;
+  carrier?: string | null;
+  service_number?: string | null;
+  cabin_class?: string | null;
+  seat?: string | null;
+  train_type?: string | null;
+  carriage?: string | null;
+  seat_type?: string | null;
+  ticket_type?: string | null;
+  departure_gate?: string | null;
+  arrival_gate?: string | null;
+  booking_reference?: string | null;
+  ticket_number?: string | null;
+  purchase_credential_type?: string | null;
+  purchase_credential?: string | null;
+  price?: string | null;
+  currency?: string | null;
+  distance?: string | null;
+  notes?: string | null;
+  trip_id?: string | null;
+}
+
+export interface TrainList {
+  items: Train[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export type TimelineRecord = Flight | Train;
+
+export interface FlightFilters {
+  search?: string;
+  status?: string;
+  cabin_class?: string;
+  trip_id?: string;
+  date_from?: string;
+  date_to?: string;
+  page?: number;
+  page_size?: number;
+}
+
 export interface Trip {
   id: string;
   user_id: string;
@@ -116,7 +203,7 @@ export interface TripInput {
 }
 
 export interface TripDetail extends Trip {
-  flights: Flight[];
+  records: Flight[];
 }
 
 export interface TripList {

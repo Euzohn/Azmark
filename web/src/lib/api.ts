@@ -7,6 +7,7 @@ import type {
   AuditLogList,
   DashboardRead,
   Flight,
+  FlightFilters,
   FlightInput,
   FlightList,
   FlightLookup,
@@ -15,7 +16,11 @@ import type {
   ProviderKeysRead,
   ProviderKeyStatus,
   StatisticsRead,
+  TimelineRecord,
   TokenResponse,
+  Train,
+  TrainInput,
+  TrainList,
   Trip,
   TripDetail,
   TripInput,
@@ -94,9 +99,14 @@ export const api = {
       body: JSON.stringify({ current_password, new_username }),
     }),
 
-  listFlights: (params: { search?: string; page?: number; page_size?: number } = {}) => {
+  listFlights: (params: FlightFilters = {}) => {
     const query = new URLSearchParams();
     if (params.search) query.set("search", params.search);
+    if (params.status) query.set("status", params.status);
+    if (params.cabin_class) query.set("cabin_class", params.cabin_class);
+    if (params.trip_id) query.set("trip_id", params.trip_id);
+    if (params.date_from) query.set("date_from", params.date_from);
+    if (params.date_to) query.set("date_to", params.date_to);
     if (params.page) query.set("page", String(params.page));
     if (params.page_size) query.set("page_size", String(params.page_size));
     const suffix = query.toString() ? `?${query.toString()}` : "";
@@ -108,6 +118,26 @@ export const api = {
   updateFlight: (id: string, data: FlightInput) =>
     request<Flight>(`/flights/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteFlight: (id: string) => request<void>(`/flights/${id}`, { method: "DELETE" }),
+
+  listTrains: (params: FlightFilters = {}) => {
+    const query = new URLSearchParams();
+    if (params.search) query.set("search", params.search);
+    if (params.status) query.set("status", params.status);
+    if (params.cabin_class) query.set("cabin_class", params.cabin_class);
+    if (params.trip_id) query.set("trip_id", params.trip_id);
+    if (params.date_from) query.set("date_from", params.date_from);
+    if (params.date_to) query.set("date_to", params.date_to);
+    if (params.page) query.set("page", String(params.page));
+    if (params.page_size) query.set("page_size", String(params.page_size));
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return request<TrainList>(`/trains${suffix}`);
+  },
+  createTrain: (data: TrainInput) =>
+    request<Train>("/trains", { method: "POST", body: JSON.stringify(data) }),
+  getTrain: (id: string) => request<Train>(`/trains/${id}`),
+  updateTrain: (id: string, data: TrainInput) =>
+    request<Train>(`/trains/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteTrain: (id: string) => request<void>(`/trains/${id}`, { method: "DELETE" }),
 
   listTrips: (params: { page?: number; page_size?: number } = {}) => {
     const query = new URLSearchParams();
@@ -158,6 +188,6 @@ export const api = {
 
   getDashboard: () => request<DashboardRead>("/dashboard"),
   getStatistics: () => request<StatisticsRead>("/statistics"),
-  getTimeline: () => request<Flight[]>("/timeline"),
+  getTimeline: () => request<TimelineRecord[]>("/timeline"),
   getMapRoutes: () => request<MapRoutesRead>("/map/routes"),
 };
