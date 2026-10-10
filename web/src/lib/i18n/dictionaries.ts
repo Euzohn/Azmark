@@ -2,6 +2,7 @@ export const dictionaries = {
   "zh-CN": {
     "app.name": "Azmark",
     "app.tagline": "记录每一次出发",
+    "app.github": "GitHub",
 
     "common.loading": "加载中…",
     "common.save": "保存",
@@ -222,6 +223,7 @@ export const dictionaries = {
   "en-US": {
     "app.name": "Azmark",
     "app.tagline": "Every journey, remembered",
+    "app.github": "GitHub",
 
     "common.loading": "Loading…",
     "common.save": "Save",

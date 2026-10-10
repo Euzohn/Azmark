@@ -188,17 +188,17 @@ export default function MapPage() {
       const pointData = { type: "FeatureCollection" as const, features: pointFeatures };
 
       const dark = isDarkTheme(themeRef.current);
-      const accent = dark ? "#e3995c" : "#9a4b1a";
+      const accent = dark ? "#f0a46e" : "#9a4b1a";
 
       if (!map.getSource("routes")) {
-        map.addSource("routes", { type: "geojson", data: lineData });
+        map.addSource("routes", { type: "geojson", data: lineData, tolerance: 0 });
         map.addSource("airports", { type: "geojson", data: pointData });
         map.addLayer({
           id: "routes-line",
           type: "line",
           source: "routes",
           layout: { "line-cap": "round", "line-join": "round" },
-          paint: { "line-color": accent, "line-width": 1.6, "line-opacity": 0.75 },
+          paint: { "line-color": accent, "line-width": 2, "line-opacity": 0.8 },
         });
         map.addLayer({
           id: "airports-point",
@@ -207,7 +207,7 @@ export default function MapPage() {
           paint: {
             "circle-radius": 3.5,
             "circle-color": accent,
-            "circle-stroke-color": dark ? "#16130e" : "#faf6ef",
+            "circle-stroke-color": dark ? "#141416" : "#faf6ef",
             "circle-stroke-width": 1.5,
           },
         });
