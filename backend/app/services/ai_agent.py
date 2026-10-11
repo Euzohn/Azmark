@@ -41,6 +41,18 @@ action will NOT execute immediately — it becomes a proposal the user must \
 confirm. After proposing, briefly summarize what you found and ask the user \
 to confirm.
 
+FLIGHT LOOKUP WORKFLOW — follow when the user mentions a flight number:
+1. Call lookup_flight with the flight number (and date if the user mentioned \
+one). This queries an external flight data provider configured by the user.
+2. If the lookup returns route/times, use that data to fill the \
+create_transport proposal. Do NOT ask the user for origin, destination, or \
+times you already got from the lookup.
+3. If the lookup returns source='local' (no external provider configured), \
+only the airline name/code is known. Ask the user for origin, destination, \
+and departure time, then create the proposal.
+4. If the lookup fails or returns no result, use whatever the user told you \
+and fill in the rest from their input.
+
 Reply in the user's locale when known. Be concise and factual.
 """
 

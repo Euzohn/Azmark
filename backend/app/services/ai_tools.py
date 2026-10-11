@@ -8,6 +8,7 @@ frontend for explicit user confirmation (spec #69, #93).
 
 from __future__ import annotations
 
+import logging
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -17,6 +18,8 @@ from sqlalchemy.orm import Session
 
 from app.schemas.ai import AiProposal
 from app.services.dashboard import DashboardService
+
+logger = logging.getLogger(__name__)
 
 
 class ToolPermission(StrEnum):
@@ -100,6 +103,66 @@ async def _get_record(db: Session, user_id: uuid.UUID, args: dict) -> dict:
     compact = _compact_record(record)
     compact["notes"] = record.notes
     return compact
+
+
+async def _lookup_flight(db: Session, user_id: uuid.UUID, args: dict) -> dict:
+    """Look up flight info by number + date via external providers (spec #31, #66)."""
+    from app.services.flight_enrichment import FlightEnrichmentService
+
+    flight_number = (args.get("flight_number") or "").strip()
+    if not flight_number:
+        return {"error": "flight_number is required"}
+    flight_date_str = args.get("date")
+    if flight_date_str:
+        try:
+            from datetime import date as date_type
+
+            flight_date = date_type.fromisoformat(str(flight_date_str))
+        except ValueError:
+            return {"error": "invalid date format, use YYYY-MM-DD"}
+    else:
+        from datetime import date as date_type
+
+        flight_date = date_type.today()
+
+    service = FlightEnrichmentService(db)
+    try:
+        result = await service.lookup(
+            user_id=user_id,
+            flight_number=flight_number,
+            date=flight_date,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("AI tool lookup_flight raised: %r", exc)
+        return {"error": "flight lookup failed"}
+
+    if result.source == "local":
+        return {
+            "flight_number": result.flight_number,
+            "airline_code": result.airline_code,
+            "airline_name": result.airline_name,
+            "source": "local",
+            "hint": (
+                "No external provider configured. Route/times are not available. "
+                "Ask the user for origin, destination, and departure time, or "
+                "configure a flight data provider in Settings → Provider Keys."
+            ),
+        }
+    return {
+        "flight_number": result.flight_number,
+        "airline_code": result.airline_code,
+        "airline_name": result.airline_name,
+        "origin_iata": result.origin_iata,
+        "destination_iata": result.destination_iata,
+        "origin_name": result.origin_name,
+        "destination_name": result.destination_name,
+        "departure_time": result.departure_time.isoformat() if result.departure_time else None,
+        "arrival_time": result.arrival_time.isoformat() if result.arrival_time else None,
+        "status": result.status,
+        "distance_km": result.distance,
+        "aircraft": result.aircraft,
+        "source": result.source,
+    }
 
 
 def _create_transport_proposal(args: dict) -> AiProposal:
@@ -188,6 +251,34 @@ TOOLS: dict[str, ToolDef] = {
         },
         permission=ToolPermission.READ,
         read=_get_record,
+    ),
+    "lookup_flight": ToolDef(
+        name="lookup_flight",
+        description=(
+            "Look up live flight information by flight number and date. Returns "
+            "airline, origin/destination airports, scheduled times, and status "
+            "from an external flight data provider. Use this BEFORE calling "
+            "create_transport when the user mentions a flight number — the "
+            "returned data should be used to fill the create_transport proposal. "
+            "If source is 'local', only the airline code/name was inferred and "
+            "route/times are unknown — ask the user for those details."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "flight_number": {
+                    "type": "string",
+                    "description": "Flight number with airline code, e.g. CX659, CA1234",
+                },
+                "date": {
+                    "type": "string",
+                    "description": "Flight date YYYY-MM-DD. Defaults to today.",
+                },
+            },
+            "required": ["flight_number"],
+        },
+        permission=ToolPermission.READ,
+        read=_lookup_flight,
     ),
     "create_transport": ToolDef(
         name="create_transport",

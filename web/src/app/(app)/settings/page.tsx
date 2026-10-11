@@ -253,7 +253,7 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between gap-2">
                 <span className="flex items-center gap-2 text-sm font-medium">
                   <KeyRound className="h-4 w-4 text-muted-foreground" />
-                  {item.provider === "aerodatabox" ? "AeroDataBox" : item.provider}
+                  {item.provider === "aerodatabox" ? "AeroDataBox" : item.provider === "aviationstack" ? "AviationStack" : item.provider}
                 </span>
                 {item.configured ? (
                   <Badge variant="success">{t("settings.providerKeyConfigured")}</Badge>
@@ -306,6 +306,15 @@ export default function SettingsPage() {
                   className="text-xs text-primary hover:underline"
                 >
                   {t("settings.providerKeyGetOne")}
+                </a>
+              ) : item.provider === "aviationstack" ? (
+                <a
+                  href="https://aviationstack.com/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-primary hover:underline"
+                >
+                  {t("settings.providerKeyGetAviationStack")}
                 </a>
               ) : null}
             </div>

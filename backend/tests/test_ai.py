@@ -257,5 +257,115 @@ def test_chat_delete_proposal(client, monkeypatch):
 def test_tool_permissions_classified():
     assert TOOLS["search_records"].permission == ToolPermission.READ
     assert TOOLS["get_statistics"].permission == ToolPermission.READ
+    assert TOOLS["get_record"].permission == ToolPermission.READ
+    assert TOOLS["lookup_flight"].permission == ToolPermission.READ
     assert TOOLS["create_transport"].permission == ToolPermission.WRITE
     assert TOOLS["delete_transport"].permission == ToolPermission.DESTRUCTIVE
+
+
+def test_chat_lookup_flight_then_create(client, monkeypatch):
+    """LLM calls lookup_flight first, then create_transport with enriched data."""
+    token = register_and_login(client, "ai_lookup")["access_token"]
+    headers = auth_headers(token)
+    _configure_ai(client, headers)
+
+    from app.services import ai_agent as agent_mod
+
+    fake = _ScriptedProvider(
+        [
+            # Step 1: LLM calls lookup_flight
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    LLMToolCall(
+                        id="call_1",
+                        name="lookup_flight",
+                        arguments={"flight_number": "CX659", "date": "2026-09-26"},
+                    )
+                ],
+            ),
+            # Step 2: LLM gets lookup result, calls create_transport with enriched data
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    LLMToolCall(
+                        id="call_2",
+                        name="create_transport",
+                        arguments={
+                            "record_type": "flight",
+                            "data": {
+                                "origin": "HKG",
+                                "destination": "SIN",
+                                "service_number": "CX659",
+                                "departure_time": "2026-09-26T01:45:00Z",
+                                "arrival_time": "2026-09-26T05:50:00Z",
+                                "carrier": "Cathay Pacific",
+                                "airline_code": "CX",
+                            },
+                        },
+                    )
+                ],
+            ),
+            # Step 3: LLM summarizes
+            LLMResponse(content="I found CX659 (HKG → SIN) and prepared a record. Please confirm."),
+        ]
+    )
+    monkeypatch.setattr(
+        agent_mod.AiAgentService,
+        "_build_provider",
+        lambda self, user_id: fake,
+    )
+
+    response = client.post(
+        "/api/v1/ai/chat",
+        json={"message": "add my CX659 flight on 2026-09-26"},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["proposals"]) == 1
+    prop = body["proposals"][0]
+    assert prop["record_type"] == "flight"
+    assert prop["data"]["origin"] == "HKG"
+    assert prop["data"]["destination"] == "SIN"
+    assert "confirm" in body["reply"].lower()
+
+
+def test_lookup_flight_no_provider_key_returns_local(client, monkeypatch):
+    """lookup_flight without a provider key returns source='local' with hint."""
+    token = register_and_login(client, "ai_local")["access_token"]
+    headers = auth_headers(token)
+    _configure_ai(client, headers)
+
+    from app.services import ai_agent as agent_mod
+
+    fake = _ScriptedProvider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    LLMToolCall(
+                        id="call_1",
+                        name="lookup_flight",
+                        arguments={"flight_number": "CA1234"},
+                    )
+                ],
+            ),
+            LLMResponse(content="I couldn't look up CA1234. What's the origin and destination?"),
+        ]
+    )
+    monkeypatch.setattr(
+        agent_mod.AiAgentService,
+        "_build_provider",
+        lambda self, user_id: fake,
+    )
+
+    response = client.post(
+        "/api/v1/ai/chat",
+        json={"message": "add CA1234"},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["proposals"] == []
+    assert "origin" in body["reply"].lower() or "couldn" in body["reply"].lower()

@@ -19,6 +19,7 @@ class Settings(BaseSettings):
 
     aerodatabox_base_url: str = "https://aerodatabox.p.rapidapi.com"
     aerodatabox_host: str = "aerodatabox.p.rapidapi.com"
+    aviationstack_base_url: str = "http://api.aviationstack.com/v1"
 
     log_level: str = "INFO"
 
