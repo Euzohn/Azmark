@@ -96,3 +96,9 @@ def get_dashboard_service(db: Session = Depends(get_db)):
     from app.services.dashboard import DashboardService
 
     return DashboardService(db)
+
+
+def get_ai_agent_service(db: Session = Depends(get_db)):
+    from app.services.ai_agent import AiAgentService
+
+    return AiAgentService(db)

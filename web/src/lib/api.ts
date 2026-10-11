@@ -5,6 +5,7 @@ import type {
   Airline,
   Airport,
   AuditLogList,
+  AiChatResponse,
   DashboardRead,
   Flight,
   FlightFilters,
@@ -216,4 +217,10 @@ export const api = {
   getStatistics: () => request<StatisticsRead>("/statistics"),
   getTimeline: () => request<TimelineRecord[]>("/timeline"),
   getMapRoutes: () => request<MapRoutesRead>("/map/routes"),
+
+  chatAi: (message: string) =>
+    request<AiChatResponse>("/ai/chat", {
+      method: "POST",
+      body: JSON.stringify({ message }),
+    }),
 };

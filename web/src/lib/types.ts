@@ -444,3 +444,16 @@ export interface MapRoutesRead {
   items: MapRoute[];
   total: number;
 }
+
+export interface AiProposal {
+  id: string;
+  action: string;
+  record_type: string;
+  summary: string;
+  data: Record<string, unknown>;
+}
+
+export interface AiChatResponse {
+  reply: string;
+  proposals: AiProposal[];
+}

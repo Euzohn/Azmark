@@ -1,13 +1,27 @@
 """Per-user LLM settings storage (spec #35, #36). Key encrypted at rest."""
 
 import uuid
+from dataclasses import dataclass
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.crypto import encrypt_value
+from app.core.crypto import decrypt_value, encrypt_value
 from app.models.ai_setting import UserAiSetting
 from app.schemas.ai_settings import AiSettingsRead, AiSettingsWrite
+
+
+@dataclass(frozen=True)
+class ResolvedAiConfig:
+    """Resolved LLM config including the decrypted API key (never logged)."""
+
+    provider: str
+    model: str
+    base_url: str | None
+    api_key: str | None
+    temperature: float | None
+    context_limit: int | None
+    web_search: bool
 
 
 class AiSettingsService:
@@ -26,6 +40,22 @@ class AiSettingsService:
             model=setting.model,
             base_url=setting.base_url,
             configured=bool(setting.api_key_enc),
+            temperature=setting.temperature,
+            context_limit=setting.context_limit,
+            web_search=setting.web_search,
+        )
+
+    def resolve(self, *, user_id: uuid.UUID) -> ResolvedAiConfig | None:
+        """Return the resolved config with the decrypted key, or None."""
+        setting = self._find(user_id=user_id)
+        if setting is None:
+            return None
+        api_key = decrypt_value(setting.api_key_enc) if setting.api_key_enc else None
+        return ResolvedAiConfig(
+            provider=setting.provider,
+            model=setting.model,
+            base_url=setting.base_url,
+            api_key=api_key,
             temperature=setting.temperature,
             context_limit=setting.context_limit,
             web_search=setting.web_search,

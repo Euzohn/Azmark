@@ -3,6 +3,7 @@
 import {
   Backpack,
   BarChart3,
+  Bot,
   Bus,
   Home,
   History,
@@ -40,6 +41,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/flights", key: "nav.flights", icon: Plane },
   { href: "/trains", key: "nav.trains", icon: TrainFront },
   { href: "/transports", key: "nav.transports", icon: Bus },
+  { href: "/ai", key: "nav.ai", icon: Bot },
   { href: "/timeline", key: "nav.timeline", icon: History },
   { href: "/map", key: "nav.map", icon: MapIcon },
   { href: "/statistics", key: "nav.stats", icon: BarChart3 },
@@ -57,6 +59,7 @@ const MOBILE_MAIN: NavItem[] = [
 const MOBILE_MORE: NavItem[] = [
   { href: "/trains", key: "nav.trains", icon: TrainFront },
   { href: "/transports", key: "nav.transports", icon: Bus },
+  { href: "/ai", key: "nav.ai", icon: Bot },
   { href: "/timeline", key: "nav.timeline", icon: History },
   { href: "/statistics", key: "nav.stats", icon: BarChart3 },
   { href: "/audit", key: "nav.audit", icon: ScrollText },

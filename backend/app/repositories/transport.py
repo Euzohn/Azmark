@@ -90,6 +90,41 @@ class TransportRepository:
         )
         return list(self.db.scalars(stmt))
 
+    def search(
+        self,
+        *,
+        user_id: uuid.UUID,
+        query: str,
+        record_type: str | None = None,
+        limit: int = 20,
+    ) -> list[TransportRecord]:
+        """Keyword search across a user's records regardless of transport type.
+
+        Only ever scoped to one user (spec #57); used by the AI agent (spec #31).
+        """
+        like = f"%{query}%"
+        filters = [
+            TransportRecord.user_id == user_id,
+            or_(
+                TransportRecord.origin.ilike(like),
+                TransportRecord.destination.ilike(like),
+                TransportRecord.service_number.ilike(like),
+                TransportRecord.carrier.ilike(like),
+            ),
+        ]
+        if record_type:
+            filters.append(TransportRecord.type == record_type)
+        stmt = (
+            select(TransportRecord)
+            .where(*filters)
+            .order_by(
+                TransportRecord.departure_time.desc().nullslast(),
+                TransportRecord.created_at.desc(),
+            )
+            .limit(limit)
+        )
+        return list(self.db.scalars(stmt))
+
     def create(self, record: TransportRecord) -> TransportRecord:
         self.db.add(record)
         self.db.commit()
