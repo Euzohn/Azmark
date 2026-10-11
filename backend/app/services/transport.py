@@ -97,3 +97,7 @@ class FlightService(TransportService):
 
 class TrainService(TransportService):
     record_type = "train"
+
+
+class OtherTransportService(TransportService):
+    record_type = "other"

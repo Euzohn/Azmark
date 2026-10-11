@@ -13,6 +13,9 @@ import type {
   FlightLookup,
   FlightNumberLookup,
   MapRoutesRead,
+  OtherTransport,
+  OtherTransportInput,
+  OtherTransportList,
   ProviderKeysRead,
   ProviderKeyStatus,
   StatisticsRead,
@@ -138,6 +141,29 @@ export const api = {
   updateTrain: (id: string, data: TrainInput) =>
     request<Train>(`/trains/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteTrain: (id: string) => request<void>(`/trains/${id}`, { method: "DELETE" }),
+
+  listOtherTransports: (params: FlightFilters = {}) => {
+    const query = new URLSearchParams();
+    if (params.search) query.set("search", params.search);
+    if (params.status) query.set("status", params.status);
+    if (params.trip_id) query.set("trip_id", params.trip_id);
+    if (params.date_from) query.set("date_from", params.date_from);
+    if (params.date_to) query.set("date_to", params.date_to);
+    if (params.page) query.set("page", String(params.page));
+    if (params.page_size) query.set("page_size", String(params.page_size));
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return request<OtherTransportList>(`/other-transports${suffix}`);
+  },
+  createOtherTransport: (data: OtherTransportInput) =>
+    request<OtherTransport>("/other-transports", { method: "POST", body: JSON.stringify(data) }),
+  getOtherTransport: (id: string) => request<OtherTransport>(`/other-transports/${id}`),
+  updateOtherTransport: (id: string, data: OtherTransportInput) =>
+    request<OtherTransport>(`/other-transports/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  deleteOtherTransport: (id: string) =>
+    request<void>(`/other-transports/${id}`, { method: "DELETE" }),
 
   listTrips: (params: { page?: number; page_size?: number } = {}) => {
     const query = new URLSearchParams();

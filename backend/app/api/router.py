@@ -9,6 +9,7 @@ from app.api.routes import (
     reference,
     settings,
     trains,
+    transports,
     trips,
 )
 
@@ -17,6 +18,7 @@ api_router.include_router(health.router)
 api_router.include_router(auth.router)
 api_router.include_router(flights.router)
 api_router.include_router(trains.router)
+api_router.include_router(transports.router)
 api_router.include_router(reference.router)
 api_router.include_router(settings.router)
 api_router.include_router(audit.router)

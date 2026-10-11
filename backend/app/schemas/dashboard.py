@@ -17,6 +17,7 @@ class DashboardStats(BaseModel):
     distance_km: float
     flights: int
     trains: int
+    transports: int
     trips: int
 
 

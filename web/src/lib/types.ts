@@ -163,7 +163,73 @@ export interface TrainList {
   page_size: number;
 }
 
-export type TimelineRecord = Flight | Train;
+export interface OtherTransport {
+  id: string;
+  user_id: string;
+  type: string;
+  status: string;
+  departure_time: string | null;
+  arrival_time: string | null;
+  actual_departure_time: string | null;
+  actual_arrival_time: string | null;
+  departure_timezone: string | null;
+  arrival_timezone: string | null;
+  origin: string | null;
+  destination: string | null;
+  carrier: string | null;
+  service_number: string | null;
+  vehicle_type: string | null;
+  seat: string | null;
+  departure_gate: string | null;
+  arrival_gate: string | null;
+  booking_reference: string | null;
+  ticket_number: string | null;
+  purchase_credential_type: string | null;
+  purchase_credential: string | null;
+  price: string | null;
+  currency: string | null;
+  distance: string | null;
+  notes: string | null;
+  trip_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OtherTransportInput {
+  status?: string;
+  departure_time?: string | null;
+  arrival_time?: string | null;
+  actual_departure_time?: string | null;
+  actual_arrival_time?: string | null;
+  departure_timezone?: string | null;
+  arrival_timezone?: string | null;
+  origin?: string | null;
+  destination?: string | null;
+  carrier?: string | null;
+  service_number?: string | null;
+  vehicle_type?: string | null;
+  seat?: string | null;
+  departure_gate?: string | null;
+  arrival_gate?: string | null;
+  booking_reference?: string | null;
+  ticket_number?: string | null;
+  purchase_credential_type?: string | null;
+  purchase_credential?: string | null;
+  price?: string | null;
+  currency?: string | null;
+  distance?: string | null;
+  notes?: string | null;
+  trip_id?: string | null;
+}
+
+export interface OtherTransportList {
+  items: OtherTransport[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export type TimelineRecord = Flight | Train | OtherTransport;
 
 export interface FlightFilters {
   search?: string;
@@ -203,7 +269,7 @@ export interface TripInput {
 }
 
 export interface TripDetail extends Trip {
-  records: Flight[];
+  records: TimelineRecord[];
 }
 
 export interface TripList {
@@ -326,6 +392,7 @@ export interface DashboardStats {
   distance_km: number;
   flights: number;
   trains: number;
+  transports: number;
   trips: number;
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, History, TrainFront } from "lucide-react";
+import { ArrowRight, Bus, History, TrainFront } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
 
@@ -12,7 +12,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import type { TimelineRecord, Train } from "@/lib/types";
+import type { OtherTransport, TimelineRecord, Train } from "@/lib/types";
 
 function dayKey(value: string | null): string {
   if (!value) return "unknown";
@@ -32,6 +32,16 @@ function timeLabel(value: string | null): string {
 
 function isTrainRecord(record: TimelineRecord): record is Train {
   return record.type === "train";
+}
+
+function isOtherRecord(record: TimelineRecord): record is OtherTransport {
+  return record.type === "other";
+}
+
+function recordHref(record: TimelineRecord): string {
+  if (record.type === "train") return `/trains/${record.id}`;
+  if (record.type === "other") return `/transports/${record.id}`;
+  return `/flights/${record.id}`;
 }
 
 function dateLabel(key: string): string {
@@ -101,7 +111,7 @@ export default function TimelinePage() {
                   <div key={record.id} className="relative">
                     <span className="absolute -left-[26px] top-4 h-2.5 w-2.5 rounded-full border-2 border-background bg-primary" />
                     <Link
-                      href={isTrainRecord(record) ? `/trains/${record.id}` : `/flights/${record.id}`}
+                      href={recordHref(record)}
                       className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-[0_1px_3px_rgba(33,26,18,0.06)] transition-colors hover:border-primary/40"
                     >
                       <span className="w-11 shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
@@ -110,6 +120,10 @@ export default function TimelinePage() {
                       {isTrainRecord(record) ? (
                         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-muted-foreground">
                           <TrainFront className="h-4 w-4" strokeWidth={1.75} />
+                        </span>
+                      ) : isOtherRecord(record) ? (
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-muted-foreground">
+                          <Bus className="h-4 w-4" strokeWidth={1.75} />
                         </span>
                       ) : (
                         <AirlineLogo code={record.airline_code} className="h-9 w-9" />
@@ -129,7 +143,7 @@ export default function TimelinePage() {
                           ) : null}
                         </div>
                         <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                          {isTrainRecord(record) ? (
+                          {isTrainRecord(record) || isOtherRecord(record) ? (
                             record.carrier
                           ) : (
                             <AirlineName code={record.airline_code} fallback={record.carrier} />

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
   Backpack,
+  Bus,
   Compass,
   Globe2,
   MapPin,
@@ -117,6 +118,7 @@ export default function DashboardPage() {
     },
     { icon: Plane, key: "dashboard.stats.flights", value: stats?.flights ?? 0 },
     { icon: TrainFront, key: "dashboard.stats.trains", value: stats?.trains ?? 0 },
+    { icon: Bus, key: "dashboard.stats.transports", value: stats?.transports ?? 0 },
     { icon: Backpack, key: "dashboard.stats.trips", value: stats?.trips ?? 0 },
   ];
 

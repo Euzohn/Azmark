@@ -57,6 +57,10 @@ class TransportRecord(Base):
     seat_type: Mapped[str | None] = mapped_column(String(20))
     ticket_type: Mapped[str | None] = mapped_column(String(30))
 
+    # Other-transport specific (spec #11). Vehicle kind (bus/ferry/taxi/…);
+    # station/dock reuses origin/destination and departure_gate/arrival_gate.
+    vehicle_type: Mapped[str | None] = mapped_column(String(30))
+
     # PNR 预订编码与客票号属敏感字段（spec #45/#96），加密存储。
     booking_reference_enc: Mapped[str | None] = mapped_column(Text)
     ticket_number_enc: Mapped[str | None] = mapped_column(Text)

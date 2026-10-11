@@ -84,6 +84,7 @@ class DashboardService:
         all_records = self.records.list_all(user_id=user_id)
         flights_desc = [r for r in all_records if r.type == "flight"]
         trains = [r for r in all_records if r.type == "train"]
+        other = [r for r in all_records if r.type == "other"]
 
         countries: set[str] = set()
         cities: set[str] = set()
@@ -121,6 +122,7 @@ class DashboardService:
                 distance_km=round(distance, 1),
                 flights=len(flights_desc),
                 trains=len(trains),
+                transports=len(other),
                 trips=int(trips_total),
             ),
             recent=flights_desc[:5],

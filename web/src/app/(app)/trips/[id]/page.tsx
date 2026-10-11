@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, Plane, Plus, Trash2, TrainFront } from "lucide-react";
+import { ArrowLeft, ArrowRight, Bus, Plane, Plus, Trash2, TrainFront } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 
@@ -15,7 +15,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import type { TripInput } from "@/lib/types";
+import type { OtherTransport, TimelineRecord, Train, TripInput } from "@/lib/types";
 
 function formatDateTime(value: string | null): string {
   if (!value) return "-";
@@ -34,6 +34,14 @@ function formatDate(value: string | null): string {
   if (!value) return "";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
+}
+
+function isTrainRecord(record: TimelineRecord): record is Train {
+  return record.type === "train";
+}
+
+function isOtherRecord(record: TimelineRecord): record is OtherTransport {
+  return record.type === "other";
 }
 
 export default function TripDetailPage() {
@@ -150,8 +158,13 @@ export default function TripDetailPage() {
             />
           ) : (
             data.records.map((record) => {
-              const isTrain = record.type === "train";
-              const detailHref = isTrain ? `/trains/${record.id}` : `/flights/${record.id}`;
+              const isTrain = isTrainRecord(record);
+              const isOther = isOtherRecord(record);
+              const detailHref = isTrain
+                ? `/trains/${record.id}`
+                : isOther
+                  ? `/transports/${record.id}`
+                  : `/flights/${record.id}`;
               return (
                 <Card key={record.id}>
                   <CardContent className="flex items-center gap-4 p-4">
@@ -162,6 +175,10 @@ export default function TripDetailPage() {
                       {isTrain ? (
                         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-muted-foreground">
                           <TrainFront className="h-4 w-4" strokeWidth={1.75} />
+                        </span>
+                      ) : isOther ? (
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-muted-foreground">
+                          <Bus className="h-4 w-4" strokeWidth={1.75} />
                         </span>
                       ) : (
                         <AirlineLogo code={record.airline_code} className="h-10 w-10" />
@@ -184,7 +201,7 @@ export default function TripDetailPage() {
                         <div className="mt-0.5 truncate text-xs text-muted-foreground">
                           {formatDateTime(record.departure_time)}
                           {" · "}
-                          {isTrain ? (
+                          {isTrain || isOther ? (
                             record.carrier
                           ) : (
                             <AirlineName code={record.airline_code} fallback={record.carrier} />
