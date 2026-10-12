@@ -1,10 +1,11 @@
 """AviationStack flight-data provider (spec #66).
 
-Endpoint: GET {base}/flights?access_key=…&flight_iata=…&flight_date=YYYY-MM-DD.
-Requires a per-user API key stored encrypted at rest (spec #35, #45). The key
-is sent as a query parameter and never logged.
+Endpoint: GET {base}/flights?access_key=…&flight_iata=….  The free plan does
+NOT support the ``flight_date`` query parameter (returns
+``function_access_restricted``), so we fetch all flights for the IATA code and
+filter by date client-side.
 
-Response: ``{ data: [{ departure, arrival, airline, flight, aircraft, … }] }``.
+Response: ``{ data: [{ flight_date, departure, arrival, airline, … }] }``.
 Times are ISO 8601 strings with offset (e.g. ``2026-01-01T09:00:00+00:00``).
 """
 
@@ -51,14 +52,15 @@ class AviationStackProvider(FlightProvider):
     async def lookup(self, flight_number: str, *, date: date) -> FlightLookupResult | None:
         if not self.api_key:
             return None
-        client = self._client or httpx.AsyncClient(timeout=httpx.Timeout(10.0))
+        client = self._client or httpx.AsyncClient(
+            timeout=httpx.Timeout(10.0), follow_redirects=True
+        )
         try:
             response = await client.get(
                 f"{self.base_url}/flights",
                 params={
                     "access_key": self.api_key,
                     "flight_iata": flight_number,
-                    "flight_date": f"{date:%Y-%m-%d}",
                 },
             )
         finally:
@@ -69,11 +71,34 @@ class AviationStackProvider(FlightProvider):
         response.raise_for_status()
         try:
             payload = response.json()
+            if isinstance(payload, dict) and "error" in payload:
+                err = payload["error"]
+                logger.warning(
+                    "AviationStack API error for %s: code=%s message=%s",
+                    flight_number,
+                    err.get("code"),
+                    err.get("message"),
+                )
+                return None
             flights = (payload or {}).get("data") or []
             if not flights:
-                logger.info("AviationStack: no flights for %s on %s", flight_number, date)
+                logger.info("AviationStack: no flights for %s", flight_number)
                 return None
-            return self._parse(flights[0], flight_number)
+            target = f"{date:%Y-%m-%d}"
+            match = next(
+                (f for f in flights if f.get("flight_date") == target), None
+            )
+            if match is None:
+                match = flights[0]
+                logger.info(
+                    "AviationStack: no exact date match for %s on %s, "
+                    "using first of %d results (date=%s)",
+                    flight_number,
+                    target,
+                    len(flights),
+                    match.get("flight_date"),
+                )
+            return self._parse(match, flight_number)
         except (ValueError, KeyError, TypeError, AttributeError) as exc:
             logger.warning("AviationStack: parse failed: %s", exc)
             return None
