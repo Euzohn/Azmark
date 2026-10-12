@@ -43,7 +43,10 @@ to confirm.
 
 FLIGHT LOOKUP WORKFLOW — follow when the user mentions a flight number:
 1. Call lookup_flight with the flight number (and date if the user mentioned \
-one). This queries an external flight data provider configured by the user.
+one). This queries external flight data providers configured by the user. \
+AeroDataBox is tried first (more accurate); AviationStack is used only as a \
+fallback. If the result includes a hint about lower accuracy, verify key \
+fields (times, airports) with the user before proposing.
 2. If the lookup returns route/times, use that data to fill the \
 create_transport proposal. Do NOT ask the user for origin, destination, or \
 times you already got from the lookup.

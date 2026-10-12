@@ -106,7 +106,12 @@ async def _get_record(db: Session, user_id: uuid.UUID, args: dict) -> dict:
 
 
 async def _lookup_flight(db: Session, user_id: uuid.UUID, args: dict) -> dict:
-    """Look up flight info by number + date via external providers (spec #31, #66)."""
+    """Look up flight info by number + date via external providers (spec #31, #66).
+
+    AeroDataBox is tried first (more accurate for most routes). Only if it
+    returns no result do we fall back to other providers like AviationStack,
+    whose data may be less reliable.
+    """
     from app.services.flight_enrichment import FlightEnrichmentService
 
     flight_number = (args.get("flight_number") or "").strip()
@@ -127,11 +132,20 @@ async def _lookup_flight(db: Session, user_id: uuid.UUID, args: dict) -> dict:
 
     service = FlightEnrichmentService(db)
     try:
+        # Try AeroDataBox first — it is the preferred, more accurate source.
         result = await service.lookup(
             user_id=user_id,
             flight_number=flight_number,
             date=flight_date,
+            provider="aerodatabox",
         )
+        # If AeroDataBox had no data (source == "local"), try other providers.
+        if result.source == "local":
+            result = await service.lookup(
+                user_id=user_id,
+                flight_number=flight_number,
+                date=flight_date,
+            )
     except Exception as exc:  # noqa: BLE001
         logger.warning("AI tool lookup_flight raised: %r", exc)
         return {"error": "flight lookup failed"}
@@ -148,7 +162,7 @@ async def _lookup_flight(db: Session, user_id: uuid.UUID, args: dict) -> dict:
                 "configure a flight data provider in Settings → Provider Keys."
             ),
         }
-    return {
+    response = {
         "flight_number": result.flight_number,
         "airline_code": result.airline_code,
         "airline_name": result.airline_name,
@@ -163,6 +177,12 @@ async def _lookup_flight(db: Session, user_id: uuid.UUID, args: dict) -> dict:
         "aircraft": result.aircraft,
         "source": result.source,
     }
+    if result.source == "aviationstack":
+        response["hint"] = (
+            "Data from AviationStack (AeroDataBox had no result). "
+            "Times or airports may be less accurate — verify with the user."
+        )
+    return response
 
 
 def _create_transport_proposal(args: dict) -> AiProposal:
