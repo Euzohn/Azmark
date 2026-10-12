@@ -113,3 +113,52 @@ class FlightEnrichmentService:
                 logger.info("FlightLookup: %s returned no result for %s", name, number)
         logger.info("FlightLookup: local-only result for %s", number)
         return _merge(local, None)
+
+    async def lookup_all(
+        self,
+        *,
+        user_id: uuid.UUID,
+        flight_number: str,
+        date: date,
+    ) -> list[dict]:
+        """Query every configured provider independently; returns all results.
+
+        Unlike ``lookup``, this does not stop at the first match — the caller
+        (e.g. the flight form's compare view) wants to see what each provider
+        returned so the user can pick one.
+        """
+        local = reference.lookup_flight_number(flight_number)
+        number = local["flight_number"]
+        available = self.keys.get_decrypted(user_id=user_id)
+        order = [name for name in providers.REGISTERED_PROVIDERS if name in available]
+        results: list[dict] = []
+        if not order:
+            logger.info(
+                "FlightLookupAll: no provider key configured (user=%s) for %s",
+                user_id,
+                number,
+            )
+            return results
+        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
+            for name in order:
+                api_key = available.get(name)
+                if not api_key:
+                    continue
+                provider_obj = providers.REGISTERED_PROVIDERS[name](api_key, client=client)
+                try:
+                    remote = await provider_obj.lookup(number, date=date)
+                except Exception as exc:
+                    logger.warning(
+                        "FlightLookupAll: provider %s raised %r for %s",
+                        name,
+                        exc,
+                        number,
+                    )
+                    remote = None
+                if remote is not None:
+                    logger.info("FlightLookupAll: %s returned a result for %s", name, number)
+                    results.append({"provider": name, "data": _merge(local, remote)})
+                else:
+                    logger.info("FlightLookupAll: %s returned no result for %s", name, number)
+                    results.append({"provider": name, "data": None})
+        return results

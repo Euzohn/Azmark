@@ -37,3 +37,15 @@ class FlightLookupResponse(BaseModel):
     status: str | None = None
     distance: float | None = None
     source: str | None = None
+
+
+class ProviderLookupResult(BaseModel):
+    """One provider's independent lookup result (None = no data from it)."""
+
+    provider: str
+    data: FlightLookupResponse | None = None
+
+
+class LookupAllResponse(BaseModel):
+    flight_number: str
+    results: list[ProviderLookupResult]

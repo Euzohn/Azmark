@@ -356,6 +356,16 @@ export interface FlightLookup {
   source: string | null;
 }
 
+export interface ProviderLookupResult {
+  provider: string;
+  data: FlightLookup | null;
+}
+
+export interface LookupAllResponse {
+  flight_number: string;
+  results: ProviderLookupResult[];
+}
+
 export interface ProviderKeyStatus {
   provider: string;
   configured: boolean;

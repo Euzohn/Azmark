@@ -30,6 +30,42 @@ class FakeProvider:
         )
 
 
+class OtherProvider:
+    name = "other"
+
+    def __init__(self, api_key, *, client=None):
+        self.api_key = api_key
+
+    async def lookup(self, flight_number, *, date):
+        if not self.api_key:
+            return None
+        return FlightLookupResult(
+            flight_number=flight_number,
+            airline_code="CX",
+            airline_name="Cathay Pacific",
+            origin_iata="HKG",
+            destination_iata="SIN",
+            origin_name="Hong Kong International Airport",
+            destination_name="Singapore Changi Airport",
+            arrival_time=None,
+            aircraft="Airbus A350-900",
+            status="landed",
+            provider="other",
+        )
+
+
+class EmptyProvider:
+    name = "empty"
+
+    def __init__(self, api_key, *, client=None):
+        self.api_key = api_key
+
+    async def lookup(self, flight_number, *, date):
+        if not self.api_key:
+            return None
+        return None
+
+
 class FailingProvider:
     name = "failing"
 
@@ -140,6 +176,92 @@ def test_key_stored_encrypted(client, db):
 
 def test_settings_requires_auth(client):
     assert client.get("/api/v1/settings/provider-keys").status_code == 401
+
+
+def test_lookup_all_returns_each_provider(client, monkeypatch):
+    import app.providers as providers
+
+    monkeypatch.setitem(providers.REGISTERED_PROVIDERS, "fake", FakeProvider)
+    monkeypatch.setitem(providers.REGISTERED_PROVIDERS, "other", OtherProvider)
+    token = register_and_login(client, "lk_all1")["access_token"]
+    headers = auth_headers(token)
+    _put_key(client, token, "fake", api_key="k1")
+    _put_key(client, token, "other", api_key="k2")
+
+    response = client.post(
+        "/api/v1/flights/lookup-all",
+        json={"flight_number": "CX659"},
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["flight_number"] == "CX659"
+    results = {item["provider"]: item["data"] for item in body["results"]}
+    assert set(results) == {"fake", "other"}
+    assert results["fake"]["source"] == "fake"
+    assert results["fake"]["aircraft"] == "Boeing 777-300ER"
+    assert results["other"]["source"] == "other"
+    assert results["other"]["aircraft"] == "Airbus A350-900"
+    assert results["other"]["status"] == "landed"
+
+
+def test_lookup_all_skips_provider_without_key(client, monkeypatch):
+    import app.providers as providers
+
+    monkeypatch.setitem(providers.REGISTERED_PROVIDERS, "fake", FakeProvider)
+    token = register_and_login(client, "lk_all2")["access_token"]
+    headers = auth_headers(token)
+    _put_key(client, token, "fake", api_key="k1")
+
+    response = client.post(
+        "/api/v1/flights/lookup-all",
+        json={"flight_number": "CX659"},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["results"]) == 1
+    assert body["results"][0]["provider"] == "fake"
+    assert body["results"][0]["data"]["source"] == "fake"
+
+
+def test_lookup_all_returns_null_for_empty_provider(client, monkeypatch):
+    import app.providers as providers
+
+    monkeypatch.setitem(providers.REGISTERED_PROVIDERS, "empty", EmptyProvider)
+    token = register_and_login(client, "lk_all3")["access_token"]
+    headers = auth_headers(token)
+    _put_key(client, token, "empty", api_key="k1")
+
+    response = client.post(
+        "/api/v1/flights/lookup-all",
+        json={"flight_number": "CX659"},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["results"]) == 1
+    assert body["results"][0]["provider"] == "empty"
+    assert body["results"][0]["data"] is None
+
+
+def test_lookup_all_no_keys_returns_empty(client):
+    token = register_and_login(client, "lk_all4")["access_token"]
+    response = client.post(
+        "/api/v1/flights/lookup-all",
+        json={"flight_number": "CX659"},
+        headers=auth_headers(token),
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["flight_number"] == "CX659"
+    assert body["results"] == []
+
+
+def test_lookup_all_requires_auth(client):
+    assert client.post(
+        "/api/v1/flights/lookup-all", json={"flight_number": "CX659"}
+    ).status_code == 401
 
 
 def test_provider_keys_list_and_crud(client):

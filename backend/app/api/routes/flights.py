@@ -11,7 +11,11 @@ from app.api.deps import (
 )
 from app.models.audit_log import AuditAction
 from app.models.user import User
-from app.schemas.flight_lookup import FlightLookupRequest, FlightLookupResponse
+from app.schemas.flight_lookup import (
+    FlightLookupRequest,
+    FlightLookupResponse,
+    LookupAllResponse,
+)
 from app.schemas.transport import FlightCreate, FlightList, FlightRead, FlightUpdate
 from app.services.audit import AuditService
 from app.services.flight_enrichment import FlightEnrichmentService, ProviderNotFoundError
@@ -64,6 +68,23 @@ async def lookup_flight(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Unknown provider"
         ) from None
+
+
+@router.post("/lookup-all", response_model=LookupAllResponse)
+async def lookup_flight_all(
+    payload: FlightLookupRequest,
+    current_user: User = Depends(get_current_user),
+    enrichment: FlightEnrichmentService = Depends(get_flight_enrichment_service),
+) -> LookupAllResponse:
+    results = await enrichment.lookup_all(
+        user_id=current_user.id,
+        flight_number=payload.flight_number,
+        date=payload.date or date.today(),
+    )
+    return LookupAllResponse(
+        flight_number=payload.flight_number,
+        results=results,
+    )
 
 
 @router.post("", response_model=FlightRead, status_code=status.HTTP_201_CREATED)

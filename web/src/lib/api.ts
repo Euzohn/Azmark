@@ -12,6 +12,7 @@ import type {
   FlightInput,
   FlightList,
   FlightLookup,
+  LookupAllResponse,
   FlightNumberLookup,
   MapRoutesRead,
   OtherTransport,
@@ -190,6 +191,8 @@ export const api = {
     request<FlightNumberLookup>(`/reference/flight-lookup?number=${encodeURIComponent(number)}`),
   lookupFlight: (data: { flight_number: string; date?: string; provider?: string }) =>
     request<FlightLookup>("/flights/lookup", { method: "POST", body: JSON.stringify(data) }),
+  lookupFlightAll: (data: { flight_number: string; date?: string }) =>
+    request<LookupAllResponse>("/flights/lookup-all", { method: "POST", body: JSON.stringify(data) }),
 
   listProviderKeys: () => request<ProviderKeysRead>("/settings/provider-keys"),
   setProviderKey: (provider: string, api_key: string) =>

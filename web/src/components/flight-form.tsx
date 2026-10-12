@@ -1,13 +1,15 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 
-import { Loader2, Wand2 } from "lucide-react";
+import { Columns2, Loader2, Wand2 } from "lucide-react";
 import Link from "next/link";
 
 import { AllianceBadge } from "@/components/alliance-badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,7 +17,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import type { Flight, FlightInput } from "@/lib/types";
+import type { Flight, FlightInput, FlightLookup, ProviderLookupResult } from "@/lib/types";
 
 function toLocalInput(value: string | null | undefined): string {
   if (!value) return "";
@@ -39,6 +41,22 @@ function autoStatus(departure: string): string | null {
   const date = new Date(departure);
   if (Number.isNaN(date.getTime())) return null;
   return date.getTime() < Date.now() ? "completed" : "scheduled";
+}
+
+function formatDateTime(value: string | null | undefined): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(
+    date.getHours(),
+  )}:${pad(date.getMinutes())}`;
+}
+
+function providerLabel(name: string): string {
+  if (name === "aerodatabox") return "AeroDataBox";
+  if (name === "aviationstack") return "AviationStack";
+  return name;
 }
 
 interface FlightFormProps {
@@ -87,6 +105,19 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
     queryKey: ["trips"],
     queryFn: () => api.listTrips(),
   });
+
+  const { data: providerKeys } = useQuery({
+    queryKey: ["provider-keys"],
+    queryFn: api.listProviderKeys,
+  });
+  const configuredProviders = (providerKeys?.providers ?? [])
+    .filter((item) => item.configured)
+    .map((item) => item.provider);
+  const canCompare = configuredProviders.length >= 2;
+
+  const [selectedProvider, setSelectedProvider] = useState<string>("auto");
+  const [compareStatus, setCompareStatus] = useState<"idle" | "running" | "error">("idle");
+  const [compareResults, setCompareResults] = useState<ProviderLookupResult[] | null>(null);
 
   const [lookupStatus, setLookupStatus] = useState<"idle" | "running" | "ok" | "local" | "error">(
     "idle",
@@ -170,13 +201,8 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
     };
   }, [form.service_number, form.carrier, locale]);
 
-  const runLookup = async () => {
-    const number = form.service_number.trim();
-    if (!/^[A-Za-z0-9]{2,3}\d{1,4}$/.test(number)) return;
-    setLookupStatus("running");
-    const datePart = lookupDate || new Date().toISOString().slice(0, 10);
-    try {
-      const result = await api.lookupFlight({ flight_number: number, date: datePart });
+  const applyLookupResult = useCallback(
+    (result: FlightLookup) => {
       setForm((prev) => {
         const next = { ...prev };
         const airlineName =
@@ -229,8 +255,39 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
       } else {
         setLookupStatus("local");
       }
+    },
+    [locale, statusTouched],
+  );
+
+  const runLookup = async () => {
+    const number = form.service_number.trim();
+    if (!/^[A-Za-z0-9]{2,3}\d{1,4}$/.test(number)) return;
+    setLookupStatus("running");
+    const datePart = lookupDate || new Date().toISOString().slice(0, 10);
+    try {
+      const result = await api.lookupFlight({
+        flight_number: number,
+        date: datePart,
+        provider: selectedProvider === "auto" ? undefined : selectedProvider,
+      });
+      applyLookupResult(result);
     } catch {
       setLookupStatus("error");
+    }
+  };
+
+  const runCompare = async () => {
+    const number = form.service_number.trim();
+    if (!canCompare || !/^[A-Za-z0-9]{2,3}\d{1,4}$/.test(number)) return;
+    setCompareStatus("running");
+    setCompareResults(null);
+    const datePart = lookupDate || new Date().toISOString().slice(0, 10);
+    try {
+      const data = await api.lookupFlightAll({ flight_number: number, date: datePart });
+      setCompareResults(data.results);
+      setCompareStatus("idle");
+    } catch {
+      setCompareStatus("error");
     }
   };
 
@@ -309,6 +366,26 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
                   <Wand2 className="h-4 w-4" />
                 )}
               </Button>
+              {canCompare ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => void runCompare()}
+                  disabled={
+                    compareStatus === "running" ||
+                    !/^[A-Za-z0-9]{2,3}\d{1,4}$/.test(form.service_number.trim())
+                  }
+                  title={t("flights.compare")}
+                  aria-label={t("flights.compare")}
+                >
+                  {compareStatus === "running" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Columns2 className="h-4 w-4" />
+                  )}
+                </Button>
+              ) : null}
             </div>
             {lookupStatus !== "idle" ? (
               <p className="mt-1.5 text-xs text-muted-foreground">
@@ -335,6 +412,21 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
               onChange={(e) => setLookupDate(e.target.value)}
             />
           </Field>
+          {canCompare ? (
+            <Field label={t("flights.lookupProvider")}>
+              <Select
+                value={selectedProvider}
+                onChange={(e) => setSelectedProvider(e.target.value)}
+              >
+                <option value="auto">{t("flights.providerAuto")}</option>
+                {configuredProviders.map((name) => (
+                  <option key={name} value={name}>
+                    {providerLabel(name)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          ) : null}
           <Field label={t("flights.carrier")}>
             <Combobox
               value={form.carrier}
@@ -395,6 +487,19 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
             </Select>
           </Field>
         </div>
+        {compareStatus === "error" ? (
+          <p className="text-xs text-danger">{t("flights.compareFailed")}</p>
+        ) : null}
+        {compareResults && compareResults.length > 0 ? (
+          <ComparePanel
+            results={compareResults}
+            onUse={(data) => {
+              applyLookupResult(data);
+              setCompareResults(null);
+            }}
+            onClose={() => setCompareResults(null)}
+          />
+        ) : null}
       </Section>
 
       <Section title={t("flights.section.schedule")}>
@@ -650,5 +755,105 @@ function Field({
       </Label>
       {children}
     </div>
+  );
+}
+
+function ComparePanel({
+  results,
+  onUse,
+  onClose,
+}: {
+  results: ProviderLookupResult[];
+  onUse: (data: FlightLookup) => void;
+  onClose: () => void;
+}) {
+  const { t, locale } = useI18n();
+
+  const rows: { label: string; get: (d: FlightLookup) => string }[] = [
+    {
+      label: t("flights.carrier"),
+      get: (d) =>
+        (locale === "zh-CN" ? (d.airline_name_zh ?? d.airline_name) : d.airline_name) ?? "",
+    },
+    { label: t("flights.origin"), get: (d) => d.origin_iata ?? "" },
+    { label: t("flights.destination"), get: (d) => d.destination_iata ?? "" },
+    { label: t("flights.departureTime"), get: (d) => formatDateTime(d.departure_time) },
+    { label: t("flights.arrivalTime"), get: (d) => formatDateTime(d.arrival_time) },
+    {
+      label: t("flights.actualDepartureTime"),
+      get: (d) => formatDateTime(d.actual_departure_time),
+    },
+    { label: t("flights.actualArrivalTime"), get: (d) => formatDateTime(d.actual_arrival_time) },
+    { label: t("flights.departureTerminal"), get: (d) => d.departure_terminal ?? "" },
+    { label: t("flights.departureGate"), get: (d) => d.departure_gate ?? "" },
+    { label: t("flights.arrivalTerminal"), get: (d) => d.arrival_terminal ?? "" },
+    { label: t("flights.arrivalGate"), get: (d) => d.arrival_gate ?? "" },
+    { label: t("flights.baggageBelt"), get: (d) => d.baggage_belt ?? "" },
+    { label: t("flights.aircraftModel"), get: (d) => d.aircraft_model ?? d.aircraft ?? "" },
+    { label: t("flights.distance"), get: (d) => (d.distance ? `${d.distance} km` : "") },
+    { label: t("flights.status"), get: (d) => d.status ?? "" },
+  ];
+
+  const template = `minmax(7rem, 1fr) repeat(${results.length}, minmax(0, 1fr))`;
+
+  return (
+    <Card className="mt-2">
+      <CardContent className="p-4">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h3 className="text-sm font-medium">{t("flights.compare")}</h3>
+          <Button type="button" variant="ghost" size="sm" onClick={onClose}>
+            {t("common.cancel")}
+          </Button>
+        </div>
+        <div className="grid gap-x-4 gap-y-1.5 text-sm" style={{ gridTemplateColumns: template }}>
+          <div />
+          {results.map((item) => (
+            <div key={item.provider} className="flex items-center gap-1.5 font-medium">
+              {providerLabel(item.provider)}
+              {!item.data ? (
+                <Badge variant="neutral">{t("flights.compareNoData")}</Badge>
+              ) : null}
+            </div>
+          ))}
+          {rows.map((row) => {
+            const values = results.map((item) => (item.data ? row.get(item.data) : ""));
+            const allEqual = values.every((value) => value === values[0]);
+            return (
+              <Fragment key={row.label}>
+                <div className="text-muted-foreground">{row.label}</div>
+                {results.map((item, index) => (
+                  <div
+                    key={item.provider}
+                    className={`break-words ${
+                      !allEqual && values[index] ? "font-medium text-primary" : ""
+                    }`}
+                  >
+                    {values[index] || "—"}
+                  </div>
+                ))}
+              </Fragment>
+            );
+          })}
+        </div>
+        <div
+          className="mt-3 grid gap-x-4"
+          style={{ gridTemplateColumns: template }}
+        >
+          <div />
+          {results.map((item) => (
+            <Button
+              key={item.provider}
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!item.data}
+              onClick={() => item.data && onUse(item.data)}
+            >
+              {t("flights.compareUse")}
+            </Button>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
