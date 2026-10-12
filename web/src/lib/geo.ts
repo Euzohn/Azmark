@@ -20,7 +20,13 @@ export function haversineKm(a: LonLat, b: LonLat): number {
  * jump more than 180°, letting MapLibre draw a continuous line across the
  * antimeridian instead of taking the long way around.
  */
-export function greatCircle(a: LonLat, b: LonLat, steps = 96, minSagDeg = 2): LonLat[] {
+export function greatCircle(
+  a: LonLat,
+  b: LonLat,
+  steps = 96,
+  minSagDeg = 2,
+  side: 1 | -1 = 1,
+): LonLat[] {
   const [lon1, lat1] = a;
   const [lon2, lat2] = b;
   const φ1 = toRad(lat1);
@@ -64,7 +70,7 @@ export function greatCircle(a: LonLat, b: LonLat, steps = 96, minSagDeg = 2): Lo
   // chord that the arc would read as a straight line on the map. Guarantee a
   // minimum visible sag by scaling each point's perpendicular distance to the
   // chord, keeping long-haul routes their true (already large) arc.
-  if (minSagDeg <= 0) return slerp;
+  if (minSagDeg <= 0 && side === 1) return slerp;
 
   const [lonA, latA] = slerp[0]!;
   const [lonB, latB] = slerp[slerp.length - 1]!;
@@ -84,10 +90,10 @@ export function greatCircle(a: LonLat, b: LonLat, steps = 96, minSagDeg = 2): Lo
     maxOff = Math.max(maxOff, Math.hypot(ox, oy));
   }
   const scale = maxOff > 0 ? Math.max(1, minSagDeg / maxOff) : 1;
-  if (scale <= 1) return slerp;
+  if (scale <= 1 && side === 1) return slerp;
 
   return proj.map(({ f, ox, oy }) => [
-    lonA + f * dx + ox * scale,
-    latA + f * dy + oy * scale,
+    lonA + f * dx + ox * scale * side,
+    latA + f * dy + oy * scale * side,
   ]);
 }

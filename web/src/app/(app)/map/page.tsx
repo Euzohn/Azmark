@@ -155,9 +155,45 @@ export default function MapPage() {
 
     const draw = () => {
       const current = routes;
+
+      // Group routes by unordered airport pair to detect overlapping arcs.
+      // Round-trip flights (A→B and B→A) and duplicate routes share the same
+      // great circle, so we fan them out: opposite directions curve to
+      // opposite sides of the chord; same-direction routes get increasing
+      // sag so they spread apart visually.
+      const pairGroups = new Map<string, typeof current>();
+      for (const route of current) {
+        const codes = [route.origin.code, route.destination.code]
+          .filter(Boolean)
+          .sort() as string[];
+        const key = codes.join("|");
+        const group = pairGroups.get(key);
+        if (group) group.push(route);
+        else pairGroups.set(key, [route]);
+      }
+      const routeOffsets = new Map<string, { side: 1 | -1; sag: number }>();
+      for (const group of pairGroups.values()) {
+        if (group.length <= 1) continue;
+        const forward = group.filter(
+          (r) => (r.origin.code ?? "") <= (r.destination.code ?? ""),
+        );
+        const reverse = group.filter(
+          (r) => (r.origin.code ?? "") > (r.destination.code ?? ""),
+        );
+        forward.forEach((r, i) => {
+          routeOffsets.set(r.id, { side: 1, sag: 2 + (i + 1) * 0.7 });
+        });
+        reverse.forEach((r, i) => {
+          routeOffsets.set(r.id, { side: -1, sag: 2 + (i + 1) * 0.7 });
+        });
+      }
+
       const lineFeatures = current.map((route) => {
         const from = pointOf(route.origin.code, route.origin.lat, route.origin.lon)!;
         const to = pointOf(route.destination.code, route.destination.lat, route.destination.lon)!;
+        const offset = routeOffsets.get(route.id);
+        const side = offset?.side ?? 1;
+        const sag = offset?.sag ?? 2;
         return {
           type: "Feature" as const,
           properties: {
@@ -167,7 +203,7 @@ export default function MapPage() {
             service: route.service_number ?? "",
             carrier: route.carrier ?? "",
           },
-          geometry: { type: "LineString" as const, coordinates: greatCircle(from, to) },
+          geometry: { type: "LineString" as const, coordinates: greatCircle(from, to, 96, sag, side) },
         };
       });
 
