@@ -175,11 +175,11 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="font-display text-3xl font-semibold tracking-tight">
+      <h1 className="font-display text-3xl font-semibold tracking-tight animate-fade-in-up">
         {t("settings.title")}
       </h1>
 
-      <Card>
+      <Card className="animate-fade-in-up" style={{ animationDelay: "50ms" }}>
         <CardHeader>
           <CardTitle>{t("settings.profile")}</CardTitle>
         </CardHeader>
@@ -242,7 +242,7 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="animate-fade-in-up" style={{ animationDelay: "100ms" }}>
         <CardHeader>
           <CardTitle>{t("settings.providerKeys")}</CardTitle>
         </CardHeader>
@@ -322,7 +322,7 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="animate-fade-in-up" style={{ animationDelay: "150ms" }}>
         <CardHeader>
           <CardTitle>{t("settings.ai")}</CardTitle>
         </CardHeader>
@@ -430,7 +430,7 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="animate-fade-in-up" style={{ animationDelay: "200ms" }}>
         <CardHeader>
           <CardTitle>{t("settings.security")}</CardTitle>
         </CardHeader>

@@ -42,19 +42,36 @@ function formatDate(value: string | null): string {
   });
 }
 
+type TileColor = "primary" | "success" | "warning" | "danger";
+
+const TILE_ICON_COLORS: Record<TileColor, string> = {
+  primary: "bg-primary/10 text-primary",
+  success: "bg-success/10 text-success",
+  warning: "bg-warning/10 text-warning",
+  danger: "bg-danger/10 text-danger",
+};
+
 function StatTile({
   icon: Icon,
   label,
   value,
+  color = "primary",
+  delay = 0,
 }: {
   icon: LucideIcon;
   label: string;
   value: string | number;
+  color?: TileColor;
+  delay?: number;
 }) {
   return (
-    <Card>
+    <Card
+      interactive
+      className="animate-fade-in-up"
+      style={{ animationDelay: `${delay}ms` }}
+    >
       <CardContent className="flex items-center gap-3 p-4">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
+        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${TILE_ICON_COLORS[color]}`}>
           <Icon className="h-5 w-5" strokeWidth={1.75} />
         </div>
         <div className="min-w-0">
@@ -68,11 +85,12 @@ function StatTile({
   );
 }
 
-function RecordRow({ flight }: { flight: Flight }) {
+function RecordRow({ flight, delay = 0 }: { flight: Flight; delay?: number }) {
   return (
     <Link
       href={`/flights/${flight.id}`}
-      className="flex items-center gap-3 rounded-xl px-2 py-2.5 transition-colors hover:bg-accent/50"
+      className="flex animate-fade-in-up items-center gap-3 rounded-xl px-2 py-2.5 transition-all duration-200 hover:bg-accent hover:pl-3"
+      style={{ animationDelay: `${delay}ms` }}
     >
       <AirlineLogo code={flight.airline_code} className="h-9 w-9" />
       <div className="min-w-0 flex-1">
@@ -107,26 +125,27 @@ export default function DashboardPage() {
   const name = user?.display_name ?? user?.username ?? "";
   const stats = data?.stats;
 
-  const statTiles: { icon: LucideIcon; key: TranslationKey; value: string | number }[] = [
-    { icon: Globe2, key: "dashboard.stats.countries", value: stats?.countries ?? 0 },
-    { icon: MapPin, key: "dashboard.stats.cities", value: stats?.cities ?? 0 },
-    { icon: Route, key: "dashboard.stats.journeys", value: stats?.journeys ?? 0 },
+  const statTiles: { icon: LucideIcon; key: TranslationKey; value: string | number; color: TileColor }[] = [
     {
       icon: Compass,
       key: "dashboard.stats.distance",
       value: `${Math.round(stats?.distance_km ?? 0).toLocaleString()} km`,
+      color: "primary",
     },
-    { icon: Plane, key: "dashboard.stats.flights", value: stats?.flights ?? 0 },
-    { icon: TrainFront, key: "dashboard.stats.trains", value: stats?.trains ?? 0 },
-    { icon: Bus, key: "dashboard.stats.transports", value: stats?.transports ?? 0 },
-    { icon: Backpack, key: "dashboard.stats.trips", value: stats?.trips ?? 0 },
+    { icon: Globe2, key: "dashboard.stats.countries", value: stats?.countries ?? 0, color: "primary" },
+    { icon: MapPin, key: "dashboard.stats.cities", value: stats?.cities ?? 0, color: "primary" },
+    { icon: Route, key: "dashboard.stats.journeys", value: stats?.journeys ?? 0, color: "primary" },
+    { icon: Plane, key: "dashboard.stats.flights", value: stats?.flights ?? 0, color: "success" },
+    { icon: TrainFront, key: "dashboard.stats.trains", value: stats?.trains ?? 0, color: "warning" },
+    { icon: Bus, key: "dashboard.stats.transports", value: stats?.transports ?? 0, color: "warning" },
+    { icon: Backpack, key: "dashboard.stats.trips", value: stats?.trips ?? 0, color: "danger" },
   ];
 
   const hasRecords = (stats?.journeys ?? 0) > 0;
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
+      <div className="animate-fade-in-up">
         <h1 className="font-display text-3xl font-semibold tracking-tight">
           {name ? t("dashboard.greeting", { name }) : t("dashboard.title")}
         </h1>
@@ -164,18 +183,25 @@ export default function DashboardPage() {
       {!isLoading && hasRecords ? (
         <>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {statTiles.map((tile) => (
+            {statTiles.map((tile, index) => (
               <StatTile
                 key={tile.key}
                 icon={tile.icon}
                 label={t(tile.key)}
                 value={tile.value}
+                color={tile.color}
+                delay={index * 50}
               />
             ))}
           </div>
 
           {data?.upcoming ? (
-            <Card className="overflow-hidden">
+            <Card
+              interactive
+              className="animate-fade-in-up overflow-hidden"
+              style={{ animationDelay: "400ms" }}
+            >
+              <div className="h-1 w-full bg-gradient-to-r from-[#6366f1] via-primary to-[#818cf8]" />
               <CardHeader className="flex-row items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
                   <PlaneTakeoff className="h-4 w-4 text-primary" />
@@ -212,7 +238,10 @@ export default function DashboardPage() {
             </Card>
           ) : null}
 
-          <Card>
+          <Card
+            className="animate-fade-in-up"
+            style={{ animationDelay: "500ms" }}
+          >
             <CardHeader className="flex-row items-center justify-between">
               <CardTitle>{t("dashboard.recent")}</CardTitle>
               <Link href="/flights">
@@ -224,7 +253,9 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="flex flex-col gap-1">
               {data && data.recent.length > 0 ? (
-                data.recent.map((flight) => <RecordRow key={flight.id} flight={flight} />)
+                data.recent.map((flight, index) => (
+                  <RecordRow key={flight.id} flight={flight} delay={600 + index * 50} />
+                ))
               ) : (
                 <p className="py-4 text-center text-sm text-muted-foreground">
                   {t("dashboard.recentEmpty")}

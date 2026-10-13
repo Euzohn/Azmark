@@ -101,18 +101,20 @@ export default function TimelinePage() {
 
       {!isLoading && groups.length > 0 ? (
         <div className="flex flex-col gap-8">
-          {groups.map(([key, records]) => (
+          {groups.map(([key, records], groupIndex) => (
             <div key={key} className="flex flex-col gap-3">
               <div className="font-display text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                 {dateLabel(key)}
               </div>
-              <div className="relative flex flex-col gap-2 border-l border-border pl-5">
-                {records.map((record) => (
-                  <div key={record.id} className="relative">
-                    <span className="absolute -left-[26px] top-4 h-2.5 w-2.5 rounded-full border-2 border-background bg-primary" />
+              <div className="relative flex flex-col gap-2 border-l border-border pl-5
+                before:absolute before:left-0 before:top-0 before:h-full before:w-[2px]
+                before:bg-gradient-to-b before:from-primary/40 before:via-primary/15 before:to-transparent">
+                {records.map((record, index) => (
+                  <div key={record.id} className="relative animate-fade-in-up" style={{ animationDelay: `${(groupIndex * 3 + index) * 50}ms` }}>
+                    <span className="absolute -left-[26px] top-4 h-2.5 w-2.5 rounded-full border-2 border-background bg-primary shadow-[0_0_0_3px_var(--color-accent)]" />
                     <Link
                       href={recordHref(record)}
-                      className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition-colors hover:border-primary/40"
+                      className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)]"
                     >
                       <span className="w-11 shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
                         {timeLabel(record.departure_time)}

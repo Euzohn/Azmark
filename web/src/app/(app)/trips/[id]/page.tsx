@@ -99,7 +99,7 @@ export default function TripDetailPage() {
         {t("common.back")}
       </Link>
 
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex animate-fade-in-up flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="font-display text-3xl font-semibold tracking-tight">{data.name}</h1>
@@ -157,7 +157,7 @@ export default function TripDetailPage() {
               }
             />
           ) : (
-            data.records.map((record) => {
+            data.records.map((record, index) => {
               const isTrain = isTrainRecord(record);
               const isOther = isOtherRecord(record);
               const detailHref = isTrain
@@ -166,18 +166,23 @@ export default function TripDetailPage() {
                   ? `/transports/${record.id}`
                   : `/flights/${record.id}`;
               return (
-                <Card key={record.id}>
+                <Card
+                  key={record.id}
+                  interactive
+                  className="group animate-fade-in-up"
+                  style={{ animationDelay: `${index * 40}ms` }}
+                >
                   <CardContent className="flex items-center gap-4 p-4">
                     <Link
                       href={detailHref}
                       className="flex min-w-0 flex-1 items-center gap-4"
                     >
                       {isTrain ? (
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-muted-foreground">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-warning/10 text-warning">
                           <TrainFront className="h-4 w-4" strokeWidth={1.75} />
                         </span>
                       ) : isOther ? (
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-muted-foreground">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-warning/10 text-warning">
                           <Bus className="h-4 w-4" strokeWidth={1.75} />
                         </span>
                       ) : (
@@ -188,7 +193,7 @@ export default function TripDetailPage() {
                           <span className="font-display text-base font-semibold tracking-tight">
                             {record.origin ?? "—"}
                           </span>
-                          <ArrowRight className="h-3.5 w-3.5 text-primary" strokeWidth={2.25} />
+                          <ArrowRight className="h-3.5 w-3.5 text-primary transition-transform group-hover:translate-x-0.5" strokeWidth={2.25} />
                           <span className="font-display text-base font-semibold tracking-tight">
                             {record.destination ?? "—"}
                           </span>

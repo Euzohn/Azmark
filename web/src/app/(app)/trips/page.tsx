@@ -43,7 +43,7 @@ export default function TripsPage() {
     <div className="flex flex-col gap-5">
       <div className="flex items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-3xl font-semibold tracking-tight">
+          <h1 className="font-display text-3xl font-semibold tracking-tight animate-fade-in-up">
             {t("trips.title")}
           </h1>
           {data ? (
@@ -90,12 +90,17 @@ export default function TripsPage() {
       ) : null}
 
       <div className="grid gap-3 md:grid-cols-2">
-        {data?.items.map((trip) => {
+        {data?.items.map((trip, index) => {
           const start = formatDate(trip.start_date);
           const end = formatDate(trip.end_date);
           const dates = start && end ? t("trips.dates", { start, end }) : null;
           return (
-            <Card key={trip.id}>
+            <Card
+              key={trip.id}
+              interactive
+              className="animate-fade-in-up"
+              style={{ animationDelay: `${index * 50}ms` }}
+            >
               <CardContent className="p-5">
                 <div className="flex items-start justify-between gap-3">
                   <Link

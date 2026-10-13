@@ -40,7 +40,7 @@ function BarList({
             </div>
             <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
               <div
-                className="h-full rounded-full bg-primary/80"
+                className="h-full rounded-full bg-gradient-to-r from-[#6366f1] to-primary transition-all duration-500"
                 style={{ width: `${(item.count / max) * 100}%` }}
               />
             </div>
@@ -98,7 +98,7 @@ export default function StatisticsPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <h1 className="font-display text-3xl font-semibold tracking-tight">
+      <h1 className="font-display text-3xl font-semibold tracking-tight animate-fade-in-up">
         {t("stats.title")}
       </h1>
 
@@ -122,8 +122,12 @@ export default function StatisticsPage() {
         <div className="grid gap-4 md:grid-cols-2">
           {sections
             .filter((section) => section.items.length > 0)
-            .map((section) => (
-              <Card key={section.title}>
+            .map((section, sectionIndex) => (
+              <Card
+                key={section.title}
+                className="animate-fade-in-up"
+                style={{ animationDelay: `${sectionIndex * 60}ms` }}
+              >
                 <CardHeader>
                   <CardTitle>{section.title}</CardTitle>
                 </CardHeader>

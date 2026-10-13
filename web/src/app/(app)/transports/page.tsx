@@ -68,7 +68,7 @@ export default function TransportsPage() {
     <div className="flex flex-col gap-5">
       <div className="flex items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-3xl font-semibold tracking-tight">
+          <h1 className="font-display text-3xl font-semibold tracking-tight animate-fade-in-up">
             {t("transports.title")}
           </h1>
           {data ? (
@@ -129,14 +129,19 @@ export default function TransportsPage() {
       ) : null}
 
       <div className="flex flex-col gap-3">
-        {data?.items.map((transport) => (
-          <Card key={transport.id} className="group">
+        {data?.items.map((transport, index) => (
+          <Card
+            key={transport.id}
+            interactive
+            className="group animate-fade-in-up"
+            style={{ animationDelay: `${index * 40}ms` }}
+          >
             <CardContent className="flex items-center gap-4 p-4">
               <Link
                 href={`/transports/${transport.id}`}
                 className="flex min-w-0 flex-1 items-center gap-4"
               >
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-muted-foreground">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-warning/10 text-warning">
                   <Bus className="h-5 w-5" strokeWidth={1.75} />
                 </div>
                 <div className="min-w-0">
@@ -144,7 +149,7 @@ export default function TransportsPage() {
                     <span className="font-display text-lg font-semibold tracking-tight">
                       {transport.origin ?? "—"}
                     </span>
-                    <ArrowRight className="h-4 w-4 shrink-0 text-primary" strokeWidth={2.25} />
+                    <ArrowRight className="h-4 w-4 shrink-0 text-primary transition-transform group-hover:translate-x-0.5" strokeWidth={2.25} />
                     <span className="font-display text-lg font-semibold tracking-tight">
                       {transport.destination ?? "—"}
                     </span>

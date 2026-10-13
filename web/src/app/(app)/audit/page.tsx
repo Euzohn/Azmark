@@ -42,7 +42,7 @@ export default function AuditPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="font-display text-3xl font-semibold tracking-tight">{t("audit.title")}</h1>
+      <h1 className="font-display text-3xl font-semibold tracking-tight animate-fade-in-up">{t("audit.title")}</h1>
 
       {isLoading ? (
         <div className="overflow-hidden rounded-2xl border border-border bg-card">
@@ -65,7 +65,7 @@ export default function AuditPage() {
       ) : null}
 
       {data && data.items.length > 0 ? (
-        <div className="overflow-x-auto rounded-2xl border border-border bg-card">
+        <div className="overflow-x-auto rounded-2xl border border-border bg-card animate-fade-in-up">
           <table className="w-full text-left text-sm">
             <thead className="bg-muted/70 text-xs uppercase tracking-wider text-muted-foreground">
               <tr>
@@ -75,10 +75,10 @@ export default function AuditPage() {
               </tr>
             </thead>
             <tbody>
-              {data.items.map((log) => {
+              {data.items.map((log, index) => {
                 const label = ACTION_LABELS[log.action];
                 return (
-                  <tr key={log.id} className="border-t border-border transition-colors hover:bg-muted/40">
+                  <tr key={log.id} className="border-t border-border transition-colors hover:bg-accent/50" style={{ animationDelay: `${index * 20}ms` }}>
                     <td className="px-5 py-3 font-medium">{label ? t(label) : log.action}</td>
                     <td className="px-5 py-3 text-muted-foreground">
                       {log.resource_type ? `${log.resource_type}` : "-"}

@@ -27,13 +27,15 @@ export default function NewTripPage() {
     <div className="flex flex-col gap-4">
       <Link
         href="/trips"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />
         {t("common.back")}
       </Link>
-      <h1 className="font-display text-3xl font-semibold tracking-tight">{t("trips.add")}</h1>
-      <TripForm submitting={create.isPending} onSubmit={(data) => create.mutate(data)} />
+      <h1 className="font-display text-3xl font-semibold tracking-tight animate-fade-in-up">{t("trips.add")}</h1>
+      <div className="animate-fade-in-up" style={{ animationDelay: "50ms" }}>
+        <TripForm submitting={create.isPending} onSubmit={(data) => create.mutate(data)} />
+      </div>
     </div>
   );
 }

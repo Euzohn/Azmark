@@ -12,9 +12,9 @@ interface EmptyStateProps {
 
 export function EmptyState({ icon: Icon, title, hint, action, className }: EmptyStateProps) {
   return (
-    <div className={cn("flex flex-col items-center gap-3 py-12 text-center", className)}>
+    <div className={cn("flex flex-col items-center gap-3 py-12 text-center animate-scale-in", className)}>
       {Icon ? (
-        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-accent text-accent-foreground">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#6366f1]/10 to-primary/10 text-primary">
           <Icon className="h-6 w-6" />
         </div>
       ) : null}

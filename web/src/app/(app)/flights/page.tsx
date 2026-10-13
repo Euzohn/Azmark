@@ -104,7 +104,7 @@ export default function FlightsPage() {
     <div className="flex flex-col gap-5">
       <div className="flex items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-3xl font-semibold tracking-tight">
+          <h1 className="font-display text-3xl font-semibold tracking-tight animate-fade-in-up">
             {t("flights.title")}
           </h1>
           {data ? (
@@ -223,8 +223,13 @@ export default function FlightsPage() {
       ) : null}
 
       <div className="flex flex-col gap-3">
-        {data?.items.map((flight) => (
-          <Card key={flight.id} className="group">
+        {data?.items.map((flight, index) => (
+          <Card
+            key={flight.id}
+            interactive
+            className="group animate-fade-in-up"
+            style={{ animationDelay: `${index * 40}ms` }}
+          >
             <CardContent className="flex items-center gap-4 p-4">
               <Link
                 href={`/flights/${flight.id}`}
@@ -236,7 +241,7 @@ export default function FlightsPage() {
                     <span className="font-display text-lg font-semibold tracking-tight">
                       {flight.origin ?? "—"}
                     </span>
-                    <ArrowRight className="h-4 w-4 shrink-0 text-primary" strokeWidth={2.25} />
+                    <ArrowRight className="h-4 w-4 shrink-0 text-primary transition-transform group-hover:translate-x-0.5" strokeWidth={2.25} />
                     <span className="font-display text-lg font-semibold tracking-tight">
                       {flight.destination ?? "—"}
                     </span>

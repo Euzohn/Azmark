@@ -66,7 +66,7 @@ export default function TrainsPage() {
     <div className="flex flex-col gap-5">
       <div className="flex items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-3xl font-semibold tracking-tight">
+          <h1 className="font-display text-3xl font-semibold tracking-tight animate-fade-in-up">
             {t("trains.title")}
           </h1>
           {data ? (
@@ -127,14 +127,19 @@ export default function TrainsPage() {
       ) : null}
 
       <div className="flex flex-col gap-3">
-        {data?.items.map((train) => (
-          <Card key={train.id} className="group">
+        {data?.items.map((train, index) => (
+          <Card
+            key={train.id}
+            interactive
+            className="group animate-fade-in-up"
+            style={{ animationDelay: `${index * 40}ms` }}
+          >
             <CardContent className="flex items-center gap-4 p-4">
               <Link
                 href={`/trains/${train.id}`}
                 className="flex min-w-0 flex-1 items-center gap-4"
               >
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-muted-foreground">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-warning/10 text-warning">
                   <TrainFront className="h-5 w-5" strokeWidth={1.75} />
                 </div>
                 <div className="min-w-0">
@@ -142,7 +147,7 @@ export default function TrainsPage() {
                     <span className="font-display text-lg font-semibold tracking-tight">
                       {train.origin ?? "—"}
                     </span>
-                    <ArrowRight className="h-4 w-4 shrink-0 text-primary" strokeWidth={2.25} />
+                    <ArrowRight className="h-4 w-4 shrink-0 text-primary transition-transform group-hover:translate-x-0.5" strokeWidth={2.25} />
                     <span className="font-display text-lg font-semibold tracking-tight">
                       {train.destination ?? "—"}
                     </span>

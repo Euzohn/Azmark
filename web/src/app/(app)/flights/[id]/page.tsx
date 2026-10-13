@@ -52,12 +52,12 @@ export default function FlightDetailPage() {
     <div className="flex flex-col gap-4">
       <Link
         href="/flights"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />
         {t("common.back")}
       </Link>
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex animate-fade-in-up items-center justify-between gap-3">
         <h1 className="font-display text-3xl font-semibold tracking-tight">
           {t("flights.edit")}
         </h1>
@@ -74,11 +74,13 @@ export default function FlightDetailPage() {
           {t("common.delete")}
         </Button>
       </div>
-      <FlightForm
-        initial={data}
-        submitting={update.isPending}
-        onSubmit={(input) => update.mutate(input)}
-      />
+      <div className="animate-fade-in-up" style={{ animationDelay: "50ms" }}>
+        <FlightForm
+          initial={data}
+          submitting={update.isPending}
+          onSubmit={(input) => update.mutate(input)}
+        />
+      </div>
     </div>
   );
 }

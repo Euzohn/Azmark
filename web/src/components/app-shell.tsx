@@ -205,8 +205,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             >
               <span
                 className={cn(
-                  "flex h-8 w-14 items-center justify-center rounded-full transition-colors duration-150",
-                  active ? "bg-accent text-accent-foreground" : "text-inherit",
+                  "flex h-8 w-14 items-center justify-center rounded-full transition-all duration-200",
+                  active ? "scale-105 bg-accent text-accent-foreground" : "text-inherit",
                 )}
               >
                 <Icon className="h-5 w-5" strokeWidth={active ? 2 : 1.75} />
@@ -225,8 +225,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         >
           <span
             className={cn(
-              "flex h-8 w-14 items-center justify-center rounded-full transition-colors duration-150",
-              moreActive ? "bg-accent text-accent-foreground" : "text-inherit",
+              "flex h-8 w-14 items-center justify-center rounded-full transition-all duration-200",
+              moreActive ? "scale-105 bg-accent text-accent-foreground" : "text-inherit",
             )}
           >
             <MoreHorizontal className="h-5 w-5" strokeWidth={moreActive ? 2 : 1.75} />
@@ -275,10 +275,10 @@ function NavLink({
     <Link
       href={item.href}
       className={cn(
-        "flex cursor-pointer items-center gap-3 rounded-full px-4 py-2.5 text-sm font-medium transition-colors duration-150",
+        "flex cursor-pointer items-center gap-3 rounded-full px-4 py-2.5 text-sm font-medium transition-all duration-200",
         active
-          ? "bg-primary text-primary-foreground shadow-sm shadow-primary/25"
-          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+          ? "bg-gradient-to-r from-primary/90 to-primary text-primary-foreground shadow-sm shadow-primary/25"
+          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground hover:translate-x-0.5",
       )}
     >
       <Icon className="h-4 w-4" strokeWidth={active ? 2.25 : 1.75} />

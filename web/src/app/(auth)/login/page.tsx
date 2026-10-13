@@ -41,8 +41,8 @@ export default function LoginPage() {
 
   return (
     <div className="bg-glow mx-auto flex min-h-[100dvh] w-full max-w-sm flex-col justify-center p-6">
-      <BrandMark />
-      <Card>
+      <BrandMark className="animate-fade-in-up" />
+      <Card className="animate-fade-in-up" style={{ animationDelay: "100ms" }}>
         <CardHeader>
           <CardTitle className="text-lg">{t("auth.loginTitle")}</CardTitle>
         </CardHeader>
