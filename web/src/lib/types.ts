@@ -461,9 +461,17 @@ export interface AiProposal {
   record_type: string;
   summary: string;
   data: Record<string, unknown>;
+  status?: "pending" | "saved" | "cancelled";
 }
 
 export interface AiChatResponse {
   reply: string;
   proposals: AiProposal[];
+}
+
+export interface AiStreamEvent {
+  type: "text" | "proposals" | "done" | "error";
+  content?: string;
+  proposals?: AiProposal[];
+  message?: string;
 }

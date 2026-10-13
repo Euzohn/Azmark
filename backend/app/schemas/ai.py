@@ -7,6 +7,11 @@ from pydantic import BaseModel, Field
 
 class AiChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
+    image: str | None = Field(
+        default=None,
+        max_length=5_000_000,
+        description="Optional data URL (data:image/...;base64,...) for vision models",
+    )
 
 
 class AiProposal(BaseModel):

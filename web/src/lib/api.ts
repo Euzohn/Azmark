@@ -1,11 +1,12 @@
 import { useAuth } from "@/lib/auth-store";
 import type {
+  AiChatResponse,
   AiSettingsRead,
   AiSettingsWrite,
+  AiStreamEvent,
   Airline,
   Airport,
   AuditLogList,
-  AiChatResponse,
   DashboardRead,
   Flight,
   FlightFilters,
@@ -221,9 +222,64 @@ export const api = {
   getTimeline: () => request<TimelineRecord[]>("/timeline"),
   getMapRoutes: () => request<MapRoutesRead>("/map/routes"),
 
-  chatAi: (message: string) =>
+  chatAi: (message: string, image?: string | null) =>
     request<AiChatResponse>("/ai/chat", {
       method: "POST",
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message, image }),
     }),
+
+  chatAiStream: async function* (
+    message: string,
+    image?: string | null,
+  ): AsyncGenerator<AiStreamEvent> {
+    const token = useAuth.getState().token;
+    const response = await fetch(`${API_BASE}/api/v1/ai/chat/stream`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ message, image }),
+    });
+
+    if (response.status === 401) {
+      useAuth.getState().clear();
+      throw new ApiError(401, "Unauthorized");
+    }
+
+    if (!response.ok) {
+      let detail = response.statusText;
+      try {
+        const body = (await response.json()) as { detail?: string };
+        detail = body.detail ?? detail;
+      } catch {
+        // ignore parse errors, fall back to statusText
+      }
+      throw new ApiError(response.status, detail);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new ApiError(0, "No response body");
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          yield JSON.parse(trimmed) as AiStreamEvent;
+        } catch {
+          // ignore malformed lines
+        }
+      }
+    }
+  },
 };
