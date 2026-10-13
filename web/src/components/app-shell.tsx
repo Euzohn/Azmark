@@ -117,7 +117,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="bg-glow mx-auto flex min-h-dvh w-full max-w-6xl flex-col md:flex-row">
       <aside className="hidden md:sticky md:top-0 md:flex md:h-dvh md:w-60 md:shrink-0 md:flex-col md:gap-1 md:overflow-y-auto md:border-r md:border-border md:px-5 md:py-8">
         <div className="mb-8 flex items-center gap-3 px-2">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#c26b30] to-primary text-primary-foreground shadow-md shadow-primary/25">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#6366f1] to-primary text-primary-foreground shadow-md shadow-primary/25">
             <Backpack className="h-5 w-5" strokeWidth={1.75} />
           </div>
           <div>
@@ -171,7 +171,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <header className="sticky top-0 z-20 flex items-center justify-between border-b border-border bg-background/90 px-4 py-3 backdrop-blur-md md:hidden">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[#c26b30] to-primary text-primary-foreground">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[#6366f1] to-primary text-primary-foreground">
             <Backpack className="h-4 w-4" strokeWidth={1.75} />
           </div>
           <span className="font-display text-lg font-semibold tracking-tight">{t("app.name")}</span>

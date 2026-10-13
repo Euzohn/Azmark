@@ -112,7 +112,7 @@ export default function TimelinePage() {
                     <span className="absolute -left-[26px] top-4 h-2.5 w-2.5 rounded-full border-2 border-background bg-primary" />
                     <Link
                       href={recordHref(record)}
-                      className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-[0_1px_3px_rgba(33,26,18,0.06)] transition-colors hover:border-primary/40"
+                      className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-[0_1px_3px_rgba(15,23,42,0.05)] transition-colors hover:border-primary/40"
                     >
                       <span className="w-11 shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
                         {timeLabel(record.departure_time)}

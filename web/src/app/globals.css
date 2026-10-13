@@ -5,65 +5,65 @@
 :root {
   color-scheme: light;
 
-  --background: #faf6ef;
-  --foreground: #211a12;
+  --background: #f8fafc;
+  --foreground: #0f172a;
 
   --card: #ffffff;
-  --card-foreground: #211a12;
+  --card-foreground: #0f172a;
 
-  --muted: #f0e8dc;
-  --muted-foreground: #7a6f60;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
 
-  --border: #e5dccb;
+  --border: #e2e8f0;
 
-  --primary: #9a4b1a;
-  --primary-foreground: #fffaf1;
+  --primary: #4f46e5;
+  --primary-foreground: #ffffff;
 
-  --accent: #f6ead8;
-  --accent-foreground: #7d3d10;
+  --accent: #eef2ff;
+  --accent-foreground: #4f46e5;
 
-  --danger: #b3261e;
+  --danger: #dc2626;
   --danger-foreground: #ffffff;
 
-  --success: #3e7d4f;
+  --success: #059669;
   --success-foreground: #ffffff;
 
-  --warning: #a9780d;
+  --warning: #d97706;
   --warning-foreground: #ffffff;
 
-  --ring: #9a4b1a;
+  --ring: #4f46e5;
 }
 
 .dark {
   color-scheme: dark;
 
-  --background: #141416;
-  --foreground: #e8e4df;
+  --background: #0b1120;
+  --foreground: #e2e8f0;
 
-  --card: #1c1c20;
-  --card-foreground: #e8e4df;
+  --card: #131c31;
+  --card-foreground: #e2e8f0;
 
-  --muted: #26262b;
-  --muted-foreground: #9a9aa5;
+  --muted: #1e293b;
+  --muted-foreground: #94a3b8;
 
-  --border: #33333a;
+  --border: #1e293b;
 
-  --primary: #f0a46e;
-  --primary-foreground: #271202;
+  --primary: #818cf8;
+  --primary-foreground: #1e1b4b;
 
-  --accent: #2a2a30;
-  --accent-foreground: #f2c99b;
+  --accent: #312e81;
+  --accent-foreground: #c7d2fe;
 
-  --danger: #f06b5f;
-  --danger-foreground: #230503;
+  --danger: #f87171;
+  --danger-foreground: #450a0a;
 
-  --success: #8ec399;
-  --success-foreground: #0a1f10;
+  --success: #34d399;
+  --success-foreground: #022c22;
 
-  --warning: #d9b057;
-  --warning-foreground: #241a02;
+  --warning: #fbbf24;
+  --warning-foreground: #451a03;
 
-  --ring: #f0a46e;
+  --ring: #818cf8;
 }
 
 @theme inline {
@@ -111,11 +111,11 @@ body {
   }
 }
 
-/* 温暖的光晕，模拟手账纸面被台灯照亮的质感 */
+/* Subtle ambient glow — evokes a night-sky / aurora feel */
 .bg-glow {
   background-image: radial-gradient(
     1000px 520px at 50% -140px,
-    color-mix(in srgb, var(--primary) 9%, transparent),
+    color-mix(in srgb, var(--primary) 7%, transparent),
     transparent 68%
   );
 }

@@ -153,7 +153,7 @@ export default function AiChatPage() {
   return (
     <div className="flex h-[calc(100dvh-8rem)] flex-col gap-4 md:h-[calc(100dvh-4rem)]">
       <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-[#c26b30] text-primary-foreground shadow-md shadow-primary/25">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#6366f1] to-primary text-primary-foreground shadow-md shadow-primary/25">
           <Bot className="h-5 w-5" strokeWidth={1.75} />
         </div>
         <div>

@@ -224,7 +224,7 @@ export default function MapPage() {
       const pointData = { type: "FeatureCollection" as const, features: pointFeatures };
 
       const dark = isDarkTheme(themeRef.current);
-      const accent = dark ? "#f0a46e" : "#9a4b1a";
+      const accent = dark ? "#818cf8" : "#4f46e5";
 
       if (!map.getSource("routes")) {
         map.addSource("routes", { type: "geojson", data: lineData, tolerance: 0 });
@@ -243,7 +243,7 @@ export default function MapPage() {
           paint: {
             "circle-radius": 3.5,
             "circle-color": accent,
-            "circle-stroke-color": dark ? "#141416" : "#faf6ef",
+            "circle-stroke-color": dark ? "#0b1120" : "#f8fafc",
             "circle-stroke-width": 1.5,
           },
         });
