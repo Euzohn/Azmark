@@ -11,10 +11,12 @@ class _ScriptedProvider(LLMProvider):
     def __init__(self, responses: list[LLMResponse]) -> None:
         self._responses = list(responses)
         self.calls = 0
+        self.last_messages: list[dict] = []
 
     async def chat(self, *, messages, tools=None, temperature=None) -> LLMResponse:
         if self.calls >= len(self._responses):
             return LLMResponse(content="")
+        self.last_messages = messages
         resp = self._responses[self.calls]
         self.calls += 1
         return resp
@@ -369,3 +371,51 @@ def test_lookup_flight_no_provider_key_returns_local(client, monkeypatch):
     body = response.json()
     assert body["proposals"] == []
     assert "origin" in body["reply"].lower() or "couldn" in body["reply"].lower()
+
+
+def test_system_prompt_includes_timezone_for_zh_cn(client, monkeypatch):
+    """LLM should receive the user's timezone in the system prompt so it can
+    append the correct offset to datetime strings extracted from screenshots."""
+    token = register_and_login(client, "ai_tz_zh")["access_token"]
+    headers = auth_headers(token)
+    _configure_ai(client, headers)
+
+    from app.services import ai_agent as agent_mod
+
+    fake = _ScriptedProvider([LLMResponse(content="ok")])
+    monkeypatch.setattr(
+        agent_mod.AiAgentService,
+        "_build_provider",
+        lambda self, user_id: fake,
+    )
+
+    client.post("/api/v1/ai/chat", json={"message": "hi"}, headers=headers)
+
+    system_msg = fake.last_messages[0]
+    assert system_msg["role"] == "system"
+    assert "+08:00" in system_msg["content"]
+    assert "TIMEZONE HANDLING" in system_msg["content"]
+
+
+def test_system_prompt_includes_timezone_for_en_us(client, monkeypatch):
+    """en-US users should receive -05:00 in the system prompt."""
+    token = register_and_login(client, "ai_tz_en")["access_token"]
+    headers = auth_headers(token)
+    _configure_ai(client, headers)
+
+    from app.services import ai_agent as agent_mod
+
+    fake = _ScriptedProvider([LLMResponse(content="ok")])
+    monkeypatch.setattr(
+        agent_mod.AiAgentService,
+        "_build_provider",
+        lambda self, user_id: fake,
+    )
+
+    # Set locale to en-US
+    client.patch("/api/v1/auth/me", json={"locale": "en-US"}, headers=headers)
+
+    client.post("/api/v1/ai/chat", json={"message": "hi"}, headers=headers)
+
+    system_msg = fake.last_messages[0]
+    assert "-05:00" in system_msg["content"]
