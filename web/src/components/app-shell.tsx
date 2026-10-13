@@ -137,31 +137,40 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             />
           ))}
         </nav>
-        <div className="mt-auto flex flex-col gap-3 pt-6">
-          <div className="rounded-2xl border border-border bg-card px-3 py-2.5">
-            <div className="truncate text-sm font-medium text-foreground">{identity}</div>
-            <div className="truncate text-[11px] text-muted-foreground">{user?.username}</div>
-          </div>
-          <div className="flex items-center justify-center gap-1">
-            <ThemeToggle />
-            <LanguageToggle />
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={logout}
-              title={t("auth.logout")}
-              aria-label={t("auth.logout")}
-            >
-              <LogOut className="h-4 w-4" />
-            </Button>
+        <div className="mt-auto pt-6">
+          <div className="rounded-2xl border border-border bg-gradient-to-br from-accent/50 to-transparent p-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#6366f1] to-primary text-xs font-semibold text-primary-foreground shadow-sm shadow-primary/25">
+                {identity.slice(0, 2).toUpperCase() || "AZ"}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium text-foreground">{identity}</div>
+                <div className="truncate text-[11px] text-muted-foreground">@{user?.username}</div>
+              </div>
+            </div>
+            <div className="mt-2.5 flex items-center gap-0.5 border-t border-border/60 pt-2">
+              <ThemeToggle />
+              <LanguageToggle />
+              <div className="flex-1" />
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={logout}
+                title={t("auth.logout")}
+                aria-label={t("auth.logout")}
+                className="h-8 w-8 text-muted-foreground hover:text-danger"
+              >
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
           <a
             href="https://github.com/Euzohn/Azmark"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-center gap-1.5 pt-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+            className="mt-3 flex items-center justify-center gap-1.5 text-xs text-muted-foreground/70 transition-colors hover:text-foreground"
           >
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-3.5 w-3.5">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-3 w-3">
               <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.431 9.8 8.207 11.387.6.111.82-.258.82-.576 0-.285-.011-1.04-.017-2.041-3.334.724-4.041-1.61-4.041-1.61-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.084-.731.084-.731 1.205.085 1.84 1.236 1.84 1.236 1.07 1.834 2.807 1.305 3.492.997.108-.775.418-1.305.762-1.604-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .317.219.69.825.57C20.568 21.795 24 17.3 24 12c0-6.627-5.373-12-12-12" />
             </svg>
             {t("app.github")}
