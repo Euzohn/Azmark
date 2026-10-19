@@ -3,11 +3,11 @@
 </p>
 
 <p align="center">
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-9a4b1a" alt="License: Apache-2.0"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-C66B4E" alt="License: Apache-2.0"></a>
   &nbsp;
-  <img src="https://img.shields.io/badge/self--hosted-211A12" alt="Self-hosted">
+  <img src="https://img.shields.io/badge/self--hosted-252822" alt="Self-hosted">
   &nbsp;
-  <img src="https://img.shields.io/badge/PostgreSQL-PostGIS-7a6f60" alt="PostgreSQL + PostGIS">
+  <img src="https://img.shields.io/badge/PostgreSQL-PostGIS-78816A" alt="PostgreSQL + PostGIS">
 </p>
 
 **Azmark（行迹）** 是一个开源、自托管、AI 原生的个人旅行记录与数据管理系统。它把你每一段航班、火车与旅程，记录成一份只属于你自己的旅行手账——数据在你自己的服务器上，不依赖任何第三方云账号。

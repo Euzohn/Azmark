@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100" role="img" aria-labelledby="title desc">
+  <title id="title">Azmark symbol</title>
+  <desc id="desc">A rounded-peak A whose right stroke flows into a Z, ending in a terracotta destination dot.</desc>
+  <g fill="none" stroke="#252822" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 78 L43 20 Q47 12 52 21 L66 43"/>
+    <path d="M69 40 H96 L66 72 H94"/>
+  </g>
+  <circle cx="106" cy="72" r="6.5" fill="#C66B4E"/>
+</svg>

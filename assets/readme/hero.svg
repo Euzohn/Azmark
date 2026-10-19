@@ -1,44 +1,52 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="heroTitle heroDesc">
   <title id="heroTitle">Azmark 行迹 — 自托管、AI 原生的个人旅行 OS</title>
-  <desc id="heroDesc">项目名 Azmark（行迹）与一句话价值，右侧为一条大圆航线示意：两个航点由弧线连接，对应地图页的核心可视化。</desc>
+  <desc id="heroDesc">Azmark 标志：字母 A 与 Z 连成一笔，终点为陶土橙圆点。左侧为标志组合与一句话价值，右侧为一条大圆航线示意。</desc>
 
   <defs>
     <radialGradient id="glow" cx="50%" cy="0%" r="75%">
-      <stop offset="0%" stop-color="#9a4b1a" stop-opacity="0.07"/>
-      <stop offset="68%" stop-color="#9a4b1a" stop-opacity="0"/>
+      <stop offset="0%" stop-color="#C66B4E" stop-opacity="0.07"/>
+      <stop offset="68%" stop-color="#C66B4E" stop-opacity="0"/>
     </radialGradient>
   </defs>
 
   <!-- warm paper canvas -->
-  <rect width="1200" height="360" rx="24" fill="#faf6ef"/>
+  <rect width="1200" height="360" rx="24" fill="#F5F1E8"/>
   <rect width="1200" height="360" rx="24" fill="url(#glow)"/>
 
-  <!-- ===== left: title block ===== -->
+  <!-- ===== left: logo lockup + value ===== -->
   <g id="title-block" transform="translate(64 0)">
     <!-- eyebrow -->
-    <text x="0" y="70" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="19" letter-spacing="2" fill="#7a6f60">自托管 · AI 原生 · 个人旅行 OS</text>
+    <text x="0" y="70" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="19" letter-spacing="2" fill="#78816A">自托管 · AI 原生 · 个人旅行 OS</text>
 
-    <!-- name -->
-    <text x="0" y="152" font-family="Georgia, 'Songti SC', 'Noto Serif SC', serif" font-size="104" font-weight="700" fill="#211a12">Azmark</text>
+    <!-- logo mark (A → Z, destination dot) -->
+    <g transform="translate(-6.79 72) scale(0.97)">
+      <g fill="none" stroke="#252822" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 78 L43 20 Q47 12 52 21 L66 43"/>
+        <path d="M69 40 H96 L66 72 H94"/>
+      </g>
+      <circle cx="106" cy="72" r="6.5" fill="#C66B4E"/>
+    </g>
+    <!-- wordmark -->
+    <text x="124" y="152" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="96" font-weight="700" letter-spacing="8" fill="#252822">AZMARK</text>
 
     <!-- subtitle -->
-    <text x="0" y="196" font-family="Georgia, 'Songti SC', 'Noto Serif SC', serif" font-size="34" fill="#9a4b1a">行迹 — 个人旅行操作系统</text>
+    <text x="0" y="196" font-family="Georgia, 'Songti SC', 'Noto Serif SC', serif" font-size="34" fill="#C66B4E">行迹 — 个人旅行操作系统</text>
 
     <!-- value -->
-    <text x="0" y="240" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif" font-size="25" font-weight="500" fill="#211a12">把每一段航班、火车与旅程，</text>
-    <text x="0" y="270" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif" font-size="25" font-weight="500" fill="#211a12">记录成属于你自己的旅行手账。</text>
+    <text x="0" y="240" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif" font-size="25" font-weight="500" fill="#252822">把每一段航班、火车与旅程，</text>
+    <text x="0" y="270" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif" font-size="25" font-weight="500" fill="#252822">记录成属于你自己的旅行手账。</text>
 
     <!-- stack metadata -->
-    <text x="0" y="316" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" fill="#7a6f60">FastAPI · Next.js · PostgreSQL/PostGIS · MapLibre GL</text>
+    <text x="0" y="316" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" fill="#78816A">FastAPI · Next.js · PostgreSQL/PostGIS · MapLibre GL</text>
   </g>
 
   <!-- ===== right: great-circle route motif ===== -->
   <g id="route-motif">
     <!-- card -->
-    <rect x="728" y="52" width="408" height="256" rx="18" fill="#ffffff" stroke="#e5dccb" stroke-width="1.5"/>
+    <rect x="728" y="52" width="408" height="256" rx="18" fill="#ffffff" stroke="#E4DED0" stroke-width="1.5"/>
 
     <!-- faint graticule -->
-    <g stroke="#efe7d8" stroke-width="1" fill="none">
+    <g stroke="#ECE6D8" stroke-width="1" fill="none">
       <line x1="752" y1="120" x2="1112" y2="120"/>
       <line x1="752" y1="180" x2="1112" y2="180"/>
       <line x1="752" y1="240" x2="1112" y2="240"/>
@@ -48,30 +56,30 @@
     </g>
 
     <!-- great-circle arc PEK -> CDG -->
-    <path d="M 784 252 Q 930 64 1080 116" fill="none" stroke="#9a4b1a" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M 784 252 Q 930 64 1080 116" fill="none" stroke="#C66B4E" stroke-width="2.5" stroke-linecap="round"/>
 
     <!-- faint second route PEK -> HKG -->
-    <path d="M 784 252 Q 870 210 940 224" fill="none" stroke="#cbb89c" stroke-width="2" stroke-dasharray="4 5" stroke-linecap="round"/>
+    <path d="M 784 252 Q 870 210 940 224" fill="none" stroke="#CBB89C" stroke-width="2" stroke-dasharray="4 5" stroke-linecap="round"/>
 
     <!-- plane glyph along the main arc (near apex) -->
     <g transform="translate(930 124) rotate(-25)">
-      <path d="M -10 0 L 10 0 M 0 -7 L 5 0 L 0 7 M 7 -3.5 L 10 0 L 7 3.5" fill="none" stroke="#9a4b1a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M -10 0 L 10 0 M 0 -7 L 5 0 L 0 7 M 7 -3.5 L 10 0 L 7 3.5" fill="none" stroke="#C66B4E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
     </g>
 
     <!-- origin waypoint -->
-    <circle cx="784" cy="252" r="5.5" fill="#211a12"/>
-    <circle cx="784" cy="252" r="2" fill="#faf6ef"/>
-    <text x="770" y="278" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" font-weight="600" fill="#211a12">PEK</text>
+    <circle cx="784" cy="252" r="5.5" fill="#252822"/>
+    <circle cx="784" cy="252" r="2" fill="#F5F1E8"/>
+    <text x="770" y="278" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" font-weight="600" fill="#252822">PEK</text>
 
     <!-- destination waypoint -->
-    <circle cx="1080" cy="116" r="5.5" fill="#9a4b1a"/>
+    <circle cx="1080" cy="116" r="5.5" fill="#C66B4E"/>
     <circle cx="1080" cy="116" r="2" fill="#ffffff"/>
-    <text x="1062" y="104" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" font-weight="600" fill="#9a4b1a">CDG</text>
+    <text x="1062" y="104" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" font-weight="600" fill="#C66B4E">CDG</text>
 
     <!-- secondary waypoint label -->
-    <text x="928" y="246" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" fill="#7a6f60">HKG</text>
+    <text x="928" y="246" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" fill="#78816A">HKG</text>
 
     <!-- card caption -->
-    <text x="728" y="332" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15" fill="#7a6f60">大圆航线 · great-circle schematic</text>
+    <text x="728" y="332" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15" fill="#78816A">大圆航线 · great-circle schematic</text>
   </g>
 </svg>

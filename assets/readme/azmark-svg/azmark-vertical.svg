@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 250" role="img" aria-labelledby="title desc">
+  <title id="title">Azmark vertical logo</title>
+  <desc id="desc">Centred Azmark symbol above the AZMARK wordmark, tagline and brand line.</desc>
+  <g transform="translate(57.26 12.2) scale(1.05)">
+    <g fill="none" stroke="#252822" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 78 L43 20 Q47 12 52 21 L66 43"/>
+      <path d="M69 40 H96 L66 72 H94"/>
+    </g>
+    <circle cx="106" cy="72" r="6.5" fill="#C66B4E"/>
+  </g>
+  <text x="120" y="161" text-anchor="middle" fill="#252822" font-family="Inter, Avenir, Helvetica, Arial, sans-serif" font-size="31" font-weight="650" letter-spacing="4.2">AZMARK</text>
+  <text x="120" y="186" text-anchor="middle" fill="#78816A" font-family="Inter, Avenir, Helvetica, Arial, sans-serif" font-size="8.5" font-weight="500" letter-spacing="2.2">PERSONAL TRAVEL OS</text>
+  <text x="120" y="226" text-anchor="middle" fill="#252822" opacity=".7" font-family="Georgia, 'Times New Roman', serif" font-size="10.5" font-style="italic">Every journey leaves a mark.</text>
+</svg>

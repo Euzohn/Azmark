@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">Azmark app icon, light</title>
+  <desc id="desc">Charcoal Azmark symbol on a cream rounded square.</desc>
+  <rect x="3" y="3" width="122" height="122" rx="27" fill="#F5F1E8" stroke="#E4DED0" stroke-width="1"/>
+  <g transform="translate(4.25 17.125) scale(1)">
+    <g fill="none" stroke="#252822" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 78 L43 20 Q47 12 52 21 L66 43"/>
+      <path d="M69 40 H96 L66 72 H94"/>
+    </g>
+    <circle cx="106" cy="72" r="6.5" fill="#C66B4E"/>
+  </g>
+</svg>
