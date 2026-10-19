@@ -1,5 +1,7 @@
 """Tests for the AI chat endpoint and agent tool loop (spec #31, #32, #93)."""
 
+import json
+
 from app.providers.llm import LLMProvider, LLMResponse, LLMToolCall
 from app.services.ai_tools import TOOLS, ToolPermission
 from tests.conftest import auth_headers, register_and_login
@@ -419,3 +421,426 @@ def test_system_prompt_includes_timezone_for_en_us(client, monkeypatch):
 
     system_msg = fake.last_messages[0]
     assert "-05:00" in system_msg["content"]
+
+
+def test_system_prompt_includes_field_inference_rules(client, monkeypatch):
+    """The prompt must teach the model to infer status, airline_code, train_type,
+    currency, timezones, etc. instead of only filling the obvious fields."""
+    token = register_and_login(client, "ai_infer_prompt")["access_token"]
+    headers = auth_headers(token)
+    _configure_ai(client, headers)
+
+    from app.services import ai_agent as agent_mod
+
+    fake = _ScriptedProvider([LLMResponse(content="ok")])
+    monkeypatch.setattr(
+        agent_mod.AiAgentService,
+        "_build_provider",
+        lambda self, user_id: fake,
+    )
+
+    client.post("/api/v1/ai/chat", json={"message": "hi"}, headers=headers)
+
+    system = fake.last_messages[0]["content"]
+    assert "FIELD INFERENCE" in system
+    assert "Today's date is" in system
+    # status inference from dates
+    assert "completed" in system
+    assert "scheduled" in system
+    # flight number → airline_code / carrier
+    assert "airline_code" in system
+    # train number → train_type (leading letter)
+    assert "train_type" in system
+    assert "G=高铁" in system
+    # timezone / distance / currency inference
+    assert "departure_timezone" in system
+    assert "distance" in system
+    assert "currency" in system
+    # today's date is injected (YYYY-MM-DD)
+    import re
+
+    assert re.search(r"\d{4}-\d{2}-\d{2}", system)
+
+
+def test_local_today_uses_offset():
+    from datetime import timedelta
+
+    from app.services.ai_agent import _offset_to_timedelta, local_today
+
+    assert _offset_to_timedelta("+08:00") == timedelta(hours=8)
+    assert _offset_to_timedelta("-05:00") == timedelta(hours=-5)
+    assert _offset_to_timedelta("garbage") == timedelta(0)
+
+    value = local_today("+08:00")
+    assert len(value) == 10
+    assert value[4] == "-" and value[7] == "-"
+
+
+def test_create_transport_proposal_preserves_all_inferred_fields(client, monkeypatch):
+    """Field inference is only useful if the proposal keeps every field the LLM
+    sends, including status, terminals, gates, aircraft, times and PNR."""
+    token = register_and_login(client, "ai_infer_create")["access_token"]
+    headers = auth_headers(token)
+    _configure_ai(client, headers)
+
+    from app.services import ai_agent as agent_mod
+
+    data = {
+        "origin": "HKG",
+        "destination": "NRT",
+        "status": "completed",
+        "service_number": "CX548",
+        "airline_code": "CX",
+        "carrier": "Cathay Pacific",
+        "departure_time": "2026-10-20T08:00:00+08:00",
+        "arrival_time": "2026-10-20T13:10:00+09:00",
+        "departure_timezone": "Asia/Hong_Kong",
+        "arrival_timezone": "Asia/Tokyo",
+        "departure_terminal": "T1",
+        "departure_gate": "A12",
+        "arrival_terminal": "T2",
+        "arrival_gate": "B7",
+        "check_in_desk": "D",
+        "baggage_belt": "22",
+        "aircraft_model": "A350-900",
+        "aircraft_reg": "B-LRA",
+        "cabin_class": "business",
+        "seat": "12A",
+        "distance": 2896.0,
+        "currency": "HKD",
+        "price": 5000,
+        "booking_reference": "ABC123",
+        "ticket_number": "160-1234567890",
+        "notes": "window seat",
+    }
+
+    fake = _ScriptedProvider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    LLMToolCall(
+                        id="call_1",
+                        name="create_transport",
+                        arguments={"record_type": "flight", "data": data},
+                    )
+                ],
+            ),
+            LLMResponse(content="Prepared, please confirm."),
+        ]
+    )
+    monkeypatch.setattr(
+        agent_mod.AiAgentService,
+        "_build_provider",
+        lambda self, user_id: fake,
+    )
+
+    response = client.post(
+        "/api/v1/ai/chat",
+        json={"message": "I flew CX548 HKG to NRT last week"},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    prop = response.json()["proposals"][0]
+    for key, value in data.items():
+        assert prop["data"][key] == value
+
+
+def test_create_train_proposal_keeps_train_type(client, monkeypatch):
+    """A train number like G1234 should keep the inferred train_type."""
+    token = register_and_login(client, "ai_infer_train")["access_token"]
+    headers = auth_headers(token)
+    _configure_ai(client, headers)
+
+    from app.services import ai_agent as agent_mod
+
+    data = {
+        "origin": "北京南",
+        "destination": "上海虹桥",
+        "status": "completed",
+        "service_number": "G1234",
+        "train_type": "高铁",
+        "carriage": "05",
+        "seat_type": "二等座",
+        "departure_time": "2026-10-01T09:00:00+08:00",
+        "arrival_time": "2026-10-01T13:30:00+08:00",
+    }
+
+    fake = _ScriptedProvider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    LLMToolCall(
+                        id="call_1",
+                        name="create_transport",
+                        arguments={"record_type": "train", "data": data},
+                    )
+                ],
+            ),
+            LLMResponse(content="Prepared, please confirm."),
+        ]
+    )
+    monkeypatch.setattr(
+        agent_mod.AiAgentService,
+        "_build_provider",
+        lambda self, user_id: fake,
+    )
+
+    response = client.post(
+        "/api/v1/ai/chat",
+        json={"message": "I took train G1234 from Beijing to Shanghai"},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    prop = response.json()["proposals"][0]
+    assert prop["record_type"] == "train"
+    assert prop["data"]["train_type"] == "高铁"
+    assert prop["data"]["carriage"] == "05"
+    assert prop["data"]["seat_type"] == "二等座"
+
+
+def test_lookup_flight_returns_all_fields_to_llm(client, monkeypatch):
+    """The lookup tool must forward terminal/gate/aircraft/timezone/actual times
+    so the LLM can copy them into the create proposal."""
+    from datetime import UTC, datetime
+
+    from app.schemas.flight_lookup import FlightLookupResponse
+    from app.services import ai_agent as agent_mod
+    from app.services.flight_enrichment import FlightEnrichmentService
+
+    token = register_and_login(client, "ai_lookup_fields")["access_token"]
+    headers = auth_headers(token)
+    _configure_ai(client, headers)
+
+    full = FlightLookupResponse(
+        flight_number="CX659",
+        airline_code="CX",
+        airline_name="Cathay Pacific",
+        airline_name_zh="国泰航空",
+        origin_iata="HKG",
+        destination_iata="SIN",
+        origin_name="Hong Kong International",
+        destination_name="Singapore Changi",
+        departure_time=datetime(2026, 9, 26, 1, 45, tzinfo=UTC),
+        arrival_time=datetime(2026, 9, 26, 5, 50, tzinfo=UTC),
+        actual_departure_time=datetime(2026, 9, 26, 1, 50, tzinfo=UTC),
+        actual_arrival_time=datetime(2026, 9, 26, 5, 55, tzinfo=UTC),
+        departure_terminal="T1",
+        departure_gate="A12",
+        arrival_terminal="T3",
+        arrival_gate="B7",
+        check_in_desk="D",
+        baggage_belt="22",
+        aircraft_model="A350-900",
+        aircraft_reg="B-LRA",
+        departure_timezone="Asia/Hong_Kong",
+        arrival_timezone="Asia/Singapore",
+        status="scheduled",
+        distance=2540.0,
+        source="aerodatabox",
+    )
+
+    async def fake_lookup(self, *, user_id, flight_number, date, provider=None):
+        return full
+
+    monkeypatch.setattr(FlightEnrichmentService, "lookup", fake_lookup)
+
+    fake = _ScriptedProvider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    LLMToolCall(
+                        id="call_1",
+                        name="lookup_flight",
+                        arguments={"flight_number": "CX659", "date": "2026-09-26"},
+                    )
+                ],
+            ),
+            LLMResponse(content="Found CX659."),
+        ]
+    )
+    monkeypatch.setattr(
+        agent_mod.AiAgentService,
+        "_build_provider",
+        lambda self, user_id: fake,
+    )
+
+    client.post(
+        "/api/v1/ai/chat",
+        json={"message": "look up CX659 on 2026-09-26"},
+        headers=headers,
+    )
+
+    tool_msgs = [m for m in fake.last_messages if m["role"] == "tool"]
+    assert tool_msgs
+    payload = json.loads(tool_msgs[0]["content"])
+    assert payload["airline_name_zh"] == "国泰航空"
+    assert payload["departure_terminal"] == "T1"
+    assert payload["departure_gate"] == "A12"
+    assert payload["arrival_terminal"] == "T3"
+    assert payload["arrival_gate"] == "B7"
+    assert payload["check_in_desk"] == "D"
+    assert payload["baggage_belt"] == "22"
+    assert payload["aircraft_model"] == "A350-900"
+    assert payload["aircraft_reg"] == "B-LRA"
+    assert payload["departure_timezone"] == "Asia/Hong_Kong"
+    assert payload["arrival_timezone"] == "Asia/Singapore"
+    assert payload["actual_departure_time"] is not None
+    assert payload["actual_arrival_time"] is not None
+
+
+def test_create_transport_schema_exposes_inference_fields():
+    """The tool JSON schema must advertise the fields the model should fill."""
+    props = TOOLS["create_transport"].parameters["properties"]["data"]["properties"]
+    for field in (
+        "status",
+        "departure_timezone",
+        "arrival_timezone",
+        "departure_terminal",
+        "departure_gate",
+        "arrival_terminal",
+        "arrival_gate",
+        "check_in_desk",
+        "baggage_belt",
+        "aircraft_model",
+        "aircraft_reg",
+        "train_type",
+        "carriage",
+        "seat_type",
+        "ticket_type",
+        "booking_reference",
+        "ticket_number",
+        "distance",
+        "currency",
+    ):
+        assert field in props, f"missing field in create_transport schema: {field}"
+
+
+def _scripted_create(client, headers, monkeypatch, record_type, data):
+    """Run one chat turn where the LLM proposes create_transport(data)."""
+    from app.services import ai_agent as agent_mod
+
+    fake = _ScriptedProvider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    LLMToolCall(
+                        id="call_1",
+                        name="create_transport",
+                        arguments={"record_type": record_type, "data": data},
+                    )
+                ],
+            ),
+            LLMResponse(content="Prepared, please confirm."),
+        ]
+    )
+    monkeypatch.setattr(
+        agent_mod.AiAgentService,
+        "_build_provider",
+        lambda self, user_id: fake,
+    )
+    response = client.post("/api/v1/ai/chat", json={"message": "add this trip"}, headers=headers)
+    assert response.status_code == 200
+    return response.json()["proposals"][0]
+
+
+def test_create_proposal_infers_status_completed_for_past_dates(client, monkeypatch):
+    from datetime import UTC, datetime, timedelta
+
+    token = register_and_login(client, "ai_status_past")["access_token"]
+    headers = auth_headers(token)
+    _configure_ai(client, headers)
+
+    past = (datetime.now(UTC) - timedelta(days=3)).isoformat()
+    prop = _scripted_create(
+        client,
+        headers,
+        monkeypatch,
+        "flight",
+        {
+            "origin": "HKG",
+            "destination": "SIN",
+            "service_number": "CX659",
+            "arrival_time": past,
+        },
+    )
+    assert prop["data"]["status"] == "completed"
+
+
+def test_create_proposal_infers_status_scheduled_for_future_dates(client, monkeypatch):
+    from datetime import UTC, datetime, timedelta
+
+    token = register_and_login(client, "ai_status_future")["access_token"]
+    headers = auth_headers(token)
+    _configure_ai(client, headers)
+
+    future = (datetime.now(UTC) + timedelta(days=5)).isoformat()
+    prop = _scripted_create(
+        client,
+        headers,
+        monkeypatch,
+        "flight",
+        {
+            "origin": "HKG",
+            "destination": "SIN",
+            "service_number": "CX659",
+            "arrival_time": future,
+        },
+    )
+    assert prop["data"]["status"] == "scheduled"
+
+
+def test_create_proposal_infers_airline_code_and_carrier(client, monkeypatch):
+    token = register_and_login(client, "ai_airline")["access_token"]
+    headers = auth_headers(token)
+    _configure_ai(client, headers)
+
+    prop = _scripted_create(
+        client,
+        headers,
+        monkeypatch,
+        "flight",
+        {"origin": "HKG", "destination": "NRT", "service_number": "CX548"},
+    )
+    assert prop["data"]["airline_code"] == "CX"
+    assert prop["data"].get("carrier")
+
+
+def test_create_proposal_infers_train_type(client, monkeypatch):
+    token = register_and_login(client, "ai_train_type")["access_token"]
+    headers = auth_headers(token)
+    _configure_ai(client, headers)
+
+    prop = _scripted_create(
+        client,
+        headers,
+        monkeypatch,
+        "train",
+        {"origin": "北京南", "destination": "上海虹桥", "service_number": "G1234"},
+    )
+    assert prop["data"]["train_type"] == "高铁"
+
+
+def test_create_proposal_does_not_override_explicit_values(client, monkeypatch):
+    token = register_and_login(client, "ai_no_override")["access_token"]
+    headers = auth_headers(token)
+    _configure_ai(client, headers)
+
+    prop = _scripted_create(
+        client,
+        headers,
+        monkeypatch,
+        "train",
+        {
+            "origin": "北京南",
+            "destination": "上海虹桥",
+            "service_number": "G1234",
+            "train_type": "复兴号",
+            "status": "scheduled",
+        },
+    )
+    assert prop["data"]["train_type"] == "复兴号"
+    assert prop["data"]["status"] == "scheduled"

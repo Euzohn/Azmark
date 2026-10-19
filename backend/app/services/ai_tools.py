@@ -9,14 +9,17 @@ frontend for explicit user confirmation (spec #69, #93).
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import StrEnum
 
 from sqlalchemy.orm import Session
 
 from app.schemas.ai import AiProposal
+from app.services import reference
 from app.services.dashboard import DashboardService
 
 logger = logging.getLogger(__name__)
@@ -37,10 +40,23 @@ def _compact_record(record) -> dict:
         "destination": record.destination,
         "service_number": record.service_number,
         "carrier": record.carrier,
+        "airline_code": record.airline_code,
         "departure_time": record.departure_time.isoformat() if record.departure_time else None,
         "arrival_time": record.arrival_time.isoformat() if record.arrival_time else None,
         "status": record.status,
         "distance_km": float(record.distance) if record.distance else None,
+        "cabin_class": record.cabin_class,
+        "seat": record.seat,
+        "departure_terminal": record.departure_terminal,
+        "departure_gate": record.departure_gate,
+        "arrival_terminal": record.arrival_terminal,
+        "arrival_gate": record.arrival_gate,
+        "aircraft_model": record.aircraft_model,
+        "train_type": record.train_type,
+        "carriage": record.carriage,
+        "seat_type": record.seat_type,
+        "price": float(record.price) if record.price is not None else None,
+        "currency": record.currency,
     }
 
 
@@ -166,12 +182,29 @@ async def _lookup_flight(db: Session, user_id: uuid.UUID, args: dict) -> dict:
         "flight_number": result.flight_number,
         "airline_code": result.airline_code,
         "airline_name": result.airline_name,
+        "airline_name_zh": result.airline_name_zh,
         "origin_iata": result.origin_iata,
         "destination_iata": result.destination_iata,
         "origin_name": result.origin_name,
         "destination_name": result.destination_name,
         "departure_time": result.departure_time.isoformat() if result.departure_time else None,
         "arrival_time": result.arrival_time.isoformat() if result.arrival_time else None,
+        "actual_departure_time": (
+            result.actual_departure_time.isoformat() if result.actual_departure_time else None
+        ),
+        "actual_arrival_time": (
+            result.actual_arrival_time.isoformat() if result.actual_arrival_time else None
+        ),
+        "departure_terminal": result.departure_terminal,
+        "departure_gate": result.departure_gate,
+        "arrival_terminal": result.arrival_terminal,
+        "arrival_gate": result.arrival_gate,
+        "check_in_desk": result.check_in_desk,
+        "baggage_belt": result.baggage_belt,
+        "aircraft_model": result.aircraft_model,
+        "aircraft_reg": result.aircraft_reg,
+        "departure_timezone": result.departure_timezone,
+        "arrival_timezone": result.arrival_timezone,
         "status": result.status,
         "distance_km": result.distance,
         "aircraft": result.aircraft,
@@ -185,9 +218,78 @@ async def _lookup_flight(db: Session, user_id: uuid.UUID, args: dict) -> dict:
     return response
 
 
+# Chinese train-number prefixes → category. Used as a server-side safety net so
+# train_type is filled even if the LLM omits it (spec #13).
+_TRAIN_TYPE_BY_PREFIX: dict[str, str] = {
+    "G": "高铁",
+    "D": "动车",
+    "C": "城际",
+    "Z": "直达特快",
+    "T": "特快",
+    "K": "快速",
+    "L": "临时",
+    "Y": "旅游",
+}
+
+
+def _parse_dt(value: object) -> datetime | None:
+    """Parse an ISO 8601 string defensively; naive values are treated as UTC."""
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed
+
+
+def _infer_status(data: dict) -> str | None:
+    """Infer scheduled/completed from the times relative to now."""
+    anchor = _parse_dt(data.get("arrival_time")) or _parse_dt(data.get("departure_time"))
+    if anchor is None:
+        return None
+    return "completed" if anchor < datetime.now(UTC) else "scheduled"
+
+
+def _fill_inferred_fields(record_type: str, data: object) -> dict:
+    """Server-side safety net for fields the LLM may have omitted.
+
+    Only fills missing values — never overrides what the LLM provided.
+    """
+    if not isinstance(data, dict):
+        return {}
+    data = dict(data)
+
+    if not data.get("status"):
+        status = _infer_status(data)
+        if status:
+            data["status"] = status
+
+    service = str(data.get("service_number") or "").strip().upper()
+    if record_type == "flight":
+        if service and not data.get("airline_code"):
+            match = re.match(r"^([A-Z0-9]{2})\d", service)
+            if match:
+                data["airline_code"] = match.group(1)
+        airline_code = str(data.get("airline_code") or "").strip().upper()
+        if airline_code and not data.get("carrier"):
+            airline = reference.get_airline_by_iata(airline_code)
+            if airline:
+                data["carrier"] = airline.get("name")
+    elif record_type == "train":
+        if service and not data.get("train_type"):
+            train_type = _TRAIN_TYPE_BY_PREFIX.get(service[0])
+            if train_type:
+                data["train_type"] = train_type
+
+    return data
+
+
 def _create_transport_proposal(args: dict) -> AiProposal:
     record_type = args.get("record_type") or args.get("type") or "other"
-    data = args.get("data", {})
+    data = _fill_inferred_fields(record_type, args.get("data", {}))
     summary_parts = [
         record_type,
         f"{data.get('origin', '—')} → {data.get('destination', '—')}",
@@ -276,12 +378,14 @@ TOOLS: dict[str, ToolDef] = {
         name="lookup_flight",
         description=(
             "Look up live flight information by flight number and date. Returns "
-            "airline, origin/destination airports, scheduled times, and status "
-            "from an external flight data provider. Use this BEFORE calling "
-            "create_transport when the user mentions a flight number — the "
-            "returned data should be used to fill the create_transport proposal. "
-            "If source is 'local', only the airline code/name was inferred and "
-            "route/times are unknown — ask the user for those details."
+            "airline code/name (incl. Chinese name), origin/destination airports and "
+            "names, scheduled and actual times, terminals, gates, check-in desk, "
+            "baggage belt, aircraft model/registration, timezones, status, and "
+            "distance. Use this BEFORE calling create_transport when the user "
+            "mentions a flight number, then copy EVERY non-null field into the "
+            "create_transport proposal. If source is 'local', only the airline "
+            "code/name was inferred and route/times are unknown — ask the user for "
+            "those details."
         ),
         parameters={
             "type": "object",
@@ -305,7 +409,10 @@ TOOLS: dict[str, ToolDef] = {
         description=(
             "Propose creating a new transport record (flight, train, or other). "
             "The user must confirm before anything is saved. Provide origin, "
-            "destination, and as many fields as known."
+            "destination, and EVERY other field you can determine — do not leave "
+            "fields empty when you can infer them. Always derive a value for "
+            "'status' from the dates. After proposing, summarize and ask the user "
+            "to confirm."
         ),
         parameters={
             "type": "object",
@@ -317,32 +424,142 @@ TOOLS: dict[str, ToolDef] = {
                 },
                 "data": {
                     "type": "object",
+                    "description": (
+                        "All known fields. Fill EVERY field you can determine from the "
+                        "user's message, a lookup_flight result, or an image — never omit a "
+                        "field you can infer. See the FIELD INFERENCE rules in the system "
+                        "prompt for how to derive status, airline_code, train_type, currency, "
+                        "timezones, etc."
+                    ),
                     "properties": {
-                        "origin": {"type": "string", "description": "Origin airport/station/city"},
+                        "origin": {
+                            "type": "string",
+                            "description": "Origin airport / IATA code / station / city",
+                        },
                         "destination": {
                             "type": "string",
-                            "description": "Destination airport/station/city",
+                            "description": "Destination airport / IATA code / station / city",
                         },
-                        "departure_time": {"type": "string", "description": "ISO 8601 datetime"},
-                        "arrival_time": {"type": "string", "description": "ISO 8601 datetime"},
-                        "carrier": {"type": "string", "description": "Airline/operator name"},
+                        "status": {
+                            "type": "string",
+                            "enum": ["scheduled", "completed"],
+                            "description": (
+                                "Infer from the dates: 'completed' if the arrival time is "
+                                "already in the past, otherwise 'scheduled'."
+                            ),
+                        },
+                        "departure_time": {
+                            "type": "string",
+                            "description": (
+                                "ISO 8601 datetime WITH timezone offset, "
+                                "e.g. 2026-09-26T08:00:00+08:00"
+                            ),
+                        },
+                        "arrival_time": {
+                            "type": "string",
+                            "description": (
+                                "ISO 8601 datetime WITH timezone offset, "
+                                "e.g. 2026-09-26T12:30:00+08:00"
+                            ),
+                        },
+                        "actual_departure_time": {
+                            "type": "string",
+                            "description": (
+                                "Actual/between departure time, ISO 8601 with offset (if known)"
+                            ),
+                        },
+                        "actual_arrival_time": {
+                            "type": "string",
+                            "description": "Actual arrival time, ISO 8601 with offset (if known)",
+                        },
+                        "departure_timezone": {
+                            "type": "string",
+                            "description": "Origin timezone, e.g. Asia/Shanghai or +08:00",
+                        },
+                        "arrival_timezone": {
+                            "type": "string",
+                            "description": "Destination timezone, e.g. Asia/Tokyo or +09:00",
+                        },
+                        "carrier": {
+                            "type": "string",
+                            "description": "Airline / rail operator name",
+                        },
                         "airline_code": {
                             "type": "string",
-                            "description": "IATA airline code, e.g. CX",
+                            "description": (
+                                "IATA airline code, e.g. CX. Derive from the flight number prefix."
+                            ),
                         },
                         "service_number": {
                             "type": "string",
-                            "description": "Flight/train/service number",
+                            "description": "Flight / train / service number, e.g. CX659, G1234",
                         },
-                        "seat": {"type": "string"},
+                        "cabin_class": {
+                            "type": "string",
+                            "description": "Cabin / seat class, e.g. economy, business, 二等座",
+                        },
+                        "seat": {"type": "string", "description": "Seat number, e.g. 12A"},
+                        "departure_terminal": {"type": "string"},
+                        "departure_gate": {
+                            "type": "string",
+                            "description": "Departure gate (flight) or platform (train)",
+                        },
+                        "arrival_terminal": {"type": "string"},
+                        "arrival_gate": {
+                            "type": "string",
+                            "description": "Arrival gate or platform",
+                        },
+                        "check_in_desk": {
+                            "type": "string",
+                            "description": "Check-in counter / desk",
+                        },
+                        "baggage_belt": {
+                            "type": "string",
+                            "description": "Baggage claim belt",
+                        },
+                        "aircraft_model": {"type": "string", "description": "e.g. A350, B787"},
+                        "aircraft_reg": {"type": "string", "description": "Aircraft registration"},
+                        "train_type": {
+                            "type": "string",
+                            "description": (
+                                "Train category derived from the number's leading letter "
+                                "(e.g. G=高铁, D=动车, Z=直达, T=特快, K=快速, C=城际)."
+                            ),
+                        },
+                        "carriage": {
+                            "type": "string",
+                            "description": "Train carriage / coach number",
+                        },
+                        "seat_type": {
+                            "type": "string",
+                            "description": "Train seat type, e.g. 商务座/一等座/二等座",
+                        },
+                        "ticket_type": {
+                            "type": "string",
+                            "description": "Train ticket type, e.g. 成人票/学生票",
+                        },
                         "vehicle_type": {
                             "type": "string",
                             "description": "For other transport: bus, ferry, taxi, etc.",
                         },
-                        "train_type": {"type": "string"},
-                        "cabin_class": {"type": "string"},
+                        "booking_reference": {
+                            "type": "string",
+                            "description": (
+                                "PNR / booking reference. SENSITIVE — extract from image only."
+                            ),
+                        },
+                        "ticket_number": {
+                            "type": "string",
+                            "description": ("Ticket number. SENSITIVE — extract from image only."),
+                        },
                         "price": {"type": "number"},
-                        "currency": {"type": "string"},
+                        "currency": {
+                            "type": "string",
+                            "description": (
+                                "ISO 4217 code, e.g. CNY, USD, HKD. Infer from "
+                                "locale/destination if not stated."
+                            ),
+                        },
                         "distance": {"type": "number", "description": "Distance in km"},
                         "notes": {"type": "string"},
                     },

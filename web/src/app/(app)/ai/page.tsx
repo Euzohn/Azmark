@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-store";
-import { useI18n } from "@/lib/i18n";
+import { useI18n, type TranslationKey } from "@/lib/i18n";
 import type { AiProposal } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -90,29 +90,65 @@ function validateImageFile(file: File): string | null {
   return null;
 }
 
-function formatProposalData(data: Record<string, unknown>): string[] {
+function formatDateTime(value: unknown): string {
+  try {
+    const date = new Date(value as string);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleString(undefined, {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return String(value);
+  }
+}
+
+function formatProposalData(
+  data: Record<string, unknown>,
+  t: (key: TranslationKey) => string,
+): string[] {
   const lines: string[] = [];
   if (data.origin || data.destination) {
     lines.push(`${data.origin ?? "?"} → ${data.destination ?? "?"}`);
   }
+
+  if (data.status === "completed") lines.push(t("ai.proposal.statusCompleted"));
+  else if (data.status === "scheduled") lines.push(t("ai.proposal.statusScheduled"));
+
   if (data.service_number) lines.push(data.service_number as string);
+  if (data.train_type) {
+    lines.push(`${t("ai.proposal.trainType")}: ${data.train_type}`);
+  }
   if (data.departure_time) {
-    try {
-      lines.push(
-        new Date(data.departure_time as string).toLocaleString(undefined, {
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-      );
-    } catch {
-      lines.push(data.departure_time as string);
-    }
+    lines.push(`${t("ai.proposal.departure")}: ${formatDateTime(data.departure_time)}`);
+  }
+  if (data.arrival_time) {
+    lines.push(`${t("ai.proposal.arrival")}: ${formatDateTime(data.arrival_time)}`);
   }
   if (data.carrier) lines.push(data.carrier as string);
-  if (data.seat) lines.push(`Seat: ${data.seat}`);
+  if (data.cabin_class) {
+    lines.push(`${t("ai.proposal.cabinClass")}: ${data.cabin_class}`);
+  }
+  if (data.seat) lines.push(`${t("ai.proposal.seat")}: ${data.seat}`);
+  if (data.departure_terminal) {
+    lines.push(`${t("ai.proposal.terminal")}: ${data.departure_terminal}`);
+  }
+  if (data.departure_gate) {
+    lines.push(`${t("ai.proposal.gate")}: ${data.departure_gate}`);
+  }
+  if (data.aircraft_model) {
+    lines.push(`${t("ai.proposal.aircraft")}: ${data.aircraft_model}`);
+  }
+  if (data.distance) {
+    lines.push(`${t("ai.proposal.distance")}: ${data.distance} km`);
+  }
+  if (data.price !== undefined && data.price !== null) {
+    const currency = data.currency ? ` ${data.currency}` : "";
+    lines.push(`${t("ai.proposal.price")}: ${data.price}${currency}`);
+  }
   if (data.notes) lines.push(data.notes as string);
   return lines;
 }
@@ -636,7 +672,7 @@ function ProposalCard({
   const isDelete = proposal.action === "delete_transport";
   const saved = proposal.status === "saved";
   const cancelled = proposal.status === "cancelled";
-  const dataLines = isDelete ? [] : formatProposalData(proposal.data);
+  const dataLines = isDelete ? [] : formatProposalData(proposal.data, t);
 
   if (saved || cancelled) {
     return (
