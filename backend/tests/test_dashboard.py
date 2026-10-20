@@ -68,6 +68,33 @@ def test_dashboard_with_flights(client):
     assert "upcoming" in body
 
 
+def test_dashboard_recent_and_upcoming_are_cross_type(client):
+    token = register_and_login(client, "dash_cross")["access_token"]
+    headers = auth_headers(token)
+
+    train = {
+        "origin": "北京南",
+        "destination": "上海虹桥",
+        "departure_time": "2099-01-01T08:00:00Z",
+        "arrival_time": "2099-01-01T12:28:00Z",
+        "carrier": "中国铁路",
+        "service_number": "G1",
+    }
+    flight = {
+        **FLIGHT_HKG_SIN,
+        "departure_time": "2099-02-01T08:00:00Z",
+        "arrival_time": "2099-02-01T12:00:00Z",
+    }
+    assert client.post("/api/v1/trains", json=train, headers=headers).status_code == 201
+    assert client.post("/api/v1/flights", json=flight, headers=headers).status_code == 201
+
+    body = client.get("/api/v1/dashboard", headers=headers).json()
+    assert {record["type"] for record in body["recent"]} == {"flight", "train"}
+    # The earliest future departure wins, regardless of transport type.
+    assert body["upcoming"]["type"] == "train"
+    assert body["upcoming"]["service_number"] == "G1"
+
+
 def test_statistics_breakdowns(client):
     token = register_and_login(client, "stats_user")["access_token"]
     headers = auth_headers(token)

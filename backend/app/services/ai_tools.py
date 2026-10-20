@@ -29,6 +29,7 @@ class ToolPermission(StrEnum):
     READ = "read"
     WRITE = "write"
     DESTRUCTIVE = "destructive"
+    EXTERNAL = "external"
 
 
 def _compact_record(record) -> dict:

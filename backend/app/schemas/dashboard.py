@@ -5,9 +5,25 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
-from app.schemas.transport import FlightRead
+
+class DashboardRecord(BaseModel):
+    """Common fields for the dashboard's cross-type recent/upcoming lists."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    type: str
+    status: str
+    origin: str | None = None
+    destination: str | None = None
+    service_number: str | None = None
+    carrier: str | None = None
+    airline_code: str | None = None
+    departure_time: datetime | None = None
+    arrival_time: datetime | None = None
+    trip_id: uuid.UUID | None = None
 
 
 class DashboardStats(BaseModel):
@@ -23,8 +39,8 @@ class DashboardStats(BaseModel):
 
 class DashboardRead(BaseModel):
     stats: DashboardStats
-    recent: list[FlightRead]
-    upcoming: FlightRead | None
+    recent: list[DashboardRecord]
+    upcoming: DashboardRecord | None
 
 
 class BreakdownItem(BaseModel):

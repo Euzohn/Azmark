@@ -121,6 +121,12 @@ def get_data_transfer_service(db: Session = Depends(get_db)):
     return DataTransferService(db)
 
 
+def get_data_source_service(db: Session = Depends(get_db)):
+    from app.services.data_source import DataSourceService
+
+    return DataSourceService(db)
+
+
 def get_admin_service(db: Session = Depends(get_db)):
     from app.services.admin import AdminService
 

@@ -109,11 +109,16 @@ class DashboardService:
         )
 
         now_naive = datetime.now(UTC).replace(tzinfo=None)
-        upcoming: TransportRecord | None = None
-        for record in reversed(flights_desc):
-            if record.departure_time and _naive_utc(record.departure_time) > now_naive:
-                upcoming = record
-                break
+        upcoming_records = [
+            record
+            for record in all_records
+            if record.departure_time and _naive_utc(record.departure_time) > now_naive
+        ]
+        upcoming: TransportRecord | None = (
+            min(upcoming_records, key=lambda record: _naive_utc(record.departure_time))
+            if upcoming_records
+            else None
+        )
 
         return DashboardRead(
             stats=DashboardStats(
@@ -126,7 +131,7 @@ class DashboardService:
                 transports=len(other),
                 trips=int(trips_total),
             ),
-            recent=flights_desc[:5],
+            recent=all_records[:5],
             upcoming=upcoming,
         )
 

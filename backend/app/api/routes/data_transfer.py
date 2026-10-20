@@ -4,11 +4,17 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
 
-from app.api.deps import get_audit_service, get_current_user, get_data_transfer_service
+from app.api.deps import (
+    get_audit_service,
+    get_current_user,
+    get_data_source_service,
+    get_data_transfer_service,
+)
 from app.models.audit_log import AuditAction
 from app.models.user import User
 from app.schemas.data_transfer import ImportPreview, ImportResult
 from app.services.audit import AuditService
+from app.services.data_source import DataSourceService
 from app.services.data_transfer import DataTransferService
 
 router = APIRouter(tags=["data"])
@@ -103,6 +109,7 @@ async def import_data(
     mapping: Annotated[str | None, Form()] = None,
     current_user: User = Depends(get_current_user),
     service: DataTransferService = Depends(get_data_transfer_service),
+    sources: DataSourceService = Depends(get_data_source_service),
     audit: AuditService = Depends(get_audit_service),
 ) -> ImportResult:
     content = _decode_file(file)
@@ -110,6 +117,20 @@ async def import_data(
     mapping_dict = _parse_mapping(mapping)
     result = service.import_records(
         user_id=current_user.id, format=fmt, content=content, mapping=mapping_dict
+    )
+    sources.record(
+        user_id=current_user.id,
+        source_type="import",
+        source_name=file.filename or f"import.{fmt}",
+        provider=fmt,
+        confidence=1.0,
+        metadata={
+            "format": fmt,
+            "imported": result.imported,
+            "skipped_duplicates": result.skipped_duplicates,
+            "failed": result.failed,
+            "trips_created": result.trips_created,
+        },
     )
     audit.log(
         action=AuditAction.IMPORT,

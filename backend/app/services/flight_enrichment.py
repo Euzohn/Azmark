@@ -17,9 +17,22 @@ from app.core.timezones import normalize_timezone
 from app.providers.base import FlightLookupResult
 from app.schemas.flight_lookup import FlightLookupResponse
 from app.services import reference
+from app.services.data_source import DataSourceService
 from app.services.provider_keys import ProviderKeyStore
 
 logger = getLogger(__name__)
+
+# Human-readable provider sites for DataSource provenance (spec #22/#37).
+_PROVIDER_URLS = {
+    "aerodatabox": "https://aerodatabox.com",
+    "aviationstack": "https://aviationstack.com",
+    "variflight": "https://www.variflight.com",
+}
+_PROVIDER_CONFIDENCE = {
+    "aerodatabox": 0.9,
+    "variflight": 0.85,
+    "aviationstack": 0.6,
+}
 
 
 class ProviderNotFoundError(Exception):
@@ -114,6 +127,37 @@ def _merge(local: dict, remote: FlightLookupResult | None) -> FlightLookupRespon
 class FlightEnrichmentService:
     def __init__(self, db: Session) -> None:
         self.keys = ProviderKeyStore(db)
+        self.sources = DataSourceService(db)
+
+    def _record_source(
+        self,
+        *,
+        user_id: uuid.UUID,
+        flight_number: str,
+        date: date,
+        result: FlightLookupResponse,
+    ) -> None:
+        """Persist where this external flight result came from (spec #22/#37)."""
+        if not result.source or result.source == "local":
+            return
+        try:
+            self.sources.record(
+                user_id=user_id,
+                source_type="api",
+                source_name=f"{flight_number} · {date.isoformat()}",
+                source_url=_PROVIDER_URLS.get(result.source),
+                provider=result.source,
+                confidence=_PROVIDER_CONFIDENCE.get(result.source, 0.5),
+                metadata={
+                    "flight_number": flight_number,
+                    "date": date.isoformat(),
+                    "origin": result.origin_iata,
+                    "destination": result.destination_iata,
+                    "status": result.status,
+                },
+            )
+        except Exception as exc:  # noqa: BLE001 - provenance must not break lookups
+            logger.warning("FlightLookup: could not record data source: %r", exc)
 
     async def lookup(
         self,
@@ -158,7 +202,14 @@ class FlightEnrichmentService:
                     remote = None
                 if remote is not None:
                     logger.info("FlightLookup: %s returned a result for %s", name, number)
-                    return _merge(local, remote)
+                    result = _merge(local, remote)
+                    self._record_source(
+                        user_id=user_id,
+                        flight_number=number,
+                        date=date,
+                        result=result,
+                    )
+                    return result
                 logger.info("FlightLookup: %s returned no result for %s", name, number)
         logger.info("FlightLookup: local-only result for %s", number)
         return _merge(local, None)
@@ -206,7 +257,14 @@ class FlightEnrichmentService:
                     remote = None
                 if remote is not None:
                     logger.info("FlightLookupAll: %s returned a result for %s", name, number)
-                    results.append({"provider": name, "data": _merge(local, remote)})
+                    merged = _merge(local, remote)
+                    self._record_source(
+                        user_id=user_id,
+                        flight_number=number,
+                        date=date,
+                        result=merged,
+                    )
+                    results.append({"provider": name, "data": merged})
                 else:
                     logger.info("FlightLookupAll: %s returned no result for %s", name, number)
                     results.append({"provider": name, "data": None})
