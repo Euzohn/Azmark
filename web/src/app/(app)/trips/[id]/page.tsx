@@ -1,7 +1,17 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, Bus, Plane, Plus, Trash2, TrainFront } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  Bus,
+  Plane,
+  Plus,
+  Trash2,
+  TrainFront,
+} from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 
@@ -15,7 +25,14 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import type { OtherTransport, TimelineRecord, Train, TripDetail, TripInput } from "@/lib/types";
+import type {
+  OtherTransport,
+  TimelineRecord,
+  Train,
+  TripDetail,
+  TripInput,
+  TripItem,
+} from "@/lib/types";
 
 function formatDateTime(value: string | null): string {
   if (!value) return "-";
@@ -77,6 +94,11 @@ export default function TripDetailPage() {
     },
   });
 
+  const reorder = useMutation({
+    mutationFn: (itemIds: string[]) => api.reorderTripItems(id, itemIds),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["trip", id] }),
+  });
+
   if (isLoading) {
     return (
       <div className="flex flex-col gap-4">
@@ -92,6 +114,33 @@ export default function TripDetailPage() {
   const start = formatDate(data.start_date);
   const end = formatDate(data.end_date);
   const dates = start && end ? t("trips.dates", { start, end }) : null;
+
+  // Older API responses may not include items yet; fall back to records.
+  const items: TripItem[] =
+    data.items && data.items.length > 0
+      ? data.items
+      : data.records.map((record) => ({
+          id: record.id,
+          item_type: "transport",
+          item_id: record.id,
+          sort_order: 0,
+          start_at: record.departure_time,
+          end_at: record.arrival_time,
+          record,
+        }));
+  const displayItems = items.filter(
+    (item): item is TripItem & { record: TimelineRecord } => item.record !== null,
+  );
+  const canReorder = Boolean(data.items && data.items.length > 1);
+
+  const moveItem = (itemId: string, direction: -1 | 1) => {
+    const ids = items.map((item) => item.id);
+    const index = ids.indexOf(itemId);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= ids.length) return;
+    [ids[index], ids[target]] = [ids[target], ids[index]];
+    reorder.mutate(ids);
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -144,9 +193,12 @@ export default function TripDetailPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="flex flex-col gap-3">
           <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            {t("trips.records")} · {data.records.length}
+            {t("trips.records")} · {displayItems.length}
           </h2>
-          {data.records.length === 0 ? (
+          {reorder.isError ? (
+            <p className="text-sm text-danger">{t("trips.reorderFailed")}</p>
+          ) : null}
+          {displayItems.length === 0 ? (
             <EmptyState
               icon={Plane}
               title={t("trips.noFlights")}
@@ -161,7 +213,9 @@ export default function TripDetailPage() {
               }
             />
           ) : (
-            data.records.map((record, index) => {
+            displayItems.map((item, index) => {
+              const record = item.record;
+              const itemIndex = items.findIndex((entry) => entry.id === item.id);
               const isTrain = isTrainRecord(record);
               const isOther = isOtherRecord(record);
               const detailHref = isTrain
@@ -219,6 +273,34 @@ export default function TripDetailPage() {
                         </div>
                       </div>
                     </Link>
+                    {canReorder ? (
+                      <div className="flex shrink-0 flex-col">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          disabled={itemIndex <= 0 || reorder.isPending}
+                          onClick={() => moveItem(item.id, -1)}
+                          title={t("trips.moveUp")}
+                          aria-label={t("trips.moveUp")}
+                        >
+                          <ArrowUp className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          disabled={itemIndex >= items.length - 1 || reorder.isPending}
+                          onClick={() => moveItem(item.id, 1)}
+                          title={t("trips.moveDown")}
+                          aria-label={t("trips.moveDown")}
+                        >
+                          <ArrowDown className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ) : null}
                     <FlightStatusBadge status={record.status} />
                   </CardContent>
                 </Card>

@@ -6,11 +6,17 @@ from sqlalchemy.orm import Session
 from app.core.crypto import encrypt_value
 from app.models.transport_record import TransportRecord
 from app.repositories.transport import TransportRepository
+from app.repositories.trip import TripRepository
+from app.repositories.trip_item import TripItemRepository
 from app.services.seating import infer_train_seat_type
 
 
 class RecordNotFoundError(Exception):
     pass
+
+
+class TripAssignmentError(RecordNotFoundError):
+    """The target trip does not exist or belongs to another user (spec #3.3/#57)."""
 
 
 # PNR、票号、购票证件号属敏感字段（spec #45/#96），一律加密存储。
@@ -23,7 +29,14 @@ class TransportService:
     record_type: str = "flight"
 
     def __init__(self, db: Session) -> None:
+        self.db = db
         self.records = TransportRepository(db)
+        self.trips = TripRepository(db)
+        self.trip_items = TripItemRepository(db)
+
+    def _check_trip(self, *, user_id: uuid.UUID, trip_id: uuid.UUID | None) -> None:
+        if trip_id is not None and self.trips.get(user_id=user_id, trip_id=trip_id) is None:
+            raise TripAssignmentError
 
     def list_records(
         self,
@@ -84,18 +97,23 @@ class TransportService:
 
     def create_record(self, *, user_id: uuid.UUID, payload) -> TransportRecord:
         data = payload.model_dump()
+        self._check_trip(user_id=user_id, trip_id=data.get("trip_id"))
         self._infer_seat_type(data)
         enc = self._encrypt_sensitive(data)
         record = TransportRecord(user_id=user_id, type=self.record_type, **data)
         for field, cipher in enc.items():
             setattr(record, f"{field}_enc", cipher)
-        return self.records.create(record)
+        record = self.records.create(record)
+        self.trip_items.sync_transport(record)
+        return record
 
     def update_record(
         self, *, user_id: uuid.UUID, record_id: uuid.UUID, payload
     ) -> TransportRecord:
         record = self.get_record(user_id=user_id, record_id=record_id)
         data = payload.model_dump(exclude_unset=True)
+        if "trip_id" in data:
+            self._check_trip(user_id=user_id, trip_id=data["trip_id"])
         self._infer_seat_type(data, seat_changed=True)
         for field in _SENSITIVE_FIELDS:
             if field in data:
@@ -103,10 +121,13 @@ class TransportService:
                 setattr(record, f"{field}_enc", encrypt_value(value) if value else None)
         for field, value in data.items():
             setattr(record, field, value)
-        return self.records.save(record)
+        record = self.records.save(record)
+        self.trip_items.sync_transport(record)
+        return record
 
     def delete_record(self, *, user_id: uuid.UUID, record_id: uuid.UUID) -> None:
         record = self.get_record(user_id=user_id, record_id=record_id)
+        self.trip_items.delete_transport(user_id=user_id, record_id=record.id)
         self.records.delete(record)
 
 

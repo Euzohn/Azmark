@@ -216,6 +216,20 @@ export const api = {
   getTrip: (id: string) => request<TripDetail>(`/trips/${id}`),
   updateTrip: (id: string, data: Partial<TripInput>) =>
     request<Trip>(`/trips/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  reorderTripItems: (tripId: string, itemIds: string[]) =>
+    request<void>(`/trips/${tripId}/items/order`, {
+      method: "PUT",
+      body: JSON.stringify({ item_ids: itemIds }),
+    }),
+  updateTripItem: (
+    tripId: string,
+    itemId: string,
+    data: { sort_order?: number; start_at?: string | null; end_at?: string | null },
+  ) =>
+    request<void>(`/trips/${tripId}/items/${itemId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
   deleteTrip: (id: string) => request<void>(`/trips/${id}`, { method: "DELETE" }),
 
   searchAirports: (query: string) =>

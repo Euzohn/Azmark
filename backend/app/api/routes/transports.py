@@ -51,7 +51,10 @@ def create_other_transport(
     service: OtherTransportService = Depends(get_transport_service),
     audit: AuditService = Depends(get_audit_service),
 ):
-    record = service.create_record(user_id=current_user.id, payload=payload)
+    try:
+        record = service.create_record(user_id=current_user.id, payload=payload)
+    except RecordNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
     audit.log(
         action=AuditAction.CREATE_RECORD,
         user_id=current_user.id,

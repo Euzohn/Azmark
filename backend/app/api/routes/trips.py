@@ -5,9 +5,22 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from app.api.deps import get_audit_service, get_current_user, get_trip_service
 from app.models.audit_log import AuditAction
 from app.models.user import User
-from app.schemas.trip import TripCreate, TripDetail, TripList, TripRead, TripUpdate
+from app.schemas.trip import (
+    TripCreate,
+    TripDetail,
+    TripItemOrder,
+    TripItemUpdate,
+    TripList,
+    TripRead,
+    TripUpdate,
+)
 from app.services.audit import AuditService
-from app.services.trip import TripNotFoundError, TripService
+from app.services.trip import (
+    InvalidTripOrderError,
+    TripItemNotFoundError,
+    TripNotFoundError,
+    TripService,
+)
 
 router = APIRouter(prefix="/trips", tags=["trips"])
 
@@ -53,9 +66,10 @@ def get_trip(
         trip = service.get_trip(user_id=current_user.id, trip_id=trip_id)
     except TripNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
-    records = service.list_records(user_id=current_user.id, trip_id=trip_id)
+    items = service.list_items(user_id=current_user.id, trip_id=trip_id)
+    records = [item.record for item in items if item.record is not None]
     return TripDetail.model_validate(trip, from_attributes=True).model_copy(
-        update={"records": records}
+        update={"records": records, "items": items}
     )
 
 
@@ -81,6 +95,64 @@ def update_trip(
         request=request,
     )
     return trip
+
+
+@router.put("/{trip_id}/items/order", status_code=status.HTTP_204_NO_CONTENT)
+def reorder_trip_items(
+    trip_id: uuid.UUID,
+    payload: TripItemOrder,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    service: TripService = Depends(get_trip_service),
+    audit: AuditService = Depends(get_audit_service),
+) -> None:
+    try:
+        service.reorder_items(user_id=current_user.id, trip_id=trip_id, item_ids=payload.item_ids)
+    except TripNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
+    except InvalidTripOrderError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid item order"
+        ) from None
+    audit.log(
+        action=AuditAction.UPDATE_RECORD,
+        user_id=current_user.id,
+        resource_type="trip",
+        resource_id=str(trip_id),
+        meta={"reordered_items": len(payload.item_ids)},
+        request=request,
+    )
+
+
+@router.patch("/{trip_id}/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+def update_trip_item(
+    trip_id: uuid.UUID,
+    item_id: uuid.UUID,
+    payload: TripItemUpdate,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    service: TripService = Depends(get_trip_service),
+    audit: AuditService = Depends(get_audit_service),
+) -> None:
+    try:
+        service.update_item(
+            user_id=current_user.id,
+            trip_id=trip_id,
+            item_id=item_id,
+            payload=payload,
+        )
+    except TripNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
+    except TripItemNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
+    audit.log(
+        action=AuditAction.UPDATE_RECORD,
+        user_id=current_user.id,
+        resource_type="trip",
+        resource_id=str(trip_id),
+        meta={"fields": sorted(payload.model_dump(exclude_unset=True).keys())},
+        request=request,
+    )
 
 
 @router.delete("/{trip_id}", status_code=status.HTTP_204_NO_CONTENT)

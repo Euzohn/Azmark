@@ -48,10 +48,33 @@ class TripRead(TripBase):
     updated_at: datetime
 
 
+class TripItemRead(BaseModel):
+    """Ordered trip member (spec #16). ``record`` is populated for transport."""
+
+    id: uuid.UUID
+    item_type: str
+    item_id: uuid.UUID
+    sort_order: int
+    start_at: datetime | None = None
+    end_at: datetime | None = None
+    record: FlightRead | None = None
+
+
+class TripItemUpdate(BaseModel):
+    sort_order: int | None = Field(default=None, ge=0)
+    start_at: datetime | None = None
+    end_at: datetime | None = None
+
+
+class TripItemOrder(BaseModel):
+    item_ids: list[uuid.UUID]
+
+
 class TripDetail(TripRead):
-    """Trip plus every transport record grouped under it (flights + trains)."""
+    """Trip plus ordered items and the grouped transport records (#15/#16)."""
 
     records: list[FlightRead] = []
+    items: list[TripItemRead] = []
 
 
 class TripList(BaseModel):

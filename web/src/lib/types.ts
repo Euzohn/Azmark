@@ -268,8 +268,19 @@ export interface TripInput {
   status?: string;
 }
 
+export interface TripItem {
+  id: string;
+  item_type: string;
+  item_id: string;
+  sort_order: number;
+  start_at: string | null;
+  end_at: string | null;
+  record: TimelineRecord | null;
+}
+
 export interface TripDetail extends Trip {
   records: TimelineRecord[];
+  items: TripItem[];
 }
 
 export interface TripList {

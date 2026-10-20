@@ -1,10 +1,11 @@
 import uuid
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from app.models.transport_record import TransportRecord
 from app.models.trip import Trip
+from app.models.trip_item import TripItem
 
 
 class TripRepository:
@@ -55,7 +56,13 @@ class TripRepository:
         self.db.commit()
 
     def clear_records(self, *, user_id: uuid.UUID, trip_id: uuid.UUID) -> None:
-        """Unlink the trip's records so they are not orphaned (spec #57)."""
+        """Drop trip items and unlink records so nothing is orphaned (spec #57)."""
+        self.db.execute(
+            delete(TripItem).where(
+                TripItem.user_id == user_id,
+                TripItem.trip_id == trip_id,
+            )
+        )
         self.db.execute(
             update(TransportRecord)
             .where(
