@@ -27,6 +27,7 @@ export interface Flight {
   service_number: string | null;
   cabin_class: string | null;
   seat: string | null;
+  seat_type: string | null;
   departure_terminal: string | null;
   departure_gate: string | null;
   arrival_terminal: string | null;
@@ -63,6 +64,7 @@ export interface FlightInput {
   service_number?: string | null;
   cabin_class?: string | null;
   seat?: string | null;
+  seat_type?: string | null;
   departure_terminal?: string | null;
   departure_gate?: string | null;
   arrival_terminal?: string | null;
@@ -511,12 +513,32 @@ export interface BreakdownItem {
   count: number;
 }
 
+export interface StatisticsTotals {
+  countries: number;
+  cities: number;
+  distance_km: number;
+  trips: number;
+  flights: number;
+  trains: number;
+  transports: number;
+}
+
 export interface StatisticsRead {
+  totals: StatisticsTotals;
+  by_year: BreakdownItem[];
   by_month: BreakdownItem[];
+  by_day: BreakdownItem[];
   by_airline: BreakdownItem[];
   by_alliance: BreakdownItem[];
   by_airport: BreakdownItem[];
   by_aircraft: BreakdownItem[];
+  by_cabin: BreakdownItem[];
+  by_seat_type: BreakdownItem[];
+  by_train_operator: BreakdownItem[];
+  by_train_type: BreakdownItem[];
+  by_station: BreakdownItem[];
+  by_train_class: BreakdownItem[];
+  by_train_seat_type: BreakdownItem[];
 }
 
 export interface MapPoint {

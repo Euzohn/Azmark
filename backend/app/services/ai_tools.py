@@ -83,22 +83,19 @@ async def _search_records(db: Session, user_id: uuid.UUID, args: dict) -> dict:
 
 async def _get_statistics(db: Session, user_id: uuid.UUID, _args: dict) -> dict:
     service = DashboardService(db)
-    stats = service.overview(user_id=user_id)
-    breakdown = service.statistics(user_id=user_id)
+    stats = service.statistics(user_id=user_id)
     return {
         "totals": {
-            "countries": stats.stats.countries,
-            "cities": stats.stats.cities,
-            "journeys": stats.stats.journeys,
-            "distance_km": stats.stats.distance_km,
-            "flights": stats.stats.flights,
-            "trains": stats.stats.trains,
-            "transports": stats.stats.transports,
-            "trips": stats.stats.trips,
+            **stats.totals.model_dump(),
+            "journeys": stats.totals.flights + stats.totals.trains + stats.totals.transports,
         },
-        "by_month": [item.model_dump() for item in breakdown.by_month],
-        "by_airline": [item.model_dump() for item in breakdown.by_airline],
-        "by_airport": [item.model_dump() for item in breakdown.by_airport],
+        "by_year": [item.model_dump() for item in stats.by_year],
+        "by_month": [item.model_dump() for item in stats.by_month],
+        "by_airline": [item.model_dump() for item in stats.by_airline],
+        "by_airport": [item.model_dump() for item in stats.by_airport],
+        "by_cabin": [item.model_dump() for item in stats.by_cabin],
+        "by_train_operator": [item.model_dump() for item in stats.by_train_operator],
+        "by_train_type": [item.model_dump() for item in stats.by_train_type],
     }
 
 
@@ -420,7 +417,8 @@ TOOLS: dict[str, ToolDef] = {
         description=(
             "Return the user's travel statistics: totals (countries, cities, "
             "journeys, distance, flights, trains, transports, trips) and "
-            "breakdowns by month, airline, and airport."
+            "breakdowns by year/month, airline, airport, cabin, train operator "
+            "and train type."
         ),
         parameters={"type": "object", "properties": {}},
         permission=ToolPermission.READ,

@@ -109,6 +109,7 @@ type FlightFormState = {
   actual_departure_time: string;
   actual_arrival_time: string;
   seat: string;
+  seat_type: string;
   cabin_class: string;
   departure_terminal: string;
   departure_gate: string;
@@ -145,6 +146,7 @@ function snapshot(initial?: Flight): FlightFormState {
     actual_departure_time: toLocalInput(initial?.actual_departure_time),
     actual_arrival_time: toLocalInput(initial?.actual_arrival_time),
     seat: initial?.seat ?? "",
+    seat_type: initial?.seat_type ?? "",
     cabin_class: initial?.cabin_class ?? "",
     departure_terminal: initial?.departure_terminal ?? "",
     departure_gate: initial?.departure_gate ?? "",
@@ -180,6 +182,7 @@ const FIELD_LABELS: Record<keyof FlightFormState, TranslationKey> = {
   actual_departure_time: "flights.actualDepartureTime",
   actual_arrival_time: "flights.actualArrivalTime",
   seat: "flights.seat",
+  seat_type: "flights.seatType",
   cabin_class: "flights.cabinClass",
   departure_terminal: "flights.departureTerminal",
   departure_gate: "flights.departureGate",
@@ -498,6 +501,7 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
       actual_departure_time: fromLocalInput(form.actual_departure_time),
       actual_arrival_time: fromLocalInput(form.actual_arrival_time),
       seat: form.seat || null,
+      seat_type: form.seat_type || null,
       cabin_class: form.cabin_class || null,
       departure_terminal: form.departure_terminal || null,
       departure_gate: form.departure_gate || null,
@@ -821,6 +825,17 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
               <option value="premium_economy">{t("flights.cabin.premium_economy")}</option>
               <option value="business">{t("flights.cabin.business")}</option>
               <option value="first">{t("flights.cabin.first")}</option>
+            </Select>
+          </Field>
+          <Field label={t("flights.seatType")} marked={isChanged("seat_type")}>
+            <Select
+              value={form.seat_type}
+              onChange={(e) => set("seat_type", e.target.value)}
+            >
+              <option value="">{t("flights.credentialType.none")}</option>
+              <option value="window">{t("flights.seatType.window")}</option>
+              <option value="aisle">{t("flights.seatType.aisle")}</option>
+              <option value="middle">{t("flights.seatType.middle")}</option>
             </Select>
           </Field>
           <Field label={t("flights.seat")} marked={isChanged("seat")}>

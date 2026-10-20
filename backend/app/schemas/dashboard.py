@@ -33,12 +33,34 @@ class BreakdownItem(BaseModel):
     count: int
 
 
+class StatisticsTotals(BaseModel):
+    countries: int
+    cities: int
+    distance_km: float
+    trips: int
+    flights: int
+    trains: int
+    transports: int
+
+
 class StatisticsRead(BaseModel):
+    totals: StatisticsTotals
+    by_year: list[BreakdownItem]
     by_month: list[BreakdownItem]
+    by_day: list[BreakdownItem]
+    # Flight
     by_airline: list[BreakdownItem]
     by_alliance: list[BreakdownItem]
     by_airport: list[BreakdownItem]
     by_aircraft: list[BreakdownItem]
+    by_cabin: list[BreakdownItem]
+    by_seat_type: list[BreakdownItem]
+    # Train
+    by_train_operator: list[BreakdownItem]
+    by_train_type: list[BreakdownItem]
+    by_station: list[BreakdownItem]
+    by_train_class: list[BreakdownItem]
+    by_train_seat_type: list[BreakdownItem]
 
 
 class MapPoint(BaseModel):

@@ -79,10 +79,17 @@ def test_statistics_breakdowns(client):
     assert response.status_code == 200
     body = response.json()
 
+    assert body["totals"]["flights"] == 2
+    assert body["totals"]["trips"] == 0
+    assert body["totals"]["distance_km"] == 7040.0
+    assert len(body["by_year"]) == 1
     assert len(body["by_month"]) >= 2
+    assert len(body["by_day"]) >= 2
     assert any(item["label"] == "CX" for item in body["by_airline"])
     assert any(item["label"] == "HKG" for item in body["by_airport"])
     assert any(item["label"] == "Airbus A330-300" for item in body["by_aircraft"])
+    assert body["by_cabin"] == []
+    assert body["by_train_operator"] == []
 
 
 def test_statistics_by_alliance(client):
@@ -100,6 +107,62 @@ def test_statistics_by_alliance(client):
     by_alliance = {item["label"]: item["count"] for item in body["by_alliance"]}
     assert by_alliance["star_alliance"] == 1
     assert by_alliance["oneworld"] == 1
+
+
+def test_statistics_overall_and_train_breakdowns(client):
+    token = register_and_login(client, "stats_train")["access_token"]
+    headers = auth_headers(token)
+
+    client.post(
+        "/api/v1/flights",
+        json={
+            **FLIGHT_HKG_SIN,
+            "cabin_class": "business",
+            "seat_type": "window",
+        },
+        headers=headers,
+    )
+    train = {
+        "origin": "北京南",
+        "destination": "上海虹桥",
+        "departure_time": "2026-09-26T08:00:00Z",
+        "arrival_time": "2026-09-26T12:28:00Z",
+        "carrier": "中国铁路",
+        "service_number": "G1",
+        "train_type": "high_speed",
+        "cabin_class": "business",
+        "seat_type": "window",
+        "distance": "1318.0",
+    }
+    response = client.post("/api/v1/trains", json=train, headers=headers)
+    assert response.status_code == 201, response.text
+    client.post("/api/v1/trips", json={"name": "Stats trip"}, headers=headers)
+
+    response = client.get("/api/v1/statistics", headers=headers)
+    assert response.status_code == 200
+    body = response.json()
+
+    totals = body["totals"]
+    assert totals["countries"] == 2  # HKG, SIN
+    assert totals["cities"] >= 4
+    assert totals["flights"] == 1
+    assert totals["trains"] == 1
+    assert totals["transports"] == 0
+    assert totals["trips"] == 1
+    assert totals["distance_km"] == 3858.0
+
+    assert {item["label"]: item["count"] for item in body["by_cabin"]} == {"business": 1}
+    assert {item["label"]: item["count"] for item in body["by_seat_type"]} == {"window": 1}
+    assert {item["label"]: item["count"] for item in body["by_train_operator"]} == {"中国铁路": 1}
+    assert {item["label"]: item["count"] for item in body["by_train_type"]} == {"high_speed": 1}
+    assert {item["label"]: item["count"] for item in body["by_station"]} == {
+        "北京南": 1,
+        "上海虹桥": 1,
+    }
+    assert {item["label"]: item["count"] for item in body["by_train_class"]} == {"business": 1}
+    assert {item["label"]: item["count"] for item in body["by_train_seat_type"]} == {"window": 1}
+    assert [item["label"] for item in body["by_year"]] == ["2026"]
+    assert any(item["label"] == "2026-09-26" and item["count"] == 2 for item in body["by_day"])
 
 
 def test_timeline(client):
