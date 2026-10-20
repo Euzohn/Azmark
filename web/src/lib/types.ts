@@ -283,6 +283,21 @@ export interface TripDetail extends Trip {
   items: TripItem[];
 }
 
+export interface Attachment {
+  id: string;
+  resource_type: string;
+  resource_id: string;
+  filename: string;
+  mime_type: string;
+  size: number;
+  created_at: string;
+}
+
+export interface AttachmentList {
+  items: Attachment[];
+  total: number;
+}
+
 export interface TripList {
   items: Trip[];
   total: number;

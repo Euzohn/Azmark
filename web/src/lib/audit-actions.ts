@@ -15,6 +15,8 @@ export const AUDIT_ACTION_LABELS: Record<string, TranslationKey> = {
   delete_record: "audit.action.delete_record",
   import: "audit.action.import",
   export: "audit.action.export",
+  upload_attachment: "audit.action.upload_attachment",
+  delete_attachment: "audit.action.delete_attachment",
   ai_action: "audit.action.ai_action",
   admin_bootstrap: "audit.action.admin_bootstrap",
   admin_update_user: "audit.action.admin_update_user",

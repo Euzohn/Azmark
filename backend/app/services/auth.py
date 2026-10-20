@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from app.core.security import hash_password, verify_password
 from app.models.user import User, UserRole, UserStatus
 from app.repositories.user import UserRepository
+from app.services.attachment import AttachmentService
 
 
 class AuthError(Exception):
@@ -64,11 +65,18 @@ class AuthService:
         user.username = new_username
         return self.users.save(user)
 
-    def delete_account(self, *, user: User, password: str) -> None:
+    def delete_account(
+        self,
+        *,
+        user: User,
+        password: str,
+        attachments: AttachmentService | None = None,
+    ) -> None:
         """Permanently delete the account and owned data (spec #48).
 
         The caller must have already offered an export; this method only guards
         the destructive action itself with the password and the last-admin rule.
+        Stored objects are removed before the database rows.
         """
         if not verify_password(password, user.password_hash):
             raise InvalidCredentialsError
@@ -78,4 +86,6 @@ class AuthService:
             and self.users.count_active_admins() <= 1
         ):
             raise LastAdminError
+        if attachments is not None:
+            attachments.delete_for_user(user_id=user.id)
         self.users.delete_account(user)

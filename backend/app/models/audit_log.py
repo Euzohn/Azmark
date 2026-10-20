@@ -42,6 +42,8 @@ class AuditAction:
     DELETE_RECORD = "delete_record"
     IMPORT = "import"
     EXPORT = "export"
+    UPLOAD_ATTACHMENT = "upload_attachment"
+    DELETE_ATTACHMENT = "delete_attachment"
     AI_ACTION = "ai_action"
     ADMIN_BOOTSTRAP = "admin_bootstrap"
     ADMIN_UPDATE_USER = "admin_update_user"

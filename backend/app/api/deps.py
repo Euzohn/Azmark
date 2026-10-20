@@ -1,4 +1,5 @@
 import uuid
+from functools import lru_cache
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -7,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.core.security import decode_access_token
 from app.models.user import User, UserRole, UserStatus
+from app.services.storage import StorageProvider
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -123,3 +125,20 @@ def get_admin_service(db: Session = Depends(get_db)):
     from app.services.admin import AdminService
 
     return AdminService(db)
+
+
+@lru_cache(maxsize=1)
+def get_storage_provider() -> StorageProvider:
+    """One S3 client per process (spec #44/#66)."""
+    from app.services.storage import build_storage_provider
+
+    return build_storage_provider()
+
+
+def get_attachment_service(
+    db: Session = Depends(get_db),
+    storage: StorageProvider = Depends(get_storage_provider),
+):
+    from app.services.attachment import AttachmentService
+
+    return AttachmentService(db, storage)

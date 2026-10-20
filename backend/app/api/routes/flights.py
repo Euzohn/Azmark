@@ -4,6 +4,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from app.api.deps import (
+    get_attachment_service,
     get_audit_service,
     get_current_user,
     get_flight_enrichment_service,
@@ -17,6 +18,7 @@ from app.schemas.flight_lookup import (
     LookupAllResponse,
 )
 from app.schemas.transport import FlightCreate, FlightList, FlightRead, FlightUpdate
+from app.services.attachment import AttachmentService
 from app.services.audit import AuditService
 from app.services.flight_enrichment import FlightEnrichmentService, ProviderNotFoundError
 from app.services.transport import FlightService, RecordNotFoundError
@@ -154,8 +156,16 @@ def delete_flight(
     request: Request,
     current_user: User = Depends(get_current_user),
     service: FlightService = Depends(get_flight_service),
+    attachments: AttachmentService = Depends(get_attachment_service),
     audit: AuditService = Depends(get_audit_service),
 ) -> None:
+    try:
+        service.get_record(user_id=current_user.id, record_id=record_id)
+    except RecordNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
+    attachments.delete_for_resource(
+        user_id=current_user.id, resource_type="flight", resource_id=record_id
+    )
     try:
         service.delete_record(user_id=current_user.id, record_id=record_id)
     except RecordNotFoundError:

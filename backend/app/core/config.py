@@ -36,6 +36,17 @@ class Settings(BaseSettings):
     search_api_key: str = ""
     searxng_base_url: str = ""
 
+    # Object storage (spec #44/#75). Works with MinIO, AWS S3, R2 and OSS.
+    # Empty endpoint means the AWS default endpoint.
+    s3_endpoint: str = ""
+    s3_access_key: str = ""
+    s3_secret_key: str = ""
+    s3_bucket: str = "azmark"
+    s3_region: str = "us-east-1"
+    s3_use_ssl: bool = True
+    s3_addressing_style: str = "path"
+    max_attachment_bytes: int = 20 * 1024 * 1024
+
     log_level: str = "INFO"
 
     @property

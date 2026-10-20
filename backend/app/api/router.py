@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.routes import (
     admin,
     ai,
+    attachments,
     audit,
     auth,
     dashboard,
@@ -23,6 +24,7 @@ api_router.include_router(admin.router)
 api_router.include_router(flights.router)
 api_router.include_router(trains.router)
 api_router.include_router(transports.router)
+api_router.include_router(attachments.router)
 api_router.include_router(reference.router)
 api_router.include_router(settings.router)
 api_router.include_router(audit.router)

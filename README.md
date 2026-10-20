@@ -21,7 +21,8 @@
 | 账号 | 注册、登录（JWT Bearer）、当前用户、改用户名/密码（不依赖邮件） |
 | 航班 | 列表（搜索/分页/高级筛选：状态、舱位、行程、日期范围）、增删改查 |
 | 火车 | 列表（搜索/筛选）、增删改查 |
-| 行程 | Trip 归组航班与火车记录 |
+| 行程 | Trip 归组航班与火车记录、行程内排序 |
+| 附件 | 按记录上传/下载/删除登机牌与票据（S3 兼容存储 · MinIO） |
 | 地图 | 大圆航线可视化（MapLibre GL · OpenFreeMap） |
 | 时间线 | 按时间排列全部交通记录 |
 | 统计 | 仪表盘 + 统计页 |
@@ -43,12 +44,14 @@
   <img src="./assets/readme/architecture.svg" width="100%" alt="部署架构：同源代理，仅 web 对外，内部网络隔离">
 </p>
 
-浏览器只访问 `web`（对外端口 `WEB_PORT`，默认 3000）。`web` 通过 compose 内部网络把 `/api/*` 转发到 `api`（FastAPI），`api` 再连接 `postgres` 与 `redis`。`api` / `postgres` / `redis` 均不发布宿主机端口。
+浏览器只访问 `web`（对外端口 `WEB_PORT`，默认 3000）。`web` 通过 compose 内部网络把 `/api/*` 转发到 `api`（FastAPI），`api` 再连接 `postgres`、`redis` 与 `minio`。`api` / `postgres` / `redis` / `minio` 均不发布宿主机端口。
+
+附件二进制存于 MinIO（S3 兼容），数据库只保存 `storage_key` 与元数据；下载统一经 API 鉴权后流式返回，不暴露 bucket。
 
 ```
 backend/   FastAPI + SQLAlchemy 2 + Alembic（PostgreSQL + PostGIS）
 web/       Next.js (App Router) + TypeScript + Tailwind + MapLibre GL
-docker-compose.yml   postgres / redis / api / web
+docker-compose.yml   postgres / redis / minio / api / web
 ```
 
 ## 快速部署（服务器）
@@ -76,7 +79,9 @@ docker compose exec api python -m app create-admin --username admin --email you@
 
 管理员登录后侧边栏会出现「管理」，可查看用户、全局操作日志与系统统计。
 
-> `POSTGRES_PASSWORD` 必须只用 URL 安全字符（推荐 hex），否则会破坏内部 `DATABASE_URL`。云服务器需在安全组放通入方向 TCP 3000；不要放通 8000/5432/6379。
+附件使用 compose 内置的 MinIO。请修改 `.env` 中的 `S3_SECRET_KEY`（至少 8 位）。`deploy.sh` 只备份 PostgreSQL 数据库；附件存放在 `minio_data` 数据卷，请另行备份该卷（例如定期对卷做快照/导出）。使用外部 S3 / R2 / OSS 时，设置 `S3_ENDPOINT`、`S3_REGION`、`S3_USE_SSL`、`S3_ADDRESSING_STYLE`，并提前创建 bucket。
+
+> `POSTGRES_PASSWORD` 必须只用 URL 安全字符（推荐 hex），否则会破坏内部 `DATABASE_URL`。云服务器需在安全组放通入方向 TCP 3000；不要放通 8000/5432/6379/9000/9001。
 
 ## 本地开发
 
@@ -90,7 +95,7 @@ cd backend
 python3 -m venv .venv
 ./.venv/bin/pip install -r requirements-dev.txt
 
-# 测试（SQLite 内存库，无需常驻服务）
+# 测试（SQLite 内存库 + 内存 StorageProvider，无需常驻服务）
 ./.venv/bin/pytest -q
 ./.venv/bin/ruff check .
 ./.venv/bin/ruff format --check .

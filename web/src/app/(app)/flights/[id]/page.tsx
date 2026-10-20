@@ -5,6 +5,7 @@ import { ArrowLeft, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 
+import { AttachmentPanel } from "@/components/attachment-panel";
 import { FlightForm } from "@/components/flight-form";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
@@ -81,6 +82,7 @@ export default function FlightDetailPage() {
           onSubmit={(input) => update.mutate(input)}
         />
       </div>
+      <AttachmentPanel resourceType="flight" resourceId={id} />
     </div>
   );
 }

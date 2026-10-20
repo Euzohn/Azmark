@@ -1,6 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from app.api.deps import get_audit_service, get_auth_service, get_current_user
+from app.api.deps import (
+    get_attachment_service,
+    get_audit_service,
+    get_auth_service,
+    get_current_user,
+)
 from app.core.security import create_access_token
 from app.models.audit_log import AuditAction
 from app.models.user import User
@@ -14,6 +19,7 @@ from app.schemas.auth import (
     UserRead,
     UserUpdate,
 )
+from app.services.attachment import AttachmentService
 from app.services.audit import AuditService
 from app.services.auth import (
     AuthService,
@@ -157,13 +163,18 @@ def delete_account(
     request: Request,
     current_user: User = Depends(get_current_user),
     service: AuthService = Depends(get_auth_service),
+    attachments: AttachmentService = Depends(get_attachment_service),
     audit: AuditService = Depends(get_audit_service),
 ) -> None:
     """Delete the account and owned data, keeping an anonymised audit trail (#48)."""
     user_id = current_user.id
     username = current_user.username
     try:
-        service.delete_account(user=current_user, password=payload.password)
+        service.delete_account(
+            user=current_user,
+            password=payload.password,
+            attachments=attachments,
+        )
     except InvalidCredentialsError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid current password"

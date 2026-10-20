@@ -5,6 +5,8 @@ import type {
   AdminUser,
   AdminUserList,
   AiChatResponse,
+  Attachment,
+  AttachmentList,
   AiSettingsRead,
   AiSettingsWrite,
   AiStreamEvent,
@@ -107,6 +109,18 @@ function importForm(file: File, mapping?: Record<string, string>): FormData {
   if (mapping && Object.values(mapping).some(Boolean)) {
     form.append("mapping", JSON.stringify(mapping));
   }
+  return form;
+}
+
+function attachmentForm(
+  resourceType: string,
+  resourceId: string,
+  file: File,
+): FormData {
+  const form = new FormData();
+  form.append("resource_type", resourceType);
+  form.append("resource_id", resourceId);
+  form.append("file", file);
   return form;
 }
 
@@ -294,6 +308,18 @@ export const api = {
   getTimeline: () => request<TimelineRecord[]>("/timeline"),
   getMapRoutes: () => request<MapRoutesRead>("/map/routes"),
 
+  listAttachments: (resourceType: string, resourceId: string) =>
+    request<AttachmentList>(
+      `/attachments?resource_type=${encodeURIComponent(resourceType)}&resource_id=${encodeURIComponent(resourceId)}`,
+    ),
+  uploadAttachment: (resourceType: string, resourceId: string, file: File) =>
+    request<Attachment>("/attachments", {
+      method: "POST",
+      body: attachmentForm(resourceType, resourceId, file),
+    }),
+  deleteAttachment: (id: string) =>
+    request<void>(`/attachments/${id}`, { method: "DELETE" }),
+  downloadAttachment: (id: string) => fetchBlob(`/attachments/${id}/download`),
   exportData: (format: "json" | "csv", includeSensitive = false) =>
     fetchBlob(`/export?format=${format}&include_sensitive=${includeSensitive}`),
   importTemplate: (format: "json" | "csv" = "csv") =>

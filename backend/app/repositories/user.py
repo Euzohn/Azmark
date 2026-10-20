@@ -2,6 +2,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from app.models.ai_setting import UserAiSetting
+from app.models.attachment import Attachment
 from app.models.audit_log import AuditLog
 from app.models.provider_setting import ProviderSetting
 from app.models.transport_record import TransportRecord
@@ -51,8 +52,9 @@ class UserRepository:
         but anonymised by clearing ``user_id`` (spec #48).
         """
         self.db.execute(update(AuditLog).where(AuditLog.user_id == user.id).values(user_id=None))
-        # Stored files are not implemented yet (spec #44); once Attachment and
-        # StorageProvider land, their rows/objects must be removed here too.
+        # Attachment objects are removed by AttachmentService before this call;
+        # delete the rows here too so no metadata can outlive the account.
+        self.db.execute(delete(Attachment).where(Attachment.user_id == user.id))
         self.db.execute(delete(TripItem).where(TripItem.user_id == user.id))
         self.db.execute(delete(TransportRecord).where(TransportRecord.user_id == user.id))
         self.db.execute(delete(Trip).where(Trip.user_id == user.id))
