@@ -22,7 +22,9 @@ services:
   # 附件对象存储（spec #44），只在内网可达；console 端口也不对外发布。
   # bucket 由 API 在首次上传时自动创建，无需 minio/mc 初始化容器。
   minio:
-    image: minio/minio:latest
+    # MinIO 开源版已归档；daocloud 等常见镜像源也不再代理该镜像。
+    # 默认走 1panel 镜像代理并固定到最后一个开源 RELEASE；可覆盖为可直连的镜像源。
+    image: ${MINIO_IMAGE:-docker.1panel.live/minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e}
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${S3_ACCESS_KEY:-azmark}

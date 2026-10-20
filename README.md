@@ -82,6 +82,8 @@ docker compose exec api python -m app create-admin --username admin --email you@
 
 附件使用 compose 内置的 MinIO。请修改 `.env` 中的 `S3_SECRET_KEY`（至少 8 位）。bucket 由 API 在首次上传时自动创建。`deploy.sh` 只备份 PostgreSQL 数据库；附件存放在 `minio_data` 数据卷，请另行备份该卷（例如定期对卷做快照/导出）。使用外部 S3 / R2 / OSS 时，设置 `S3_ENDPOINT`、`S3_REGION`、`S3_USE_SSL`、`S3_ADDRESSING_STYLE`，并提前创建 bucket。
 
+> MinIO 开源版已归档。compose 默认从 `docker.1panel.live` 拉取最后一个开源版本并固定 digest；如服务器可直连 Docker Hub，可在 `.env` 设置 `MINIO_IMAGE=minio/minio:RELEASE.2025-09-07T16-13-09Z`。
+
 > `POSTGRES_PASSWORD` 必须只用 URL 安全字符（推荐 hex），否则会破坏内部 `DATABASE_URL`。云服务器需在安全组放通入方向 TCP 3000；不要放通 8000/5432/6379/9000/9001。
 
 ## 本地开发
