@@ -5,6 +5,7 @@ import { ArrowRight, Backpack, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 
 import { TripStatusBadge } from "@/components/status-badge";
+import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -41,24 +42,18 @@ export default function TripsPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex items-end justify-between gap-3">
-        <div>
-          <h1 className="font-display text-3xl font-semibold tracking-tight animate-fade-in-up">
-            {t("trips.title")}
-          </h1>
-          {data ? (
-            <p className="mt-1 text-sm text-muted-foreground">
-              {t("trips.total", { count: data.total })}
-            </p>
-          ) : null}
-        </div>
-        <Link href="/trips/new">
-          <Button>
-            <Plus className="h-4 w-4" />
-            {t("trips.add")}
-          </Button>
-        </Link>
-      </div>
+      <PageHeader
+        title={t("trips.title")}
+        subtitle={data ? t("trips.total", { count: data.total }) : undefined}
+        actions={
+          <Link href="/trips/new">
+            <Button>
+              <Plus className="h-4 w-4" />
+              {t("trips.add")}
+            </Button>
+          </Link>
+        }
+      />
 
       {isLoading ? (
         <div className="grid gap-3 md:grid-cols-2">

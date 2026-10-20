@@ -14,7 +14,7 @@ export function EmptyState({ icon: Icon, title, hint, action, className }: Empty
   return (
     <div className={cn("flex flex-col items-center gap-3 py-12 text-center animate-scale-in", className)}>
       {Icon ? (
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#c66b4e]/15 to-[#78816a]/10 text-primary">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
           <Icon className="h-6 w-6" />
         </div>
       ) : null}

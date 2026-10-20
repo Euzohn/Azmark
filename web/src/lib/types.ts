@@ -501,10 +501,24 @@ export interface DashboardStats {
   trips: number;
 }
 
+export interface DashboardRecord {
+  id: string;
+  type: string;
+  status: string;
+  origin: string | null;
+  destination: string | null;
+  service_number: string | null;
+  carrier: string | null;
+  airline_code: string | null;
+  departure_time: string | null;
+  arrival_time: string | null;
+  trip_id: string | null;
+}
+
 export interface DashboardRead {
   stats: DashboardStats;
-  recent: Flight[];
-  upcoming: Flight | null;
+  recent: DashboardRecord[];
+  upcoming: DashboardRecord | null;
 }
 
 export interface BreakdownItem {

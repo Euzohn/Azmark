@@ -3,63 +3,64 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * Azmark brand palette
- *   graphite  #252822   ink / primary text
- *   paper     #f5f1e8   warm canvas
- *   terracotta#c66b4e   accent (deepened below for AA contrast on fills)
- *   moss      #78816a   secondary
+ * Azmark brand palette — "Ink & Saffron"
+ *   ink       #1a1816   warm near-black, primary text
+ *   paper     #f7f5f0   warm neutral canvas
+ *   saffron   #b45309   single accent (deep amber; golden on dark)
+ *   moss      #4f7a3e   reserved for success semantics only
+ * One accent, warm-tinted neutrals throughout; no second decorative color.
  */
 :root {
   color-scheme: light;
 
-  --background: #f5f1e8;
-  --foreground: #252822;
+  --background: #f7f5f0;
+  --foreground: #1a1816;
 
-  --card: #fffdf8;
-  --card-foreground: #252822;
+  --card: #ffffff;
+  --card-foreground: #1a1816;
 
-  --muted: #ece5d6;
-  --muted-foreground: #6e6759;
+  --muted: #efece4;
+  --muted-foreground: #6b6557;
 
-  --border: #e2dac8;
+  --border: #e3ddd1;
 
-  --primary: #ad4e33;
+  --primary: #b45309;
   --primary-foreground: #fbf6ef;
 
-  --accent: #f0e4da;
-  --accent-foreground: #8f3f28;
+  --accent: #f3ead9;
+  --accent-foreground: #7a4a0e;
 
-  --danger: #b23a2e;
+  --danger: #a8342b;
   --danger-foreground: #fbf6ef;
 
   --success: #4f7a3e;
   --success-foreground: #fbf6ef;
 
-  --warning: #a9761f;
+  --warning: #96670c;
   --warning-foreground: #fbf6ef;
 
-  --ring: #c66b4e;
+  --ring: #b45309;
 }
 
 .dark {
   color-scheme: dark;
 
-  --background: #16140f;
-  --foreground: #ece6d8;
+  --background: #141310;
+  --foreground: #ece7db;
 
-  --card: #201d16;
-  --card-foreground: #ece6d8;
+  --card: #1c1a16;
+  --card-foreground: #ece7db;
 
-  --muted: #2a251d;
-  --muted-foreground: #a79e8a;
+  --muted: #25221c;
+  --muted-foreground: #a39c89;
 
-  --border: #332c22;
+  --border: #322d24;
 
-  --primary: #d98a6b;
-  --primary-foreground: #2a1b13;
+  --primary: #e0a737;
+  --primary-foreground: #1a140a;
 
-  --accent: #2e2820;
-  --accent-foreground: #e7b69f;
+  --accent: #2a261d;
+  --accent-foreground: #d4b076;
 
   --danger: #e0836f;
   --danger-foreground: #2a1410;
@@ -70,7 +71,7 @@
   --warning: #d9ad62;
   --warning-foreground: #2a1f0c;
 
-  --ring: #d98a6b;
+  --ring: #e0a737;
 }
 
 @theme inline {

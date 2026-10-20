@@ -18,6 +18,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/page-header";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-store";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
@@ -452,30 +453,23 @@ export default function AiChatPage() {
 
   return (
     <div className="flex h-[calc(100dvh-8rem)] flex-col gap-4 md:h-[calc(100dvh-4rem)]">
-      <div className="flex animate-fade-in-up items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#c66b4e] to-[#ad4e33] text-primary-foreground shadow-md shadow-primary/25">
-            <Bot className="h-5 w-5" strokeWidth={1.75} />
-          </div>
-          <div>
-            <h1 className="font-display text-2xl font-semibold tracking-tight">
-              {t("ai.title")}
-            </h1>
-          </div>
-        </div>
-        {messages.length > 0 && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={clearHistory}
-            title={t("ai.clearHistory")}
-            aria-label={t("ai.clearHistory")}
-            className="h-9 w-9 text-muted-foreground hover:text-danger"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        title={t("ai.title")}
+        actions={
+          messages.length > 0 ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={clearHistory}
+              title={t("ai.clearHistory")}
+              aria-label={t("ai.clearHistory")}
+              className="h-9 w-9 text-muted-foreground hover:text-danger"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          ) : null
+        }
+      />
 
       {!configured ? (
         <EmptyState
@@ -483,7 +477,7 @@ export default function AiChatPage() {
           title={t("ai.notConfigured")}
           hint={t("ai.notConfiguredHint")}
           action={
-            <Link href="/settings">
+            <Link href="/account?tab=profile">
               <Button variant="outline">{t("ai.goToSettings")}</Button>
             </Link>
           }
@@ -532,7 +526,7 @@ export default function AiChatPage() {
                   className={cn(
                     "max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-sm",
                     msg.role === "user"
-                      ? "bg-gradient-to-br from-[#c66b4e] to-[#ad4e33] text-primary-foreground"
+                      ? "bg-gradient-to-br from-[#e0a737] to-[#b45309] text-primary-foreground"
                       : msg.error
                         ? "bg-danger/10 text-danger"
                         : "bg-accent text-accent-foreground",

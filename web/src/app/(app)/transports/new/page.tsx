@@ -1,10 +1,9 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { PageHeader } from "@/components/page-header";
 import { TransportForm } from "@/components/transport-form";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -19,22 +18,13 @@ export default function NewTransportPage() {
     mutationFn: (data: OtherTransportInput) => api.createOtherTransport(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transports"] });
-      router.push("/transports");
+      router.push("/records?type=other");
     },
   });
 
   return (
     <div className="flex flex-col gap-4">
-      <Link
-        href="/transports"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        {t("common.back")}
-      </Link>
-      <h1 className="font-display text-3xl font-semibold tracking-tight animate-fade-in-up">
-        {t("transports.add")}
-      </h1>
+      <PageHeader title={t("transports.add")} backHref="/records?type=other" backLabel={t("common.back")} />
       <div className="animate-fade-in-up" style={{ animationDelay: "50ms" }}>
         <TransportForm submitting={create.isPending} onSubmit={(data) => create.mutate(data)} />
       </div>

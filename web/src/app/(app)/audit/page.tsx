@@ -22,7 +22,7 @@ function formatDateTime(value: string): string {
   });
 }
 
-export default function AuditPage() {
+export default function AuditPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { t } = useI18n();
   const { data, isLoading } = useQuery({
     queryKey: ["audit"],
@@ -31,7 +31,9 @@ export default function AuditPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="font-display text-3xl font-semibold tracking-tight animate-fade-in-up">{t("audit.title")}</h1>
+      {embedded ? null : (
+        <h1 className="font-display text-3xl font-semibold tracking-tight animate-fade-in-up">{t("audit.title")}</h1>
+      )}
 
       {isLoading ? (
         <div className="overflow-hidden rounded-2xl border border-border bg-card">

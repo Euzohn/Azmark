@@ -4,20 +4,13 @@ import {
   Backpack,
   BarChart3,
   Bot,
-  Bus,
-  Database,
   Home,
-  History,
   List as ListIcon,
   LogOut,
   type LucideIcon,
   Map as MapIcon,
   MoreHorizontal,
-  Plane,
-  ScrollText,
-  Settings,
-  Shield,
-  TrainFront,
+  User,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -44,37 +37,39 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", key: "nav.dashboard", icon: Home },
   { href: "/trips", key: "nav.trips", icon: Backpack },
   { href: "/records", key: "nav.records", icon: ListIcon },
-  { href: "/flights", key: "nav.flights", icon: Plane },
-  { href: "/trains", key: "nav.trains", icon: TrainFront },
-  { href: "/transports", key: "nav.transports", icon: Bus },
   { href: "/ai", key: "nav.ai", icon: Bot },
-  { href: "/timeline", key: "nav.timeline", icon: History },
   { href: "/map", key: "nav.map", icon: MapIcon },
   { href: "/statistics", key: "nav.stats", icon: BarChart3 },
-  { href: "/audit", key: "nav.audit", icon: ScrollText },
-  { href: "/data", key: "nav.data", icon: Database },
-  { href: "/admin", key: "nav.admin", icon: Shield, adminOnly: true },
-  { href: "/settings", key: "nav.settings", icon: Settings },
+  { href: "/account", key: "nav.account", icon: User },
 ];
+
+function isNavActive(href: string, pathname: string): boolean {
+  // Flight/train/other detail routes live outside /records but belong to it.
+  if (href === "/records") {
+    return ["/records", "/flights", "/trains", "/transports"].some((base) =>
+      pathname.startsWith(base),
+    );
+  }
+  // The old settings/data/audit/admin routes are now tabs under /account.
+  if (href === "/account") {
+    return ["/account", "/settings", "/data", "/audit", "/admin"].some((base) =>
+      pathname.startsWith(base),
+    );
+  }
+  return pathname.startsWith(href);
+}
 
 const MOBILE_MAIN: NavItem[] = [
   { href: "/dashboard", key: "nav.dashboard", icon: Home },
+  { href: "/records", key: "nav.records", icon: ListIcon },
   { href: "/trips", key: "nav.trips", icon: Backpack },
-  { href: "/flights", key: "nav.flights", icon: Plane },
   { href: "/map", key: "nav.map", icon: MapIcon },
 ];
 
 const MOBILE_MORE: NavItem[] = [
-  { href: "/records", key: "nav.records", icon: ListIcon },
-  { href: "/trains", key: "nav.trains", icon: TrainFront },
-  { href: "/transports", key: "nav.transports", icon: Bus },
   { href: "/ai", key: "nav.ai", icon: Bot },
-  { href: "/timeline", key: "nav.timeline", icon: History },
   { href: "/statistics", key: "nav.stats", icon: BarChart3 },
-  { href: "/audit", key: "nav.audit", icon: ScrollText },
-  { href: "/data", key: "nav.data", icon: Database },
-  { href: "/admin", key: "nav.admin", icon: Shield, adminOnly: true },
-  { href: "/settings", key: "nav.settings", icon: Settings },
+  { href: "/account", key: "nav.account", icon: User },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -127,13 +122,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isAdmin = user?.role === "ADMIN";
   const navItems = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin);
   const mobileMoreItems = MOBILE_MORE.filter((item) => !item.adminOnly || isAdmin);
-  const moreActive = MOBILE_MORE.some((item) => pathname.startsWith(item.href));
+  const moreActive = MOBILE_MORE.some((item) => isNavActive(item.href, pathname));
 
   return (
     <div className="bg-glow mx-auto flex min-h-dvh w-full max-w-6xl flex-col md:flex-row">
       <aside className="hidden md:sticky md:top-0 md:flex md:h-dvh md:w-60 md:shrink-0 md:flex-col md:gap-1 md:overflow-y-auto md:border-r md:border-border md:px-5 md:py-8">
         <div className="mb-8 flex items-center gap-3 px-2">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#252822] text-[#F5F1E8] shadow-md shadow-black/20 dark:bg-[#F5F1E8] dark:text-[#252822]">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#1a1816] text-[#f7f5f0] shadow-md shadow-black/20 dark:bg-[#f7f5f0] dark:text-[#1a1816]">
             <AzmarkMark className="h-6 w-auto" />
           </div>
           <div>
@@ -148,7 +143,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <NavLink
               key={item.href}
               item={item}
-              active={pathname.startsWith(item.href)}
+              active={isNavActive(item.href, pathname)}
               label={t(item.key)}
             />
           ))}
@@ -167,7 +162,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </a>
           <div className="rounded-2xl border border-border bg-gradient-to-br from-accent/50 to-transparent p-3">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#c66b4e] to-[#ad4e33] text-xs font-semibold text-primary-foreground shadow-sm shadow-primary/25">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#e0a737] to-[#b45309] text-xs font-semibold text-primary-foreground shadow-sm shadow-primary/25">
                 {identity.slice(0, 2).toUpperCase() || "AZ"}
               </div>
               <div className="min-w-0 flex-1">
@@ -196,7 +191,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <header className="sticky top-0 z-20 flex items-center justify-between border-b border-border bg-background/90 px-4 py-3 backdrop-blur-md md:hidden">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#252822] text-[#F5F1E8] dark:bg-[#F5F1E8] dark:text-[#252822]">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1a1816] text-[#f7f5f0] dark:bg-[#f7f5f0] dark:text-[#1a1816]">
             <AzmarkMark className="h-5 w-auto" />
           </div>
           <span className="font-display text-lg font-semibold tracking-tight">{t("app.name")}</span>
@@ -218,7 +213,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       >
         {MOBILE_MAIN.map((item) => {
           const Icon = item.icon;
-          const active = pathname.startsWith(item.href);
+          const active = isNavActive(item.href, pathname);
           return (
             <Link
               key={item.href}
@@ -263,7 +258,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <BottomSheet open={moreOpen} onClose={() => setMoreOpen(false)} title={t("nav.moreTitle")}>
         {mobileMoreItems.map((item) => {
           const Icon = item.icon;
-          const active = pathname.startsWith(item.href);
+          const active = isNavActive(item.href, pathname);
           return (
             <Link
               key={item.href}

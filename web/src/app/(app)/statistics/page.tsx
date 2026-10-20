@@ -1,19 +1,10 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import {
-  Backpack,
-  BarChart3,
-  Bus,
-  Compass,
-  Globe2,
-  MapPin,
-  Plane,
-  TrainFront,
-  type LucideIcon,
-} from "lucide-react";
+import { BarChart3 } from "lucide-react";
 
 import { AirlineLogo } from "@/components/airline-logo";
+import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -91,7 +82,7 @@ function BarList({
             </div>
             <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-primary to-[#78816a] transition-all duration-500"
+                className="h-full rounded-full bg-gradient-to-r from-primary to-[#96670c] transition-all duration-500"
                 style={{ width: `${(item.count / max) * 100}%` }}
               />
             </div>
@@ -117,35 +108,6 @@ function translateLabel(
 ): string {
   const key = map[label];
   return key ? t(key) : label;
-}
-
-function TotalTile({
-  icon: Icon,
-  label,
-  value,
-  delay = 0,
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: string | number;
-  delay?: number;
-}) {
-  return (
-    <div
-      className="flex animate-fade-in-up items-center gap-3"
-      style={{ animationDelay: `${delay}ms` }}
-    >
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-        <Icon className="h-5 w-5" strokeWidth={1.75} />
-      </div>
-      <div className="min-w-0">
-        <div className="font-display text-2xl font-semibold leading-none tracking-tight">
-          {value}
-        </div>
-        <div className="mt-1 truncate text-xs text-muted-foreground">{label}</div>
-      </div>
-    </div>
-  );
 }
 
 interface StatsSection {
@@ -259,38 +221,9 @@ export default function StatisticsPage() {
         data.totals.trips > 0),
   );
 
-  const tiles = data
-    ? [
-        {
-          icon: Globe2,
-          label: t("dashboard.stats.countries"),
-          value: data.totals.countries,
-        },
-        { icon: MapPin, label: t("dashboard.stats.cities"), value: data.totals.cities },
-        {
-          icon: Compass,
-          label: t("dashboard.stats.distance"),
-          value: `${Math.round(data.totals.distance_km).toLocaleString()} ${t("stats.km")}`,
-        },
-        { icon: Backpack, label: t("dashboard.stats.trips"), value: data.totals.trips },
-        { icon: Plane, label: t("dashboard.stats.flights"), value: data.totals.flights },
-        { icon: TrainFront, label: t("dashboard.stats.trains"), value: data.totals.trains },
-        {
-          icon: Bus,
-          label: t("dashboard.stats.transports"),
-          value: data.totals.transports,
-        },
-      ]
-    : [];
-
   return (
     <div className="flex flex-col gap-6">
-      <div className="animate-fade-in-up">
-        <h1 className="font-display text-3xl font-semibold tracking-tight">
-          {t("stats.title")}
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">{t("stats.subtitle")}</p>
-      </div>
+      <PageHeader title={t("stats.title")} subtitle={t("stats.subtitle")} />
 
       {isLoading ? (
         <div className="flex flex-col gap-4">
@@ -313,20 +246,6 @@ export default function StatisticsPage() {
 
       {data && hasRecords ? (
         <>
-          <Card className="animate-fade-in-up">
-            <CardContent className="grid grid-cols-2 gap-x-4 gap-y-5 p-5 sm:grid-cols-3 lg:grid-cols-4">
-              {tiles.map((tile, index) => (
-                <TotalTile
-                  key={tile.label}
-                  icon={tile.icon}
-                  label={tile.label}
-                  value={tile.value}
-                  delay={index * 35}
-                />
-              ))}
-            </CardContent>
-          </Card>
-
           {groups.map((group, groupIndex) => (
             <section key={group.key} className="flex flex-col gap-3">
               <h2

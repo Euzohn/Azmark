@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
   Bus,
+  History,
   List as ListIcon,
   Plane,
   Plus,
@@ -12,19 +13,24 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useMemo, useState } from "react";
 
+import { AirlineLogo } from "@/components/airline-logo";
 import { FlightStatusBadge } from "@/components/status-badge";
+import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
 import type {
+  Flight,
   RecordFilters,
   RecordSort,
   RecordType,
@@ -45,6 +51,8 @@ const TYPE_ICONS = {
   other: Bus,
 } as const;
 
+type ViewMode = "list" | "timeline";
+
 function formatDateTime(value: string | null): string {
   if (!value) return "-";
   const date = new Date(value);
@@ -64,10 +72,117 @@ function recordHref(record: TimelineRecord): string {
   return `/flights/${record.id}`;
 }
 
-export default function RecordsPage() {
+/** TimelineRecord is a union keyed by a `string` (not a literal), so TS won't
+ *  narrow on `record.type === "flight"`. Access the flight-only field safely. */
+function airlineCode(record: TimelineRecord): string | null {
+  return record.type === "flight" ? (record as Flight).airline_code : null;
+}
+
+function parseType(value: string | null): RecordType | "" {
+  if (value === "flight" || value === "train" || value === "other") {
+    return value;
+  }
+  return "";
+}
+
+function parseView(value: string | null): ViewMode {
+  return value === "timeline" ? "timeline" : "list";
+}
+
+function dayKey(value: string | null): string {
+  if (!value) return "unknown";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "unknown";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function dateLabel(key: string): string {
+  if (key === "unknown") return "—";
+  const date = new Date(key);
+  if (Number.isNaN(date.getTime())) return key;
+  return date.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "short",
+  });
+}
+
+function matchesSearch(record: TimelineRecord, search: string): boolean {
+  if (!search) return true;
+  const needle = search.toLowerCase();
+  return [
+    record.origin,
+    record.destination,
+    record.service_number,
+    record.carrier,
+    airlineCode(record),
+  ]
+    .filter((v): v is string => Boolean(v))
+    .some((v) => v.toLowerCase().includes(needle));
+}
+
+function RecordCard({ record, index = 0 }: { record: TimelineRecord; index?: number }) {
   const { t } = useI18n();
+  const typeKey = TYPE_KEYS[record.type] ?? "records.type.other";
+  const Icon = TYPE_ICONS[record.type as keyof typeof TYPE_ICONS] ?? Bus;
+
+  return (
+    <Card interactive className="group animate-fade-in-up" style={{ animationDelay: `${index * 30}ms` }}>
+      <CardContent className="flex items-center gap-4 p-4">
+        <Link href={recordHref(record)} className="flex min-w-0 flex-1 items-center gap-4">
+          {record.type === "flight" ? (
+            <AirlineLogo code={airlineCode(record)} className="h-11 w-11" />
+          ) : (
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
+              <Icon className="h-5 w-5" />
+            </div>
+          )}
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 truncate">
+              <span className="font-display text-lg font-semibold tracking-tight">
+                {record.origin ?? "—"}
+              </span>
+              <ArrowRight
+                className="h-4 w-4 shrink-0 text-primary transition-transform group-hover:translate-x-0.5"
+                strokeWidth={2.25}
+              />
+              <span className="font-display text-lg font-semibold tracking-tight">
+                {record.destination ?? "—"}
+              </span>
+              {record.service_number ? (
+                <span className="ml-1 shrink-0 text-xs font-medium text-muted-foreground">
+                  {record.service_number}
+                </span>
+              ) : null}
+            </div>
+            <div className="mt-0.5 truncate text-xs text-muted-foreground">
+              {formatDateTime(record.departure_time)}
+              {record.arrival_time ? ` → ${formatDateTime(record.arrival_time)}` : ""}
+              {record.carrier ? ` · ${record.carrier}` : ""}
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              <Badge>{t(typeKey)}</Badge>
+            </div>
+          </div>
+        </Link>
+        <div className="flex shrink-0 items-center gap-1">
+          <FlightStatusBadge status={record.status} />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function RecordsContent() {
+  const { t } = useI18n();
+  const searchParams = useSearchParams();
+  const [view, setView] = useState<ViewMode>(() => parseView(searchParams.get("view")));
   const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState<RecordType | "">("");
+  const [typeFilter, setTypeFilter] = useState<RecordType | "">(() =>
+    parseType(searchParams.get("type")),
+  );
   const [statusFilter, setStatusFilter] = useState("");
   const [tripFilter, setTripFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -95,6 +210,13 @@ export default function RecordsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["records", filters],
     queryFn: () => api.listRecords(filters),
+    enabled: view === "list",
+  });
+
+  const { data: timeline, isLoading: timelineLoading } = useQuery({
+    queryKey: ["timeline"],
+    queryFn: api.getTimeline,
+    enabled: view === "timeline",
   });
 
   const tripNames = new Map<string, string>(
@@ -120,40 +242,55 @@ export default function RecordsPage() {
     setPage(1);
   };
 
+  const timelineGroups = useMemo(() => {
+    const items = (timeline ?? []).filter(
+      (record) => (!typeFilter || record.type === typeFilter) && matchesSearch(record, search),
+    );
+    items.sort((a, b) => {
+      const ta = a.departure_time ? new Date(a.departure_time).getTime() : 0;
+      const tb = b.departure_time ? new Date(b.departure_time).getTime() : 0;
+      return tb - ta;
+    });
+    const map = new Map<string, TimelineRecord[]>();
+    for (const record of items) {
+      const key = dayKey(record.departure_time);
+      const bucket = map.get(key);
+      if (bucket) bucket.push(record);
+      else map.set(key, [record]);
+    }
+    return Array.from(map.entries());
+  }, [timeline, typeFilter, search]);
+
+  const totalLabel = data
+    ? `${t("records.subtitle")} · ${t("records.total", { count: data.total })}`
+    : t("records.subtitle");
+
+  const addActions = (
+    <div className="flex flex-wrap items-center gap-2">
+      <Link href="/flights/new">
+        <Button variant="outline" size="sm">
+          <Plane className="h-4 w-4" />
+          {t("records.addFlight")}
+        </Button>
+      </Link>
+      <Link href="/trains/new">
+        <Button variant="outline" size="sm">
+          <TrainFront className="h-4 w-4" />
+          {t("records.addTrain")}
+        </Button>
+      </Link>
+      <Link href="/transports/new">
+        <Button size="sm">
+          <Plus className="h-4 w-4" />
+          {t("records.addTransport")}
+        </Button>
+      </Link>
+    </div>
+  );
+
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="font-display text-3xl font-semibold tracking-tight animate-fade-in-up">
-            {t("records.title")}
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {data
-              ? `${t("records.subtitle")} · ${t("records.total", { count: data.total })}`
-              : t("records.subtitle")}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Link href="/flights/new">
-            <Button variant="outline" size="sm">
-              <Plane className="h-4 w-4" />
-              {t("records.addFlight")}
-            </Button>
-          </Link>
-          <Link href="/trains/new">
-            <Button variant="outline" size="sm">
-              <TrainFront className="h-4 w-4" />
-              {t("records.addTrain")}
-            </Button>
-          </Link>
-          <Link href="/transports/new">
-            <Button size="sm">
-              <Plus className="h-4 w-4" />
-              {t("records.addTransport")}
-            </Button>
-          </Link>
-        </div>
-      </div>
+      <PageHeader title={t("records.title")} subtitle={totalLabel} actions={addActions} />
 
       <div className="flex flex-col gap-3">
         <div className="relative">
@@ -169,9 +306,7 @@ export default function RecordsPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Select
             value={typeFilter}
-            onChange={(event) =>
-              change(setTypeFilter, event.target.value as RecordType | "")
-            }
+            onChange={(event) => change(setTypeFilter, event.target.value as RecordType | "")}
             className="w-auto text-sm"
             aria-label={t("records.filter.type")}
           >
@@ -183,63 +318,67 @@ export default function RecordsPage() {
             <option value="other">{t("records.type.other")}</option>
           </Select>
 
-          <Select
-            value={statusFilter}
-            onChange={(event) => change(setStatusFilter, event.target.value)}
-            className="w-auto text-sm"
-            aria-label={t("records.filter.status")}
-          >
-            <option value="">
-              {t("records.filter.status")}: {t("records.filter.all")}
-            </option>
-            <option value="scheduled">{t("flights.status.scheduled")}</option>
-            <option value="completed">{t("flights.status.completed")}</option>
-            <option value="cancelled">{t("flights.status.cancelled")}</option>
-          </Select>
+          {view === "list" ? (
+            <>
+              <Select
+                value={statusFilter}
+                onChange={(event) => change(setStatusFilter, event.target.value)}
+                className="w-auto text-sm"
+                aria-label={t("records.filter.status")}
+              >
+                <option value="">
+                  {t("records.filter.status")}: {t("records.filter.all")}
+                </option>
+                <option value="scheduled">{t("flights.status.scheduled")}</option>
+                <option value="completed">{t("flights.status.completed")}</option>
+                <option value="cancelled">{t("flights.status.cancelled")}</option>
+              </Select>
 
-          <Select
-            value={tripFilter}
-            onChange={(event) => change(setTripFilter, event.target.value)}
-            className="w-auto text-sm"
-            aria-label={t("records.filter.trip")}
-          >
-            <option value="">
-              {t("records.filter.trip")}: {t("records.filter.all")}
-            </option>
-            {trips?.items.map((trip) => (
-              <option key={trip.id} value={trip.id}>
-                {trip.name}
-              </option>
-            ))}
-          </Select>
+              <Select
+                value={tripFilter}
+                onChange={(event) => change(setTripFilter, event.target.value)}
+                className="w-auto text-sm"
+                aria-label={t("records.filter.trip")}
+              >
+                <option value="">
+                  {t("records.filter.trip")}: {t("records.filter.all")}
+                </option>
+                {trips?.items.map((trip) => (
+                  <option key={trip.id} value={trip.id}>
+                    {trip.name}
+                  </option>
+                ))}
+              </Select>
 
-          <Select
-            value={sort}
-            onChange={(event) => change(setSort, event.target.value as RecordSort)}
-            className="w-auto text-sm"
-            aria-label={t("records.filter.sort")}
-          >
-            <option value="newest">{t("records.sort.newest")}</option>
-            <option value="oldest">{t("records.sort.oldest")}</option>
-            <option value="departure">{t("records.sort.departure")}</option>
-            <option value="arrival">{t("records.sort.arrival")}</option>
-            <option value="created">{t("records.sort.created")}</option>
-          </Select>
+              <Select
+                value={sort}
+                onChange={(event) => change(setSort, event.target.value as RecordSort)}
+                className="w-auto text-sm"
+                aria-label={t("records.filter.sort")}
+              >
+                <option value="newest">{t("records.sort.newest")}</option>
+                <option value="oldest">{t("records.sort.oldest")}</option>
+                <option value="departure">{t("records.sort.departure")}</option>
+                <option value="arrival">{t("records.sort.arrival")}</option>
+                <option value="created">{t("records.sort.created")}</option>
+              </Select>
 
-          <Input
-            type="date"
-            value={dateFrom}
-            onChange={(event) => change(setDateFrom, event.target.value)}
-            className="w-auto text-sm"
-            aria-label={t("records.filter.dateFrom")}
-          />
-          <Input
-            type="date"
-            value={dateTo}
-            onChange={(event) => change(setDateTo, event.target.value)}
-            className="w-auto text-sm"
-            aria-label={t("records.filter.dateTo")}
-          />
+              <Input
+                type="date"
+                value={dateFrom}
+                onChange={(event) => change(setDateFrom, event.target.value)}
+                className="w-auto text-sm"
+                aria-label={t("records.filter.dateFrom")}
+              />
+              <Input
+                type="date"
+                value={dateTo}
+                onChange={(event) => change(setDateTo, event.target.value)}
+                className="w-auto text-sm"
+                aria-label={t("records.filter.dateTo")}
+              />
+            </>
+          ) : null}
 
           {hasFilters ? (
             <Button variant="ghost" size="sm" onClick={resetFilters}>
@@ -247,110 +386,109 @@ export default function RecordsPage() {
               {t("records.filter.reset")}
             </Button>
           ) : null}
+
+          <div className="ml-auto">
+            <Segmented
+              value={view}
+              onChange={(value) => {
+                setView(value);
+                setPage(1);
+              }}
+              options={[
+                { value: "list", label: t("records.view.list"), icon: ListIcon },
+                { value: "timeline", label: t("records.view.timeline"), icon: History },
+              ]}
+            />
+          </div>
         </div>
       </div>
 
-      {isLoading ? (
-        <div className="flex flex-col gap-3">
-          {Array.from({ length: 4 }, (_, index) => (
-            <Card key={index}>
-              <CardContent className="flex items-center gap-4 p-4">
-                <Skeleton className="h-11 w-11 shrink-0 rounded-full" />
-                <div className="flex flex-1 flex-col gap-2">
-                  <Skeleton className="h-5 w-2/5" />
-                  <Skeleton className="h-3 w-3/5" />
-                </div>
-                <Skeleton className="h-6 w-16 rounded-full" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      ) : null}
-
-      {data && data.items.length === 0 ? (
-        <EmptyState
-          icon={ListIcon}
-          title={t("records.empty")}
-          hint={t("records.emptyHint")}
-          action={
-            <Link href="/flights/new">
-              <Button variant="outline">
-                <Plus className="h-4 w-4" />
-                {t("records.addFlight")}
-              </Button>
-            </Link>
-          }
+      {view === "list" ? (
+        <ListView
+          isLoading={isLoading}
+          isEmpty={Boolean(data && data.items.length === 0)}
+          items={data?.items ?? []}
+          tripNames={tripNames}
+          page={page}
+          pages={pages}
+          onPage={setPage}
         />
-      ) : null}
+      ) : (
+        <TimelineView
+          isLoading={timelineLoading}
+          groups={timelineGroups}
+          isEmpty={timelineGroups.length === 0}
+        />
+      )}
+    </div>
+  );
+}
 
+interface ListViewProps {
+  isLoading: boolean;
+  isEmpty: boolean;
+  items: TimelineRecord[];
+  tripNames: Map<string, string>;
+  page: number;
+  pages: number;
+  onPage: (page: number) => void;
+}
+
+function ListView({ isLoading, isEmpty, items, page, pages, onPage }: ListViewProps) {
+  const { t } = useI18n();
+
+  if (isLoading) {
+    return (
       <div className="flex flex-col gap-3">
-        {data?.items.map((record, index) => {
-          const typeKey = TYPE_KEYS[record.type] ?? "records.type.other";
-          const Icon = TYPE_ICONS[record.type as keyof typeof TYPE_ICONS] ?? Bus;
-          const tripName = record.trip_id ? tripNames.get(record.trip_id) : undefined;
+        {Array.from({ length: 4 }, (_, index) => (
+          <Card key={index}>
+            <CardContent className="flex items-center gap-4 p-4">
+              <Skeleton className="h-11 w-11 shrink-0 rounded-full" />
+              <div className="flex flex-1 flex-col gap-2">
+                <Skeleton className="h-5 w-2/5" />
+                <Skeleton className="h-3 w-3/5" />
+              </div>
+              <Skeleton className="h-6 w-16 rounded-full" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
+  }
 
-          return (
-            <Card
-              key={record.id}
-              interactive
-              className="group animate-fade-in-up"
-              style={{ animationDelay: `${index * 30}ms` }}
-            >
-              <CardContent className="flex items-center gap-4 p-4">
-                <Link
-                  href={recordHref(record)}
-                  className="flex min-w-0 flex-1 items-center gap-4"
-                >
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 truncate">
-                      <span className="font-display text-lg font-semibold tracking-tight">
-                        {record.origin ?? "—"}
-                      </span>
-                      <ArrowRight
-                        className="h-4 w-4 shrink-0 text-primary transition-transform group-hover:translate-x-0.5"
-                        strokeWidth={2.25}
-                      />
-                      <span className="font-display text-lg font-semibold tracking-tight">
-                        {record.destination ?? "—"}
-                      </span>
-                      {record.service_number ? (
-                        <span className="ml-1 shrink-0 text-xs font-medium text-muted-foreground">
-                          {record.service_number}
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                      {formatDateTime(record.departure_time)}
-                      {record.arrival_time
-                        ? ` → ${formatDateTime(record.arrival_time)}`
-                        : ""}
-                      {record.carrier ? ` · ${record.carrier}` : ""}
-                    </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                      <Badge>{t(typeKey)}</Badge>
-                      {tripName ? <Badge variant="primary">{tripName}</Badge> : null}
-                    </div>
-                  </div>
-                </Link>
-                <div className="flex shrink-0 items-center gap-1">
-                  <FlightStatusBadge status={record.status} />
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
+  if (isEmpty) {
+    return (
+      <EmptyState
+        icon={ListIcon}
+        title={t("records.empty")}
+        hint={t("records.emptyHint")}
+        action={
+          <Link href="/flights/new">
+            <Button variant="outline">
+              <Plus className="h-4 w-4" />
+              {t("records.addFlight")}
+            </Button>
+          </Link>
+        }
+      />
+    );
+  }
+
+  return (
+    <>
+      <div className="flex flex-col gap-3">
+        {items.map((record, index) => (
+          <RecordCard key={record.id} record={record} index={index} />
+        ))}
       </div>
 
-      {data && data.total > PAGE_SIZE ? (
+      {pages > 1 ? (
         <div className="flex items-center justify-center gap-3">
           <Button
             variant="outline"
             size="sm"
             disabled={page <= 1}
-            onClick={() => setPage((current) => Math.max(1, current - 1))}
+            onClick={() => onPage(Math.max(1, page - 1))}
           >
             {t("common.previous")}
           </Button>
@@ -361,12 +499,85 @@ export default function RecordsPage() {
             variant="outline"
             size="sm"
             disabled={page >= pages}
-            onClick={() => setPage((current) => Math.min(pages, current + 1))}
+            onClick={() => onPage(Math.min(pages, page + 1))}
           >
             {t("common.next")}
           </Button>
         </div>
       ) : null}
+    </>
+  );
+}
+
+interface TimelineViewProps {
+  isLoading: boolean;
+  isEmpty: boolean;
+  groups: Array<[string, TimelineRecord[]]>;
+}
+
+function TimelineView({ isLoading, isEmpty, groups }: TimelineViewProps) {
+  const { t } = useI18n();
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-5">
+        {Array.from({ length: 3 }, (_, index) => (
+          <div key={index} className="flex flex-col gap-3">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (isEmpty) {
+    return (
+      <EmptyState
+        icon={History}
+        title={t("timeline.empty")}
+        hint={t("timeline.emptyHint")}
+      />
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      {groups.map(([key, records], groupIndex) => (
+        <section key={key} className="flex flex-col gap-3 animate-fade-in-up" style={{ animationDelay: `${groupIndex * 40}ms` }}>
+          <div className="flex items-center gap-3">
+            <span className="h-2 w-2 rounded-full bg-primary/70" />
+            <h2 className="font-display text-sm font-semibold tracking-tight text-muted-foreground">
+              {dateLabel(key)}
+            </h2>
+            <span className="text-xs text-muted-foreground/60">· {records.length}</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+          <div className="flex flex-col gap-3 sm:border-l sm:border-border sm:pl-5">
+            {records.map((record, index) => (
+              <RecordCard key={record.id} record={record} index={index} />
+            ))}
+          </div>
+        </section>
+      ))}
     </div>
+  );
+}
+
+export default function RecordsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-col gap-5">
+          <Skeleton className="h-10 w-56" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-20 w-full" />
+        </div>
+      }
+    >
+      <RecordsContent />
+    </Suspense>
   );
 }

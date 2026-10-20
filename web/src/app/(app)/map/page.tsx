@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { GeoJSONSource, Map as MLMap, Marker, Popup, StyleSpecification } from "maplibre-gl";
 
 import { useTheme } from "@/components/theme-provider";
+import { PageHeader } from "@/components/page-header";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -224,7 +225,7 @@ export default function MapPage() {
       const pointData = { type: "FeatureCollection" as const, features: pointFeatures };
 
       const dark = isDarkTheme(themeRef.current);
-      const accent = dark ? "#d98a6b" : "#ad4e33";
+      const accent = dark ? "#e0a737" : "#b45309";
 
       if (!map.getSource("routes")) {
         map.addSource("routes", { type: "geojson", data: lineData, tolerance: 0 });
@@ -243,7 +244,7 @@ export default function MapPage() {
           paint: {
             "circle-radius": 3.5,
             "circle-color": accent,
-            "circle-stroke-color": dark ? "#16140f" : "#f5f1e8",
+            "circle-stroke-color": dark ? "#141310" : "#f7f5f0",
             "circle-stroke-width": 1.5,
           },
         });
@@ -332,14 +333,10 @@ export default function MapPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex items-end justify-between gap-3">
-        <h1 className="font-display text-3xl font-semibold tracking-tight">{t("map.title")}</h1>
-        {data ? (
-          <p className="text-sm text-muted-foreground">
-            {t("map.routes", { count: routes.length })}
-          </p>
-        ) : null}
-      </div>
+      <PageHeader
+        title={t("map.title")}
+        subtitle={data ? t("map.routes", { count: routes.length }) : undefined}
+      />
 
       {isLoading ? <Skeleton className="h-[60vh] w-full" /> : null}
 

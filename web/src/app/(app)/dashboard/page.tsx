@@ -3,31 +3,28 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
-  Backpack,
+  BarChart3,
   Bus,
-  Compass,
-  Globe2,
-  MapPin,
   Plane,
   PlaneTakeoff,
-  Route,
   TrainFront,
-  type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
 
 import { AirlineLogo } from "@/components/airline-logo";
 import { AirlineName } from "@/components/airline-name";
 import { FlightStatusBadge } from "@/components/status-badge";
+import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Stat } from "@/components/ui/stat";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-store";
-import { useI18n, type TranslationKey } from "@/lib/i18n";
-import type { Flight } from "@/lib/types";
+import { useI18n } from "@/lib/i18n";
+import type { DashboardRecord } from "@/lib/types";
 
 function formatDate(value: string | null): string {
   if (!value) return "";
@@ -42,73 +39,48 @@ function formatDate(value: string | null): string {
   });
 }
 
-type TileColor = "primary" | "success" | "warning" | "danger";
-
-const TILE_ICON_COLORS: Record<TileColor, string> = {
-  primary: "bg-primary/10 text-primary",
-  success: "bg-success/10 text-success",
-  warning: "bg-warning/10 text-warning",
-  danger: "bg-danger/10 text-danger",
-};
-
-function StatTile({
-  icon: Icon,
-  label,
-  value,
-  color = "primary",
-  delay = 0,
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: string | number;
-  color?: TileColor;
-  delay?: number;
-}) {
-  return (
-    <Card
-      interactive
-      className="animate-fade-in-up"
-      style={{ animationDelay: `${delay}ms` }}
-    >
-      <CardContent className="flex items-center gap-3 p-4">
-        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${TILE_ICON_COLORS[color]}`}>
-          <Icon className="h-5 w-5" strokeWidth={1.75} />
-        </div>
-        <div className="min-w-0">
-          <div className="font-display text-2xl font-semibold leading-none tracking-tight">
-            {value}
-          </div>
-          <div className="mt-1 truncate text-xs text-muted-foreground">{label}</div>
-        </div>
-      </CardContent>
-    </Card>
-  );
+function recordHref(record: DashboardRecord): string {
+  if (record.type === "train") return `/trains/${record.id}`;
+  if (record.type === "other") return `/transports/${record.id}`;
+  return `/flights/${record.id}`;
 }
 
-function RecordRow({ flight, delay = 0 }: { flight: Flight; delay?: number }) {
+function RecordTypeIcon({ type }: { type: string }) {
+  if (type === "train") return <TrainFront className="h-4 w-4" />;
+  if (type === "other") return <Bus className="h-4 w-4" />;
+  return <Plane className="h-4 w-4" />;
+}
+
+function RecordRow({ record, delay = 0 }: { record: DashboardRecord; delay?: number }) {
   return (
     <Link
-      href={`/flights/${flight.id}`}
+      href={recordHref(record)}
       className="flex animate-fade-in-up items-center gap-3 rounded-xl px-2 py-2.5 transition-all duration-200 hover:bg-accent hover:pl-3"
       style={{ animationDelay: `${delay}ms` }}
     >
-      <AirlineLogo code={flight.airline_code} className="h-9 w-9" />
+      {record.type === "flight" ? (
+        <AirlineLogo code={record.airline_code} className="h-9 w-9" />
+      ) : (
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
+          <RecordTypeIcon type={record.type} />
+        </div>
+      )}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 truncate text-sm font-medium">
-          <span>{flight.origin ?? "—"}</span>
+          <span>{record.origin ?? "—"}</span>
           <ArrowRight className="h-3.5 w-3.5 shrink-0 text-primary" strokeWidth={2.5} />
-          <span>{flight.destination ?? "—"}</span>
-          {flight.service_number ? (
+          <span>{record.destination ?? "—"}</span>
+          {record.service_number ? (
             <span className="ml-1 shrink-0 text-xs font-normal text-muted-foreground">
-              {flight.service_number}
+              {record.service_number}
             </span>
           ) : null}
         </div>
         <div className="mt-0.5 truncate text-xs text-muted-foreground">
-          {formatDate(flight.departure_time)}
+          {formatDate(record.departure_time)}
         </div>
       </div>
-      <FlightStatusBadge status={flight.status} />
+      <FlightStatusBadge status={record.status} />
     </Link>
   );
 }
@@ -124,43 +96,38 @@ export default function DashboardPage() {
 
   const name = user?.display_name ?? user?.username ?? "";
   const stats = data?.stats;
-
-  const statTiles: { icon: LucideIcon; key: TranslationKey; value: string | number; color: TileColor }[] = [
-    {
-      icon: Compass,
-      key: "dashboard.stats.distance",
-      value: `${Math.round(stats?.distance_km ?? 0).toLocaleString()} km`,
-      color: "primary",
-    },
-    { icon: Globe2, key: "dashboard.stats.countries", value: stats?.countries ?? 0, color: "primary" },
-    { icon: MapPin, key: "dashboard.stats.cities", value: stats?.cities ?? 0, color: "primary" },
-    { icon: Route, key: "dashboard.stats.journeys", value: stats?.journeys ?? 0, color: "primary" },
-    { icon: Plane, key: "dashboard.stats.flights", value: stats?.flights ?? 0, color: "success" },
-    { icon: TrainFront, key: "dashboard.stats.trains", value: stats?.trains ?? 0, color: "warning" },
-    { icon: Bus, key: "dashboard.stats.transports", value: stats?.transports ?? 0, color: "warning" },
-    { icon: Backpack, key: "dashboard.stats.trips", value: stats?.trips ?? 0, color: "danger" },
-  ];
-
   const hasRecords = (stats?.journeys ?? 0) > 0;
+
+  const metrics = [
+    { label: t("dashboard.stats.countries"), value: stats?.countries ?? 0 },
+    { label: t("dashboard.stats.cities"), value: stats?.cities ?? 0 },
+    { label: t("dashboard.stats.journeys"), value: stats?.journeys ?? 0 },
+    {
+      label: t("dashboard.stats.distance"),
+      value: `${Math.round(stats?.distance_km ?? 0).toLocaleString()} ${t("stats.km")}`,
+    },
+  ];
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="animate-fade-in-up">
-        <h1 className="font-display text-3xl font-semibold tracking-tight">
-          {name ? t("dashboard.greeting", { name }) : t("dashboard.title")}
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">{t("app.tagline")}</p>
-      </div>
+      <PageHeader
+        title={name ? t("dashboard.greeting", { name }) : t("dashboard.title")}
+        subtitle={t("app.tagline")}
+        actions={
+          <Link href="/statistics">
+            <Button variant="ghost" size="sm">
+              <BarChart3 className="h-4 w-4" />
+              {t("dashboard.viewStats")}
+            </Button>
+          </Link>
+        }
+      />
 
       {isLoading ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 4 }, (_, index) => (
-            <Card key={index}>
-              <CardContent className="p-4">
-                <Skeleton className="h-11 w-full" />
-              </CardContent>
-            </Card>
-          ))}
+        <div className="flex flex-col gap-6">
+          <Skeleton className="h-28 w-full rounded-2xl" />
+          <Skeleton className="h-20 w-full rounded-2xl" />
+          <Skeleton className="h-64 w-full rounded-2xl" />
         </div>
       ) : null}
 
@@ -182,26 +149,14 @@ export default function DashboardPage() {
 
       {!isLoading && hasRecords ? (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {statTiles.map((tile, index) => (
-              <StatTile
-                key={tile.key}
-                icon={tile.icon}
-                label={t(tile.key)}
-                value={tile.value}
-                color={tile.color}
-                delay={index * 50}
-              />
-            ))}
-          </div>
-
+          {/* Next departure hero */}
           {data?.upcoming ? (
             <Card
               interactive
               className="animate-fade-in-up overflow-hidden"
-              style={{ animationDelay: "400ms" }}
+              style={{ animationDelay: "120ms" }}
             >
-              <div className="h-1 w-full bg-gradient-to-r from-[#c66b4e] via-primary to-[#78816a]" />
+              <div className="h-1 w-full bg-gradient-to-r from-[#e0a737] via-primary to-[#96670c]" />
               <CardHeader className="flex-row items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
                   <PlaneTakeoff className="h-4 w-4 text-primary" />
@@ -209,11 +164,14 @@ export default function DashboardPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <Link
-                  href={`/flights/${data.upcoming.id}`}
-                  className="flex items-center gap-4"
-                >
-                  <AirlineLogo code={data.upcoming.airline_code} className="h-12 w-12" />
+                <Link href={recordHref(data.upcoming)} className="flex items-center gap-4">
+                  {data.upcoming.type === "flight" ? (
+                    <AirlineLogo code={data.upcoming.airline_code} className="h-12 w-12" />
+                  ) : (
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
+                      <RecordTypeIcon type={data.upcoming.type} />
+                    </div>
+                  )}
                   <div className="min-w-0 flex-1">
                     <div className="font-display text-2xl font-semibold tracking-tight">
                       {data.upcoming.origin ?? "—"}
@@ -226,25 +184,43 @@ export default function DashboardPage() {
                     <div className="mt-1 text-sm text-muted-foreground">
                       {formatDate(data.upcoming.departure_time)}
                       {" · "}
-                      <AirlineName
-                        code={data.upcoming.airline_code}
-                        fallback={data.upcoming.carrier}
-                      />
+                      {data.upcoming.type === "flight" ? (
+                        <AirlineName
+                          code={data.upcoming.airline_code}
+                          fallback={data.upcoming.carrier}
+                        />
+                      ) : (
+                        data.upcoming.carrier ?? data.upcoming.service_number
+                      )}
                     </div>
                   </div>
-                  <Badge variant="primary">{data.upcoming.service_number ?? ""}</Badge>
+                  {data.upcoming.service_number ? (
+                    <Badge variant="primary">{data.upcoming.service_number}</Badge>
+                  ) : null}
                 </Link>
               </CardContent>
             </Card>
           ) : null}
 
+          {/* Footprint metric strip — the only totals on this page */}
           <Card
-            className="animate-fade-in-up"
-            style={{ animationDelay: "500ms" }}
+            className="animate-fade-in-up bg-border p-px"
+            style={{ animationDelay: "240ms" }}
           >
+            <CardContent className="grid grid-cols-2 gap-px sm:grid-cols-4">
+              {metrics.map((metric) => (
+                <div key={metric.label} className="bg-card p-4">
+                  <Stat label={metric.label} value={metric.value} />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          {/* Recent activity */}
+          <Card className="animate-fade-in-up" style={{ animationDelay: "360ms" }}>
             <CardHeader className="flex-row items-center justify-between">
               <CardTitle>{t("dashboard.recent")}</CardTitle>
-              <Link href="/flights">
+              <Link href="/records">
                 <Button variant="ghost" size="sm">
                   {t("dashboard.viewAll")}
                   <ArrowRight className="h-3.5 w-3.5" />
@@ -253,8 +229,8 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="flex flex-col gap-1">
               {data && data.recent.length > 0 ? (
-                data.recent.map((flight, index) => (
-                  <RecordRow key={flight.id} flight={flight} delay={600 + index * 50} />
+                data.recent.map((record, index) => (
+                  <RecordRow key={record.id} record={record} delay={480 + index * 50} />
                 ))
               ) : (
                 <p className="py-4 text-center text-sm text-muted-foreground">

@@ -33,7 +33,7 @@ export default function RegisterPage() {
       useAuth.setState({ token: token.access_token });
       const user = await api.me();
       setAuth(token.access_token, user);
-      router.replace("/flights");
+      router.replace("/dashboard");
     } catch {
       setError(true);
     } finally {

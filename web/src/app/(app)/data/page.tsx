@@ -47,7 +47,7 @@ function formatCell(value: unknown): string {
   return String(value);
 }
 
-export default function DataPage() {
+export default function DataPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { t } = useI18n();
   const queryClient = useQueryClient();
   const [includeSensitive, setIncludeSensitive] = useState(false);
@@ -128,12 +128,14 @@ export default function DataPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="font-display text-3xl font-semibold tracking-tight animate-fade-in-up">
-          {t("data.title")}
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">{t("data.subtitle")}</p>
-      </div>
+      {embedded ? null : (
+        <div>
+          <h1 className="font-display text-3xl font-semibold tracking-tight animate-fade-in-up">
+            {t("data.title")}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t("data.subtitle")}</p>
+        </div>
+      )}
 
       {error ? (
         <div className="rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">

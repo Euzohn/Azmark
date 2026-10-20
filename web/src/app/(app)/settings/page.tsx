@@ -25,7 +25,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   searxng: "SearXNG",
 };
 
-export default function SettingsPage() {
+export default function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { t } = useI18n();
   const { user, setUser, clear } = useAuth();
   const queryClient = useQueryClient();
@@ -202,9 +202,11 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="font-display text-3xl font-semibold tracking-tight animate-fade-in-up">
-        {t("settings.title")}
-      </h1>
+      {embedded ? null : (
+        <h1 className="font-display text-3xl font-semibold tracking-tight animate-fade-in-up">
+          {t("settings.title")}
+        </h1>
+      )}
 
       <Card className="animate-fade-in-up" style={{ animationDelay: "50ms" }}>
         <CardHeader>

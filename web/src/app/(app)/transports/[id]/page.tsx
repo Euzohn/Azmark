@@ -1,11 +1,11 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Trash2 } from "lucide-react";
-import Link from "next/link";
+import { Trash2 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 
 import { AttachmentPanel } from "@/components/attachment-panel";
+import { PageHeader } from "@/components/page-header";
 import { TransportForm } from "@/components/transport-form";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
@@ -30,7 +30,7 @@ export default function TransportDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transports"] });
       queryClient.invalidateQueries({ queryKey: ["transport", id] });
-      router.push("/transports");
+      router.push("/records?type=other");
     },
   });
 
@@ -38,7 +38,7 @@ export default function TransportDetailPage() {
     mutationFn: () => api.deleteOtherTransport(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transports"] });
-      router.push("/transports");
+      router.push("/records?type=other");
     },
   });
 
@@ -51,30 +51,25 @@ export default function TransportDetailPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <Link
-        href="/transports"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        {t("common.back")}
-      </Link>
-      <div className="flex animate-fade-in-up items-center justify-between gap-3">
-        <h1 className="font-display text-3xl font-semibold tracking-tight">
-          {t("transports.edit")}
-        </h1>
-        <Button
-          variant="danger"
-          size="sm"
-          onClick={() => {
-            if (window.confirm(t("transports.deleteConfirm"))) {
-              remove.mutate();
-            }
-          }}
-        >
-          <Trash2 className="h-4 w-4" />
-          {t("common.delete")}
-        </Button>
-      </div>
+      <PageHeader
+        title={t("transports.edit")}
+        backHref="/records?type=other"
+        backLabel={t("common.back")}
+        actions={
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={() => {
+              if (window.confirm(t("transports.deleteConfirm"))) {
+                remove.mutate();
+              }
+            }}
+          >
+            <Trash2 className="h-4 w-4" />
+            {t("common.delete")}
+          </Button>
+        }
+      />
       <div className="animate-fade-in-up" style={{ animationDelay: "50ms" }}>
         <TransportForm
           initial={data}
