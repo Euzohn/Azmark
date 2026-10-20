@@ -79,7 +79,7 @@ docker compose exec api python -m app create-admin --username admin --email you@
 
 管理员登录后侧边栏会出现「管理」，可查看用户、全局操作日志与系统统计。
 
-附件使用 compose 内置的 MinIO。请修改 `.env` 中的 `S3_SECRET_KEY`（至少 8 位）。`deploy.sh` 只备份 PostgreSQL 数据库；附件存放在 `minio_data` 数据卷，请另行备份该卷（例如定期对卷做快照/导出）。使用外部 S3 / R2 / OSS 时，设置 `S3_ENDPOINT`、`S3_REGION`、`S3_USE_SSL`、`S3_ADDRESSING_STYLE`，并提前创建 bucket。
+附件使用 compose 内置的 MinIO。请修改 `.env` 中的 `S3_SECRET_KEY`（至少 8 位）。bucket 由 API 在首次上传时自动创建。`deploy.sh` 只备份 PostgreSQL 数据库；附件存放在 `minio_data` 数据卷，请另行备份该卷（例如定期对卷做快照/导出）。使用外部 S3 / R2 / OSS 时，设置 `S3_ENDPOINT`、`S3_REGION`、`S3_USE_SSL`、`S3_ADDRESSING_STYLE`，并提前创建 bucket。
 
 > `POSTGRES_PASSWORD` 必须只用 URL 安全字符（推荐 hex），否则会破坏内部 `DATABASE_URL`。云服务器需在安全组放通入方向 TCP 3000；不要放通 8000/5432/6379/9000/9001。
 

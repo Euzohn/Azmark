@@ -51,6 +51,7 @@ class S3StorageProvider(StorageProvider):
             raise StorageError("boto3 is required for object storage") from exc
 
         self.bucket = bucket
+        self.region = region or "us-east-1"
         self._client = boto3.client(
             "s3",
             endpoint_url=endpoint or None,
@@ -67,17 +68,40 @@ class S3StorageProvider(StorageProvider):
             ),
         )
 
+    def _create_bucket(self) -> None:
+        kwargs: dict[str, object] = {"Bucket": self.bucket}
+        if self.region != "us-east-1":
+            kwargs["CreateBucketConfiguration"] = {"LocationConstraint": self.region}
+        self._client.create_bucket(**kwargs)
+
     def put(self, *, key: str, data: bytes, content_type: str) -> None:
-        try:
-            self._client.put_object(
-                Bucket=self.bucket,
-                Key=key,
-                Body=data,
-                ContentType=content_type,
-                ContentLength=len(data),
-            )
-        except Exception as exc:  # noqa: BLE001 - normalize provider errors
-            raise StorageError("Could not store file") from exc
+        from botocore.exceptions import ClientError
+
+        for attempt in range(2):
+            try:
+                self._client.put_object(
+                    Bucket=self.bucket,
+                    Key=key,
+                    Body=data,
+                    ContentType=content_type,
+                    ContentLength=len(data),
+                )
+                return
+            except ClientError as exc:
+                code = str(exc.response.get("Error", {}).get("Code", ""))
+                # MinIO needs a bucket before the first upload. Creating it
+                # lazily avoids a separate `mc` init container (and its image).
+                if attempt == 0 and code in {"NoSuchBucket", "404", "NotFound"}:
+                    try:
+                        self._create_bucket()
+                    except ClientError:
+                        # Another request may have created it concurrently.
+                        pass
+                    continue
+                raise StorageError("Could not store file") from exc
+            except Exception as exc:  # noqa: BLE001 - normalize provider errors
+                raise StorageError("Could not store file") from exc
+        raise StorageError("Could not store file")
 
     def get(self, *, key: str) -> bytes:
         from botocore.exceptions import ClientError

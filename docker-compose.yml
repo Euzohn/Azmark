@@ -20,6 +20,7 @@ services:
     image: redis:7-alpine
 
   # 附件对象存储（spec #44），只在内网可达；console 端口也不对外发布。
+  # bucket 由 API 在首次上传时自动创建，无需 minio/mc 初始化容器。
   minio:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
@@ -28,21 +29,6 @@ services:
       MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-azmark-minio-secret}
     volumes:
       - minio_data:/data
-
-  # 一次性初始化 bucket；重复执行是幂等的。
-  minio-init:
-    image: minio/mc:latest
-    depends_on:
-      - minio
-    environment:
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-azmark}
-      S3_SECRET_KEY: ${S3_SECRET_KEY:-azmark-minio-secret}
-      S3_BUCKET: ${S3_BUCKET:-azmark}
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        until mc alias set local http://minio:9000 "$$S3_ACCESS_KEY" "$$S3_SECRET_KEY"; do sleep 2; done
-        mc mb --ignore-existing "local/$$S3_BUCKET"
 
   api:
     build: ./backend
@@ -63,8 +49,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      minio-init:
-        condition: service_completed_successfully
+      minio:
+        condition: service_started
     # 不对外发布端口：仅 web 通过内部网络访问 http://api:8000
 
   web:
