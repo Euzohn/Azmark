@@ -3,19 +3,38 @@
 Docs: https://ai.variflight.com/zh/docs/aviation
 
 The MCP server is stateless JSON-RPC over HTTP. We call the
-``searchFlightsByNumber`` tool and parse the JSON it returns in a text content
-block. VariFlight uses PascalCase fields such as ``FlightDeptimePlanDate``
-(scheduled) and ``FlightDeptimeDate`` (actual); the parser accepts common
-aliases because the upstream field set varies by route.
+``searchFlightsByNumber`` tool and parse the payload it returns in a text
+content block. Important: the tool wraps its result as a Python ``repr()``
+dict (single quotes, ``Flight details: { ... }``), not JSON, so the parser
+tries ``json.loads`` first and falls back to ``ast.literal_eval``.
+
+VariFlight field reference (confirmed against a live response):
+  FlightNo / FlightCompany          flight number / airline (Chinese)
+  FlightDepcode / FlightArrcode     IATA airport codes
+  FlightDepAirport / FlightArrAirport  airport names (Chinese, short)
+  FlightDeptimePlanDate / FlightArrtimePlanDate  scheduled times (local)
+  FlightDeptimeDate     / FlightArrtimeDate       actual times (local)
+  FlightDeptimeReadyDate/ FlightArrtimeReadyDate  estimated times (local)
+  FlightHTerminal / FlightTerminal  departure / arrival terminal
+  BoardGate                          boarding (departure) gate
+  CheckinTable                       check-in counters (e.g. "C03-D07")
+  BaggageID                          baggage belt (e.g. "13")
+  ftype / generic / AircraftNumber   IATA type / full model / tail reg
+  FlightState                        Chinese status (到达/起飞/取消/计划…)
+  distance                           km (lowercase)
+  org_timezone / dst_timezone        UTC offset in seconds (e.g. 28800)
 
 The API key is sent only to this provider and never logged (spec #45/#96).
+Web snippets are treated as untrusted data (spec #70): we parse them as
+literals only, never executing anything.
 """
 
 from __future__ import annotations
 
+import ast
 import json
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from logging import getLogger
 from typing import Any
 
@@ -43,23 +62,58 @@ def _as_str(value: Any) -> str | None:
     return str(value).strip() or None
 
 
-def _parse_datetime(value: Any) -> datetime | None:
-    """Parse VariFlight local wall-clock strings — no timezone is attached."""
+def _parse_datetime(value: Any, *, offset_seconds: Any = None) -> datetime | None:
+    """Parse VariFlight local wall-clock strings.
+
+    When ``offset_seconds`` is supplied (VariFlight ships UTC offsets in
+    seconds, e.g. 28800 for +08:00) the returned datetime is made aware so
+    downstream code can convert to the viewer's timezone.
+    """
     text = _as_str(value)
     if not text:
         return None
     text = text.replace("/", "-")
     if text.endswith("Z"):
         text = f"{text[:-1]}+00:00"
+    parsed: datetime | None = None
     try:
-        return datetime.fromisoformat(text)
+        parsed = datetime.fromisoformat(text)
     except ValueError:
         for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
             try:
-                return datetime.strptime(text, fmt)
+                parsed = datetime.strptime(text, fmt)
+                break
             except ValueError:
                 continue
-    return None
+    if parsed is None:
+        return None
+    secs = _as_int(offset_seconds)
+    if secs is not None:
+        try:
+            return parsed.replace(tzinfo=timezone(timedelta(seconds=secs)))
+        except (OverflowError, ValueError):
+            return parsed
+    return parsed
+
+
+def _as_int(value: Any) -> int | None:
+    text = _as_str(value)
+    if text is None:
+        return None
+    try:
+        return int(float(text))
+    except (TypeError, ValueError):
+        return None
+
+
+def _tz_string(offset_seconds: Any) -> str | None:
+    """28800 -> "+08:00". Used for the departure/arrival_timezone fields."""
+    secs = _as_int(offset_seconds)
+    if secs is None:
+        return None
+    sign = "+" if secs >= 0 else "-"
+    secs = abs(secs)
+    return f"{sign}{secs // 3600:02d}:{(secs % 3600) // 60:02d}"
 
 
 def _parse_distance(value: Any) -> float | None:
@@ -76,9 +130,7 @@ def _map_status(value: Any) -> str | None:
     if not text:
         return None
     lowered = text.lower()
-    if any(token in text for token in ("取消",)) or any(
-        token in lowered for token in ("cancel", "cancelled", "canceled")
-    ):
+    if "取消" in text or any(token in lowered for token in ("cancel", "cancelled", "canceled")):
         return "cancelled"
     if any(token in text for token in ("到达", "落地", "结束", "完成")) or any(
         token in lowered for token in ("arrived", "landed", "completed")
@@ -113,8 +165,34 @@ def _mcp_payload(response: httpx.Response) -> dict[str, Any] | None:
     return payload if isinstance(payload, dict) else None
 
 
+def _literal_payload(text: str) -> Any:
+    """Parse the tool's text content.
+
+    VariFlight returns a Python ``repr()`` dict (single quotes) prefixed with
+    "Flight details: ". Some deployments may return plain JSON, so try JSON
+    first, then fall back to ``ast.literal_eval`` on the dict substring.
+    ``ast.literal_eval`` only evaluates literal expressions — it never runs
+    code, so untrusted snippets stay data (spec #70).
+    """
+    if not isinstance(text, str) or not text:
+        return None
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        return None
+    try:
+        return ast.literal_eval(text[start : end + 1])
+    except (ValueError, SyntaxError):
+        logger.warning("VariFlight: unparseable tool output: %s", text[:300])
+        return None
+
+
 def _tool_json(payload: dict[str, Any] | None) -> Any:
-    """Extract and decode the JSON text returned by the MCP tool."""
+    """Extract and decode the payload returned by the MCP tool."""
     if not isinstance(payload, dict):
         return None
     if payload.get("error"):
@@ -127,14 +205,7 @@ def _tool_json(payload: dict[str, Any] | None) -> Any:
         return None
     for block in result.get("content") or []:
         if isinstance(block, dict) and block.get("type") == "text":
-            text = block.get("text")
-            if not isinstance(text, str):
-                continue
-            try:
-                return json.loads(text)
-            except json.JSONDecodeError:
-                logger.warning("VariFlight: non-JSON tool output: %s", text[:300])
-                return None
+            return _literal_payload(block.get("text"))
     return None
 
 
@@ -201,7 +272,6 @@ class VariflightProvider(FlightProvider):
             logger.info("VariFlight: no flight for %s on %s (404)", number, date)
             return None
         response.raise_for_status()
-        logger.info("VariFlight: status=%s for %s", response.status_code, number)
 
         flights = _flight_list(_tool_json(_mcp_payload(response)))
         if not flights:
@@ -220,12 +290,15 @@ class VariflightProvider(FlightProvider):
         return self._parse(flight, number)
 
     def _parse(self, flight: dict[str, Any], flight_number: str) -> FlightLookupResult:
+        org_tz_secs = _pick(flight, "org_timezone", "OrgTimezone", "dep_timezone")
+        dst_tz_secs = _pick(flight, "dst_timezone", "DstTimezone", "arr_timezone")
+
         airline_name = _as_str(
             _pick(flight, "FlightCompanyEn", "AirlineNameEn", "CompanyEn", "AirlineEn")
         )
         if not airline_name:
             company = _as_str(_pick(flight, "FlightCompany", "AirlineName", "Company"))
-            # VariFlight's Chinese company names would override the English
+            # VariFlight's Chinese company name would override the English
             # reference name used by the en-US UI; keep ASCII values only.
             if company and company.isascii():
                 airline_name = company
@@ -245,15 +318,17 @@ class VariflightProvider(FlightProvider):
             destination_iata=_as_str(
                 _pick(flight, "FlightArrcode", "ArrAirportCode", "ArrCode", "DestCode")
             ),
-            origin_name=_as_str(_pick(flight, "FlightDepAirport", "DepAirport", "DepAirportName")),
-            destination_name=_as_str(
-                _pick(flight, "FlightArrAirport", "ArrAirport", "ArrAirportName")
-            ),
+            # Airport names come back Chinese-only; leave them to the local
+            # reference so en-US does not show Chinese strings.
+            origin_name=None,
+            destination_name=None,
             departure_time=_parse_datetime(
-                _pick(flight, "FlightDeptimePlanDate", "FlightDeptimePlan", "DepTimePlan")
+                _pick(flight, "FlightDeptimePlanDate", "FlightDeptimePlan", "DepTimePlan"),
+                offset_seconds=org_tz_secs,
             ),
             arrival_time=_parse_datetime(
-                _pick(flight, "FlightArrtimePlanDate", "FlightArrtimePlan", "ArrTimePlan")
+                _pick(flight, "FlightArrtimePlanDate", "FlightArrtimePlan", "ArrTimePlan"),
+                offset_seconds=dst_tz_secs,
             ),
             actual_departure_time=_parse_datetime(
                 _pick(
@@ -262,7 +337,8 @@ class VariflightProvider(FlightProvider):
                     "FlightDeptimeActual",
                     "DepTimeActual",
                     "FlightDeptimeReadyDate",
-                )
+                ),
+                offset_seconds=org_tz_secs,
             ),
             actual_arrival_time=_parse_datetime(
                 _pick(
@@ -271,8 +347,11 @@ class VariflightProvider(FlightProvider):
                     "FlightArrtimeActual",
                     "ArrTimeActual",
                     "FlightArrtimeReadyDate",
-                )
+                ),
+                offset_seconds=dst_tz_secs,
             ),
+            departure_timezone=_tz_string(org_tz_secs),
+            arrival_timezone=_tz_string(dst_tz_secs),
             departure_terminal=_as_str(
                 _pick(flight, "FlightHTerminal", "FlightDepTerminal", "DepTerminal")
             ),
@@ -282,17 +361,12 @@ class VariflightProvider(FlightProvider):
             ),
             arrival_gate=_as_str(_pick(flight, "FlightArrGate", "ArrGate", "ArrivalGate")),
             check_in_desk=_as_str(
-                _pick(
-                    flight,
-                    "CheckinCounter",
-                    "CheckInDesk",
-                    "CheckinDesk",
-                    "CheckinCounterNo",
-                )
+                _pick(flight, "CheckinTable", "CheckinCounter", "CheckInDesk", "CheckinDesk")
             ),
             baggage_belt=_as_str(
                 _pick(
                     flight,
+                    "BaggageID",
                     "BaggageCarousel",
                     "BaggageReclaim",
                     "BaggageBelt",
@@ -303,17 +377,28 @@ class VariflightProvider(FlightProvider):
             aircraft_model=_as_str(
                 _pick(
                     flight,
+                    "generic",
+                    "AircraftModel",
+                    "PlaneType",
                     "ftype",
                     "FlightType",
                     "AircraftType",
-                    "AircraftModel",
-                    "PlaneType",
                 )
             ),
             aircraft_reg=_as_str(
-                _pick(flight, "AircraftReg", "FlightReg", "RegisterNo", "ACReg", "TailNo")
+                _pick(
+                    flight,
+                    "AircraftNumber",
+                    "AircraftReg",
+                    "FlightReg",
+                    "RegisterNo",
+                    "ACReg",
+                    "TailNo",
+                )
             ),
             status=_map_status(_pick(flight, "FlightState", "FlightStatus", "State", "Status")),
-            distance=_parse_distance(_pick(flight, "FlightDistance", "Distance", "DistanceKm")),
+            distance=_parse_distance(
+                _pick(flight, "distance", "FlightDistance", "Distance", "DistanceKm")
+            ),
             provider=self.name,
         )
