@@ -102,3 +102,9 @@ def get_ai_agent_service(db: Session = Depends(get_db)):
     from app.services.ai_agent import AiAgentService
 
     return AiAgentService(db)
+
+
+def get_data_transfer_service(db: Session = Depends(get_db)):
+    from app.services.data_transfer import DataTransferService
+
+    return DataTransferService(db)

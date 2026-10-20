@@ -454,7 +454,7 @@ export default function AiChatPage() {
     <div className="flex h-[calc(100dvh-8rem)] flex-col gap-4 md:h-[calc(100dvh-4rem)]">
       <div className="flex animate-fade-in-up items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#6366f1] to-primary text-primary-foreground shadow-md shadow-primary/25">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#c66b4e] to-[#ad4e33] text-primary-foreground shadow-md shadow-primary/25">
             <Bot className="h-5 w-5" strokeWidth={1.75} />
           </div>
           <div>
@@ -532,7 +532,7 @@ export default function AiChatPage() {
                   className={cn(
                     "max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-sm",
                     msg.role === "user"
-                      ? "bg-gradient-to-br from-[#6366f1] to-primary text-primary-foreground"
+                      ? "bg-gradient-to-br from-[#c66b4e] to-[#ad4e33] text-primary-foreground"
                       : msg.error
                         ? "bg-danger/10 text-danger"
                         : "bg-accent text-accent-foreground",

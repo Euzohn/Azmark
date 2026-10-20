@@ -18,6 +18,8 @@ const ACTION_LABELS: Record<string, TranslationKey> = {
   create_record: "audit.action.create_record",
   update_record: "audit.action.update_record",
   delete_record: "audit.action.delete_record",
+  import: "audit.action.import",
+  export: "audit.action.export",
 };
 
 function formatDateTime(value: string): string {

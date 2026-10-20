@@ -40,7 +40,7 @@ function BarList({
             </div>
             <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-[#6366f1] to-primary transition-all duration-500"
+                className="h-full rounded-full bg-gradient-to-r from-primary to-[#78816a] transition-all duration-500"
                 style={{ width: `${(item.count / max) * 100}%` }}
               />
             </div>

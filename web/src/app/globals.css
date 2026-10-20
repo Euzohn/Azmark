@@ -2,68 +2,75 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/*
+ * Azmark brand palette
+ *   graphite  #252822   ink / primary text
+ *   paper     #f5f1e8   warm canvas
+ *   terracotta#c66b4e   accent (deepened below for AA contrast on fills)
+ *   moss      #78816a   secondary
+ */
 :root {
   color-scheme: light;
 
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  --background: #f5f1e8;
+  --foreground: #252822;
 
-  --card: #ffffff;
-  --card-foreground: #0f172a;
+  --card: #fffdf8;
+  --card-foreground: #252822;
 
-  --muted: #f1f5f9;
-  --muted-foreground: #64748b;
+  --muted: #ece5d6;
+  --muted-foreground: #6e6759;
 
-  --border: #e2e8f0;
+  --border: #e2dac8;
 
-  --primary: #4f46e5;
-  --primary-foreground: #ffffff;
+  --primary: #ad4e33;
+  --primary-foreground: #fbf6ef;
 
-  --accent: #eef2ff;
-  --accent-foreground: #4f46e5;
+  --accent: #f0e4da;
+  --accent-foreground: #8f3f28;
 
-  --danger: #dc2626;
-  --danger-foreground: #ffffff;
+  --danger: #b23a2e;
+  --danger-foreground: #fbf6ef;
 
-  --success: #059669;
-  --success-foreground: #ffffff;
+  --success: #4f7a3e;
+  --success-foreground: #fbf6ef;
 
-  --warning: #d97706;
-  --warning-foreground: #ffffff;
+  --warning: #a9761f;
+  --warning-foreground: #fbf6ef;
 
-  --ring: #4f46e5;
+  --ring: #c66b4e;
 }
 
 .dark {
   color-scheme: dark;
 
-  --background: #0b1120;
-  --foreground: #e2e8f0;
+  --background: #16140f;
+  --foreground: #ece6d8;
 
-  --card: #131c31;
-  --card-foreground: #e2e8f0;
+  --card: #201d16;
+  --card-foreground: #ece6d8;
 
-  --muted: #1e293b;
-  --muted-foreground: #94a3b8;
+  --muted: #2a251d;
+  --muted-foreground: #a79e8a;
 
-  --border: #1e293b;
+  --border: #332c22;
 
-  --primary: #818cf8;
-  --primary-foreground: #1e1b4b;
+  --primary: #d98a6b;
+  --primary-foreground: #2a1b13;
 
-  --accent: #312e81;
-  --accent-foreground: #c7d2fe;
+  --accent: #2e2820;
+  --accent-foreground: #e7b69f;
 
-  --danger: #f87171;
-  --danger-foreground: #450a0a;
+  --danger: #e0836f;
+  --danger-foreground: #2a1410;
 
-  --success: #34d399;
-  --success-foreground: #022c22;
+  --success: #8fb07a;
+  --success-foreground: #16210f;
 
-  --warning: #fbbf24;
-  --warning-foreground: #451a03;
+  --warning: #d9ad62;
+  --warning-foreground: #2a1f0c;
 
-  --ring: #818cf8;
+  --ring: #d98a6b;
 }
 
 @theme inline {

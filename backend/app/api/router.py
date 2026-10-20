@@ -5,6 +5,7 @@ from app.api.routes import (
     audit,
     auth,
     dashboard,
+    data_transfer,
     flights,
     health,
     reference,
@@ -26,3 +27,4 @@ api_router.include_router(audit.router)
 api_router.include_router(trips.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(ai.router)
+api_router.include_router(data_transfer.router)

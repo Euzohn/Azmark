@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     aerodatabox_host: str = "aerodatabox.p.rapidapi.com"
     aviationstack_base_url: str = "http://api.aviationstack.com/v1"
 
+    # SearchProvider (spec #37) — used for train schedules and travel lookups.
+    search_provider: str = ""
+    search_api_key: str = ""
+    searxng_base_url: str = ""
+
     log_level: str = "INFO"
 
     @property

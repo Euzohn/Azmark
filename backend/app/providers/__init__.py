@@ -1,8 +1,9 @@
-"""Provider registry (spec #66). Add new FlightProviders here."""
+"""Provider registry (spec #66). Add new Flight/Search providers here."""
 
 from app.providers.aerodatabox import AeroDataBoxProvider
 from app.providers.aviationstack import AviationStackProvider
 from app.providers.base import FlightProvider
+from app.providers.search import SEARCH_PROVIDERS
 
 REGISTERED_PROVIDERS: dict[str, type[FlightProvider]] = {
     AeroDataBoxProvider.name: AeroDataBoxProvider,
@@ -11,4 +12,4 @@ REGISTERED_PROVIDERS: dict[str, type[FlightProvider]] = {
 
 
 def provider_names() -> tuple[str, ...]:
-    return tuple(REGISTERED_PROVIDERS)
+    return tuple(REGISTERED_PROVIDERS) + tuple(SEARCH_PROVIDERS)

@@ -5,6 +5,7 @@ import {
   BarChart3,
   Bot,
   Bus,
+  Database,
   Home,
   History,
   LogOut,
@@ -47,6 +48,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/map", key: "nav.map", icon: MapIcon },
   { href: "/statistics", key: "nav.stats", icon: BarChart3 },
   { href: "/audit", key: "nav.audit", icon: ScrollText },
+  { href: "/data", key: "nav.data", icon: Database },
   { href: "/settings", key: "nav.settings", icon: Settings },
 ];
 
@@ -64,6 +66,7 @@ const MOBILE_MORE: NavItem[] = [
   { href: "/timeline", key: "nav.timeline", icon: History },
   { href: "/statistics", key: "nav.stats", icon: BarChart3 },
   { href: "/audit", key: "nav.audit", icon: ScrollText },
+  { href: "/data", key: "nav.data", icon: Database },
   { href: "/settings", key: "nav.settings", icon: Settings },
 ];
 
@@ -152,7 +155,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </a>
           <div className="rounded-2xl border border-border bg-gradient-to-br from-accent/50 to-transparent p-3">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#6366f1] to-primary text-xs font-semibold text-primary-foreground shadow-sm shadow-primary/25">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#c66b4e] to-[#ad4e33] text-xs font-semibold text-primary-foreground shadow-sm shadow-primary/25">
                 {identity.slice(0, 2).toUpperCase() || "AZ"}
               </div>
               <div className="min-w-0 flex-1">

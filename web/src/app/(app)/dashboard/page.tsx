@@ -201,7 +201,7 @@ export default function DashboardPage() {
               className="animate-fade-in-up overflow-hidden"
               style={{ animationDelay: "400ms" }}
             >
-              <div className="h-1 w-full bg-gradient-to-r from-[#6366f1] via-primary to-[#818cf8]" />
+              <div className="h-1 w-full bg-gradient-to-r from-[#c66b4e] via-primary to-[#78816a]" />
               <CardHeader className="flex-row items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
                   <PlaneTakeoff className="h-4 w-4 text-primary" />

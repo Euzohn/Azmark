@@ -40,6 +40,14 @@ function timezoneOptions(): string[] {
 
 const TIMEZONES = timezoneOptions();
 
+const PROVIDER_LABELS: Record<string, string> = {
+  aerodatabox: "AeroDataBox",
+  aviationstack: "AviationStack",
+  tavily: "Tavily",
+  brave: "Brave Search",
+  searxng: "SearXNG",
+};
+
 export default function SettingsPage() {
   const { t } = useI18n();
   const { user, setUser } = useAuth();
@@ -253,7 +261,7 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between gap-2">
                 <span className="flex items-center gap-2 text-sm font-medium">
                   <KeyRound className="h-4 w-4 text-muted-foreground" />
-                  {item.provider === "aerodatabox" ? "AeroDataBox" : item.provider === "aviationstack" ? "AviationStack" : item.provider}
+                  {PROVIDER_LABELS[item.provider] ?? item.provider}
                 </span>
                 {item.configured ? (
                   <Badge variant="success">{t("settings.providerKeyConfigured")}</Badge>
@@ -263,9 +271,13 @@ export default function SettingsPage() {
               </div>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <Input
-                  type="password"
+                  type={item.provider === "searxng" ? "text" : "password"}
                   autoComplete="off"
-                  placeholder={t("settings.providerKeyPlaceholder")}
+                  placeholder={
+                    item.provider === "searxng"
+                      ? t("settings.providerKeySearxngPlaceholder")
+                      : t("settings.providerKeyPlaceholder")
+                  }
                   value={keyInputs[item.provider] ?? ""}
                   onChange={(e) =>
                     setKeyInputs((prev) => ({ ...prev, [item.provider]: e.target.value }))

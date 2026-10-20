@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.crypto import encrypt_value
 from app.models.transport_record import TransportRecord
 from app.repositories.transport import TransportRepository
+from app.services.seating import infer_train_seat_type
 
 
 class RecordNotFoundError(Exception):
@@ -65,8 +66,25 @@ class TransportService:
             if (value := data.pop(field, None))
         }
 
+    def _infer_seat_type(self, data: dict, *, seat_changed: bool = False) -> None:
+        """Derive the seat position from the seat number (spec #13).
+
+        Explicit values always win; on update we only infer when the seat itself
+        changed, so clearing seat_type stays a deliberate choice.
+        """
+        if self.record_type != "train":
+            return
+        if data.get("seat_type"):
+            return
+        if seat_changed and "seat" not in data:
+            return
+        inferred = infer_train_seat_type(data.get("seat"))
+        if inferred:
+            data["seat_type"] = inferred
+
     def create_record(self, *, user_id: uuid.UUID, payload) -> TransportRecord:
         data = payload.model_dump()
+        self._infer_seat_type(data)
         enc = self._encrypt_sensitive(data)
         record = TransportRecord(user_id=user_id, type=self.record_type, **data)
         for field, cipher in enc.items():
@@ -78,6 +96,7 @@ class TransportService:
     ) -> TransportRecord:
         record = self.get_record(user_id=user_id, record_id=record_id)
         data = payload.model_dump(exclude_unset=True)
+        self._infer_seat_type(data, seat_changed=True)
         for field in _SENSITIVE_FIELDS:
             if field in data:
                 value = data.pop(field)

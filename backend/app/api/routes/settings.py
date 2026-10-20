@@ -19,7 +19,7 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 
 
 def _ensure_provider(provider: str) -> None:
-    if provider not in providers.REGISTERED_PROVIDERS:
+    if provider not in providers.provider_names():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown provider")
 
 

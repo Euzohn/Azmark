@@ -475,3 +475,37 @@ export interface AiStreamEvent {
   proposals?: AiProposal[];
   message?: string;
 }
+
+export interface ImportRowError {
+  row: number;
+  field: string | null;
+  message: string;
+}
+
+export interface ImportDuplicate {
+  row: number;
+  signature: string;
+}
+
+export interface ImportPreview {
+  format: string;
+  columns: string[];
+  field_mapping: Record<string, string>;
+  target_fields: string[];
+  total: number;
+  valid: number;
+  duplicate_count: number;
+  error_count: number;
+  errors: ImportRowError[];
+  duplicates: ImportDuplicate[];
+  rows: Record<string, unknown>[];
+  truncated: boolean;
+}
+
+export interface ImportResult {
+  imported: number;
+  skipped_duplicates: number;
+  failed: number;
+  trips_created: number;
+  errors: ImportRowError[];
+}

@@ -15,6 +15,8 @@ import type {
   FlightLookup,
   LookupAllResponse,
   FlightNumberLookup,
+  ImportPreview,
+  ImportResult,
   MapRoutesRead,
   OtherTransport,
   OtherTransportInput,
@@ -50,10 +52,11 @@ export class ApiError extends Error {
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = useAuth.getState().token;
+  const isFormData = options.body instanceof FormData;
   const response = await fetch(`${API_BASE}/api/v1${path}`, {
     ...options,
     headers: {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers ?? {}),
     },
@@ -78,6 +81,29 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     return undefined as T;
   }
   return (await response.json()) as T;
+}
+
+async function fetchBlob(path: string): Promise<Blob> {
+  const token = useAuth.getState().token;
+  const response = await fetch(`${API_BASE}/api/v1${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (response.status === 401) {
+    useAuth.getState().clear();
+  }
+  if (!response.ok) {
+    throw new ApiError(response.status, response.statusText);
+  }
+  return response.blob();
+}
+
+function importForm(file: File, mapping?: Record<string, string>): FormData {
+  const form = new FormData();
+  form.append("file", file);
+  if (mapping && Object.values(mapping).some(Boolean)) {
+    form.append("mapping", JSON.stringify(mapping));
+  }
+  return form;
 }
 
 export const api = {
@@ -221,6 +247,21 @@ export const api = {
   getStatistics: () => request<StatisticsRead>("/statistics"),
   getTimeline: () => request<TimelineRecord[]>("/timeline"),
   getMapRoutes: () => request<MapRoutesRead>("/map/routes"),
+
+  exportData: (format: "json" | "csv", includeSensitive = false) =>
+    fetchBlob(`/export?format=${format}&include_sensitive=${includeSensitive}`),
+  importTemplate: (format: "json" | "csv" = "csv") =>
+    fetchBlob(`/import/template?format=${format}`),
+  previewImport: (file: File, mapping?: Record<string, string>) =>
+    request<ImportPreview>("/import/preview", {
+      method: "POST",
+      body: importForm(file, mapping),
+    }),
+  importData: (file: File, mapping?: Record<string, string>) =>
+    request<ImportResult>("/import", {
+      method: "POST",
+      body: importForm(file, mapping),
+    }),
 
   chatAi: (message: string, image?: string | null) =>
     request<AiChatResponse>("/ai/chat", {

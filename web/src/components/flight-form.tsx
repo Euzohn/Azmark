@@ -30,9 +30,28 @@ function toLocalInput(value: string | null | undefined): string {
 }
 
 function fromLocalInput(value: string): string | null {
-  if (!value) return null;
+  if (!value || !value.includes("T")) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function timePart(value: string): string {
+  return value.includes("T") ? value.slice(11, 16) : "";
+}
+
+function datePart(value: string): string {
+  return value.slice(0, 10);
+}
+
+function joinDateTime(date: string, time: string): string {
+  if (!date) return "";
+  return time ? `${date}T${time}` : date;
+}
+
+function todayISO(): string {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
 // 航班日期已过 → 默认「已完成」，否则「计划中」。空/非法返回 null 表示不干预。
@@ -41,6 +60,13 @@ function autoStatus(departure: string): string | null {
   const date = new Date(departure);
   if (Number.isNaN(date.getTime())) return null;
   return date.getTime() < Date.now() ? "completed" : "scheduled";
+}
+
+// 只有日期时按日历日比较：今天及以后仍是「计划中」，避免把今天晚些的航班误判为已完成。
+function autoStatusByDate(value: string): string | null {
+  const date = value.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  return date < todayISO() ? "completed" : "scheduled";
 }
 
 function formatDateTime(value: string | null | undefined): string {
@@ -58,6 +84,13 @@ function providerLabel(name: string): string {
   if (name === "aviationstack") return "AviationStack";
   return name;
 }
+
+const SCHEDULE_KEYS = [
+  "departure_time",
+  "arrival_time",
+  "actual_departure_time",
+  "actual_arrival_time",
+] as const;
 
 interface FlightFormProps {
   initial?: Flight;
@@ -131,12 +164,30 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
   const set = (key: keyof typeof form, value: string) =>
     setForm((prev) => ({ ...prev, [key]: value }));
 
+  // 航班日期是锚点：把已填写的时刻平移到这一天（时间不变），空字段由日期输入框继承。
+  const changeLookupDate = (date: string) => {
+    setLookupDate(date);
+    if (!date) return;
+    setForm((prev) => {
+      const next = { ...prev };
+      for (const key of SCHEDULE_KEYS) {
+        if (prev[key]) next[key] = joinDateTime(date, timePart(prev[key]));
+      }
+      if (!statusTouched) {
+        const status = autoStatusByDate(date);
+        if (status) next.status = status;
+      }
+      return next;
+    });
+  };
+
   // 变更起飞时间时同步推断状态（用户手动改过状态则不覆盖）。
   const setDepartureTime = (value: string) => {
+    if (value) changeLookupDate(datePart(value));
     setForm((prev) => {
       const next = { ...prev, departure_time: value };
       if (!statusTouched) {
-        const status = autoStatus(value);
+        const status = value.includes("T") ? autoStatus(value) : autoStatusByDate(value);
         if (status) next.status = status;
       }
       return next;
@@ -249,6 +300,9 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
         if (result.distance && !next.distance) next.distance = String(result.distance);
         return next;
       });
+      if (result.departure_time) {
+        setLookupDate(result.departure_time.slice(0, 10));
+      }
       if (result.source && result.source !== "local") {
         setLookupSource(result.source);
         setLookupStatus("ok");
@@ -409,7 +463,7 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
             <Input
               type="date"
               value={lookupDate}
-              onChange={(e) => setLookupDate(e.target.value)}
+              onChange={(e) => changeLookupDate(e.target.value)}
             />
           </Field>
           {canCompare ? (
@@ -505,31 +559,31 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
       <Section title={t("flights.section.schedule")}>
         <div className="grid gap-4 md:grid-cols-2">
           <Field label={t("flights.departureTime")}>
-            <Input
-              type="datetime-local"
+            <ScheduleInput
               value={form.departure_time}
-              onChange={(e) => setDepartureTime(e.target.value)}
+              fallbackDate={lookupDate}
+              onChange={setDepartureTime}
             />
           </Field>
           <Field label={t("flights.arrivalTime")}>
-            <Input
-              type="datetime-local"
+            <ScheduleInput
               value={form.arrival_time}
-              onChange={(e) => set("arrival_time", e.target.value)}
+              fallbackDate={lookupDate}
+              onChange={(value) => set("arrival_time", value)}
             />
           </Field>
           <Field label={t("flights.actualDepartureTime")}>
-            <Input
-              type="datetime-local"
+            <ScheduleInput
               value={form.actual_departure_time}
-              onChange={(e) => set("actual_departure_time", e.target.value)}
+              fallbackDate={lookupDate}
+              onChange={(value) => set("actual_departure_time", value)}
             />
           </Field>
           <Field label={t("flights.actualArrivalTime")}>
-            <Input
-              type="datetime-local"
+            <ScheduleInput
               value={form.actual_arrival_time}
-              onChange={(e) => set("actual_arrival_time", e.target.value)}
+              fallbackDate={lookupDate}
+              onChange={(value) => set("actual_arrival_time", value)}
             />
           </Field>
           <Field label={t("flights.departureTimezone")}>
@@ -712,6 +766,35 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
         </div>
       </Section>
     </form>
+  );
+}
+
+function ScheduleInput({
+  value,
+  fallbackDate,
+  onChange,
+}: {
+  value: string;
+  fallbackDate: string;
+  onChange: (value: string) => void;
+}) {
+  const date = datePart(value) || fallbackDate;
+  const time = timePart(value);
+  return (
+    <div className="flex gap-2">
+      <Input
+        type="date"
+        value={date}
+        onChange={(e) => onChange(joinDateTime(e.target.value, time))}
+        className="flex-1"
+      />
+      <Input
+        type="time"
+        value={time}
+        onChange={(e) => onChange(joinDateTime(date, e.target.value))}
+        className="w-32"
+      />
+    </div>
   );
 }
 
