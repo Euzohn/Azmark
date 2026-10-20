@@ -84,6 +84,8 @@ docker compose exec api python -m app create-admin --username admin --email you@
 
 > MinIO 开源版已归档。compose 默认从 `docker.1panel.live` 拉取最后一个开源版本并固定 digest；如服务器可直连 Docker Hub，可在 `.env` 设置 `MINIO_IMAGE=minio/minio:RELEASE.2025-09-07T16-13-09Z`。
 
+> 后端镜像构建默认使用清华 PyPI 镜像，避免服务器从官方源下载依赖过慢。可在 `.env` 用 `PIP_INDEX_URL` 覆盖。
+
 > `POSTGRES_PASSWORD` 必须只用 URL 安全字符（推荐 hex），否则会破坏内部 `DATABASE_URL`。云服务器需在安全组放通入方向 TCP 3000；不要放通 8000/5432/6379/9000/9001。
 
 ## 本地开发
