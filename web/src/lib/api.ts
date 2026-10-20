@@ -29,6 +29,8 @@ import type {
   OtherTransportList,
   ProviderKeysRead,
   ProviderKeyStatus,
+  RecordFilters,
+  RecordList,
   StatisticsRead,
   TimelineRecord,
   TokenResponse,
@@ -155,6 +157,21 @@ export const api = {
       body: JSON.stringify({ current_password, new_username }),
     }),
 
+  listRecords: (params: RecordFilters = {}) => {
+    const query = new URLSearchParams();
+    if (params.search) query.set("search", params.search);
+    if (params.type) query.set("type", params.type);
+    if (params.status) query.set("status", params.status);
+    if (params.carrier) query.set("carrier", params.carrier);
+    if (params.trip_id) query.set("trip_id", params.trip_id);
+    if (params.date_from) query.set("date_from", params.date_from);
+    if (params.date_to) query.set("date_to", params.date_to);
+    if (params.sort) query.set("sort", params.sort);
+    if (params.page) query.set("page", String(params.page));
+    if (params.page_size) query.set("page_size", String(params.page_size));
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return request<RecordList>(`/records${suffix}`);
+  },
   listFlights: (params: FlightFilters = {}) => {
     const query = new URLSearchParams();
     if (params.search) query.set("search", params.search);

@@ -142,3 +142,9 @@ def get_attachment_service(
     from app.services.attachment import AttachmentService
 
     return AttachmentService(db, storage)
+
+
+def get_record_service(db: Session = Depends(get_db)):
+    from app.services.record import RecordService
+
+    return RecordService(db)

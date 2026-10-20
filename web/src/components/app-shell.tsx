@@ -8,6 +8,7 @@ import {
   Database,
   Home,
   History,
+  List as ListIcon,
   LogOut,
   type LucideIcon,
   Map as MapIcon,
@@ -42,6 +43,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", key: "nav.dashboard", icon: Home },
   { href: "/trips", key: "nav.trips", icon: Backpack },
+  { href: "/records", key: "nav.records", icon: ListIcon },
   { href: "/flights", key: "nav.flights", icon: Plane },
   { href: "/trains", key: "nav.trains", icon: TrainFront },
   { href: "/transports", key: "nav.transports", icon: Bus },
@@ -63,6 +65,7 @@ const MOBILE_MAIN: NavItem[] = [
 ];
 
 const MOBILE_MORE: NavItem[] = [
+  { href: "/records", key: "nav.records", icon: ListIcon },
   { href: "/trains", key: "nav.trains", icon: TrainFront },
   { href: "/transports", key: "nav.transports", icon: Bus },
   { href: "/ai", key: "nav.ai", icon: Bot },

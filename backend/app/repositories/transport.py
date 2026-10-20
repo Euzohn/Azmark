@@ -19,17 +19,21 @@ class TransportRepository:
         self,
         *,
         user_id: uuid.UUID,
-        record_type: str = "flight",
+        record_type: str | None = "flight",
         search: str | None = None,
         status: str | None = None,
         cabin_class: str | None = None,
+        carrier: str | None = None,
         trip_id: uuid.UUID | None = None,
         date_from: date | None = None,
         date_to: date | None = None,
+        sort: str = "newest",
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[list[TransportRecord], int]:
-        filters = [TransportRecord.user_id == user_id, TransportRecord.type == record_type]
+        filters = [TransportRecord.user_id == user_id]
+        if record_type:
+            filters.append(TransportRecord.type == record_type)
         if search:
             like = f"%{search}%"
             filters.append(
@@ -44,6 +48,8 @@ class TransportRepository:
             filters.append(TransportRecord.status == status)
         if cabin_class:
             filters.append(TransportRecord.cabin_class == cabin_class)
+        if carrier:
+            filters.append(TransportRecord.carrier.ilike(f"%{carrier}%"))
         if trip_id is not None:
             filters.append(TransportRecord.trip_id == trip_id)
         if date_from is not None:
@@ -51,14 +57,37 @@ class TransportRepository:
         if date_to is not None:
             filters.append(func.date(TransportRecord.departure_time) <= date_to)
 
+        # Spec #23 sort options. "newest" keeps the historic list behaviour;
+        # "departure"/"arrival" are chronological for planning, while
+        # "created" reflects when the row was added.
+        if sort == "oldest":
+            order_by = (
+                TransportRecord.departure_time.asc().nullslast(),
+                TransportRecord.created_at.asc(),
+            )
+        elif sort == "departure":
+            order_by = (
+                TransportRecord.departure_time.asc().nullslast(),
+                TransportRecord.created_at.asc(),
+            )
+        elif sort == "arrival":
+            order_by = (
+                TransportRecord.arrival_time.asc().nullslast(),
+                TransportRecord.created_at.asc(),
+            )
+        elif sort == "created":
+            order_by = (TransportRecord.created_at.desc(), TransportRecord.id)
+        else:  # newest
+            order_by = (
+                TransportRecord.departure_time.desc().nullslast(),
+                TransportRecord.created_at.desc(),
+            )
+
         total = self.db.scalar(select(func.count()).select_from(TransportRecord).where(*filters))
         stmt = (
             select(TransportRecord)
             .where(*filters)
-            .order_by(
-                TransportRecord.departure_time.desc().nullslast(),
-                TransportRecord.created_at.desc(),
-            )
+            .order_by(*order_by)
             .offset((page - 1) * page_size)
             .limit(page_size)
         )

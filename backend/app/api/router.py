@@ -10,6 +10,7 @@ from app.api.routes import (
     data_transfer,
     flights,
     health,
+    records,
     reference,
     settings,
     trains,
@@ -24,6 +25,7 @@ api_router.include_router(admin.router)
 api_router.include_router(flights.router)
 api_router.include_router(trains.router)
 api_router.include_router(transports.router)
+api_router.include_router(records.router)
 api_router.include_router(attachments.router)
 api_router.include_router(reference.router)
 api_router.include_router(settings.router)

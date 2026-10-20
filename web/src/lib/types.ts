@@ -242,6 +242,29 @@ export interface FlightFilters {
   page_size?: number;
 }
 
+export type RecordType = "flight" | "train" | "other";
+export type RecordSort = "newest" | "oldest" | "departure" | "arrival" | "created";
+
+export interface RecordFilters {
+  search?: string;
+  type?: RecordType;
+  status?: string;
+  carrier?: string;
+  trip_id?: string;
+  date_from?: string;
+  date_to?: string;
+  sort?: RecordSort;
+  page?: number;
+  page_size?: number;
+}
+
+export interface RecordList {
+  items: TimelineRecord[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 export interface Trip {
   id: string;
   user_id: string;
