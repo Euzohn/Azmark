@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 import { Columns2, Loader2, Wand2 } from "lucide-react";
 import Link from "next/link";
@@ -15,8 +15,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { TimezoneSelect } from "@/components/ui/timezone-select";
 import { api } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import { useAuth } from "@/lib/auth-store";
+import { useI18n, type TranslationKey } from "@/lib/i18n";
+import { defaultTimezone } from "@/lib/timezones";
+import { useFormDiff } from "@/lib/use-form-diff";
+import { cn } from "@/lib/utils";
 import type { Flight, FlightInput, FlightLookup, ProviderLookupResult } from "@/lib/types";
 
 function toLocalInput(value: string | null | undefined): string {
@@ -93,15 +98,43 @@ const SCHEDULE_KEYS = [
   "actual_arrival_time",
 ] as const;
 
-interface FlightFormProps {
-  initial?: Flight;
-  submitting?: boolean;
-  onSubmit: (data: FlightInput) => void | Promise<void>;
-}
+type FlightFormState = {
+  service_number: string;
+  carrier: string;
+  airline_code: string;
+  origin: string;
+  destination: string;
+  departure_time: string;
+  arrival_time: string;
+  actual_departure_time: string;
+  actual_arrival_time: string;
+  seat: string;
+  cabin_class: string;
+  departure_terminal: string;
+  departure_gate: string;
+  arrival_terminal: string;
+  arrival_gate: string;
+  check_in_desk: string;
+  baggage_belt: string;
+  aircraft_model: string;
+  aircraft_reg: string;
+  departure_timezone: string;
+  arrival_timezone: string;
+  status: string;
+  price: string;
+  currency: string;
+  distance: string;
+  ticket_number: string;
+  booking_reference: string;
+  purchase_credential_type: string;
+  purchase_credential: string;
+  notes: string;
+  trip_id: string;
+};
 
-export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
-  const { t, locale } = useI18n();
-  const [form, setForm] = useState({
+/** The value each field would hold if untouched: the saved record, or blank. */
+function snapshot(initial?: Flight): FlightFormState {
+  return {
     service_number: initial?.service_number ?? "",
     carrier: initial?.carrier ?? "",
     airline_code: initial?.airline_code ?? "",
@@ -133,6 +166,63 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
     purchase_credential: initial?.purchase_credential ?? "",
     notes: initial?.notes ?? "",
     trip_id: initial?.trip_id ?? "",
+  };
+}
+
+const FIELD_LABELS: Record<keyof FlightFormState, TranslationKey> = {
+  service_number: "flights.serviceNumber",
+  carrier: "flights.carrier",
+  airline_code: "flights.carrier",
+  origin: "flights.origin",
+  destination: "flights.destination",
+  departure_time: "flights.departureTime",
+  arrival_time: "flights.arrivalTime",
+  actual_departure_time: "flights.actualDepartureTime",
+  actual_arrival_time: "flights.actualArrivalTime",
+  seat: "flights.seat",
+  cabin_class: "flights.cabinClass",
+  departure_terminal: "flights.departureTerminal",
+  departure_gate: "flights.departureGate",
+  arrival_terminal: "flights.arrivalTerminal",
+  arrival_gate: "flights.arrivalGate",
+  check_in_desk: "flights.checkInDesk",
+  baggage_belt: "flights.baggageBelt",
+  aircraft_model: "flights.aircraftModel",
+  aircraft_reg: "flights.aircraftReg",
+  departure_timezone: "flights.departureTimezone",
+  arrival_timezone: "flights.arrivalTimezone",
+  status: "flights.status",
+  price: "flights.price",
+  currency: "flights.currency",
+  distance: "flights.distance",
+  ticket_number: "flights.ticketNumber",
+  booking_reference: "flights.bookingReference",
+  purchase_credential_type: "flights.purchaseCredentialType",
+  purchase_credential: "flights.purchaseCredential",
+  notes: "flights.notes",
+  trip_id: "flights.trip",
+};
+
+interface FlightFormProps {
+  initial?: Flight;
+  submitting?: boolean;
+  onSubmit: (data: FlightInput) => void | Promise<void>;
+}
+
+export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
+  const { user } = useAuth();
+  const { t, locale } = useI18n();
+  const [form, setForm] = useState<FlightFormState>(() => {
+    const base = snapshot(initial);
+    if (initial) return base;
+    // A new record starts in the traveller's own zone (profile setting); a
+    // provider lookup or a manual pick still wins.
+    const tz = defaultTimezone(user?.timezone);
+    return {
+      ...base,
+      departure_timezone: base.departure_timezone || tz,
+      arrival_timezone: base.arrival_timezone || tz,
+    };
   });
 
   const { data: trips } = useQuery({
@@ -164,10 +254,27 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
   // Whether the user typed/picked the airline themselves. Provider lookups may
   // correct an auto-inferred (prefix-based) carrier but never a manual edit.
   const [carrierTouched, setCarrierTouched] = useState(Boolean(initial?.carrier));
+  // Same rule for timezones: a lookup may move the pre-filled default, but a
+  // manual pick is kept.
+  const [tzTouched, setTzTouched] = useState(
+    Boolean(initial?.departure_timezone || initial?.arrival_timezone),
+  );
   const [lastVerified, setLastVerified] = useState<string | null>(null);
 
   const set = (key: keyof typeof form, value: string) =>
     setForm((prev) => ({ ...prev, [key]: value }));
+
+  const editing = Boolean(initial);
+  const baseline = useMemo(() => snapshot(initial), [initial]);
+  const { changed, changedLabels } = useFormDiff(form, baseline, FIELD_LABELS);
+  const joiner = locale === "zh-CN" ? "、" : ", ";
+  // Mark only when editing — a blank record is not "modified".
+  const isChanged = (key: keyof FlightFormState) => editing && changed.has(key);
+  // The carrier name and its IATA code are one logical pick; mark the carrier
+  // field if either moved.
+  const carrierChanged = editing && (changed.has("carrier") || changed.has("airline_code"));
+  // The two share a label, so a name+code change collapses into one summary row.
+  const summaryLabels = [...new Set(changedLabels)];
 
   // 航班日期是锚点：把已填写的时刻平移到这一天（时间不变），空字段由日期输入框继承。
   const changeLookupDate = (date: string) => {
@@ -307,9 +414,9 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
         if (result.aircraft_model && !next.aircraft_model)
           next.aircraft_model = result.aircraft_model;
         if (result.aircraft_reg && !next.aircraft_reg) next.aircraft_reg = result.aircraft_reg;
-        if (result.departure_timezone && !next.departure_timezone)
+        if (result.departure_timezone && (force || !tzTouched || !next.departure_timezone))
           next.departure_timezone = result.departure_timezone;
-        if (result.arrival_timezone && !next.arrival_timezone)
+        if (result.arrival_timezone && (force || !tzTouched || !next.arrival_timezone))
           next.arrival_timezone = result.arrival_timezone;
         if (result.distance && !next.distance) next.distance = String(result.distance);
         return next;
@@ -324,7 +431,7 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
         setLookupStatus("local");
       }
     },
-    [locale, statusTouched, carrierTouched],
+    [locale, statusTouched, carrierTouched, tzTouched],
   );
 
   const runLookup = async (force = false) => {
@@ -420,7 +527,7 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
     <form onSubmit={handleSubmit} className="flex flex-col gap-8">
       <Section title={t("flights.section.flight")}>
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label={t("flights.serviceNumber")}>
+          <Field label={t("flights.serviceNumber")} marked={isChanged("service_number")}>
             <div className="flex gap-2">
               <Input
                 value={form.service_number}
@@ -508,7 +615,7 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
               </Select>
             </Field>
           ) : null}
-          <Field label={t("flights.carrier")}>
+          <Field label={t("flights.carrier")} marked={carrierChanged}>
             <Combobox
               value={form.carrier}
               onChange={(value) => {
@@ -530,7 +637,7 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
               </div>
             ) : null}
           </Field>
-          <Field label={t("flights.origin")} required>
+          <Field label={t("flights.origin")} required marked={isChanged("origin")}>
             <Combobox
               value={form.origin}
               onChange={(value) => set("origin", value)}
@@ -539,7 +646,7 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
               emptyText={t("flights.noResults")}
             />
           </Field>
-          <Field label={t("flights.destination")} required>
+          <Field label={t("flights.destination")} required marked={isChanged("destination")}>
             <Combobox
               value={form.destination}
               onChange={(value) => set("destination", value)}
@@ -548,7 +655,7 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
               emptyText={t("flights.noResults")}
             />
           </Field>
-          <Field label={t("flights.trip")}>
+          <Field label={t("flights.trip")} marked={isChanged("trip_id")}>
             <Select value={form.trip_id} onChange={(e) => set("trip_id", e.target.value)}>
               <option value="">{t("flights.tripNone")}</option>
               {trips?.items.map((trip) => (
@@ -558,7 +665,7 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
               ))}
             </Select>
           </Field>
-          <Field label={t("flights.status")}>
+          <Field label={t("flights.status")} marked={isChanged("status")}>
             <Select
               value={form.status}
               onChange={(e) => {
@@ -589,46 +696,53 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
 
       <Section title={t("flights.section.schedule")}>
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label={t("flights.departureTime")}>
+          <Field label={t("flights.departureTime")} marked={isChanged("departure_time")}>
             <ScheduleInput
               value={form.departure_time}
               fallbackDate={lookupDate}
               onChange={setDepartureTime}
             />
           </Field>
-          <Field label={t("flights.arrivalTime")}>
+          <Field label={t("flights.arrivalTime")} marked={isChanged("arrival_time")}>
             <ScheduleInput
               value={form.arrival_time}
               fallbackDate={lookupDate}
               onChange={(value) => set("arrival_time", value)}
             />
           </Field>
-          <Field label={t("flights.actualDepartureTime")}>
+          <Field label={t("flights.actualDepartureTime")} marked={isChanged("actual_departure_time")}>
             <ScheduleInput
               value={form.actual_departure_time}
               fallbackDate={lookupDate}
               onChange={(value) => set("actual_departure_time", value)}
             />
           </Field>
-          <Field label={t("flights.actualArrivalTime")}>
+          <Field label={t("flights.actualArrivalTime")} marked={isChanged("actual_arrival_time")}>
             <ScheduleInput
               value={form.actual_arrival_time}
               fallbackDate={lookupDate}
               onChange={(value) => set("actual_arrival_time", value)}
             />
           </Field>
-          <Field label={t("flights.departureTimezone")}>
-            <Input
+          <Field
+            label={t("flights.departureTimezone")}
+            marked={isChanged("departure_timezone")}
+          >
+            <TimezoneSelect
               value={form.departure_timezone}
-              onChange={(e) => set("departure_timezone", e.target.value)}
-              placeholder="Asia/Shanghai"
+              onChange={(value) => {
+                setTzTouched(true);
+                set("departure_timezone", value);
+              }}
             />
           </Field>
-          <Field label={t("flights.arrivalTimezone")}>
-            <Input
+          <Field label={t("flights.arrivalTimezone")} marked={isChanged("arrival_timezone")}>
+            <TimezoneSelect
               value={form.arrival_timezone}
-              onChange={(e) => set("arrival_timezone", e.target.value)}
-              placeholder="Asia/Singapore"
+              onChange={(value) => {
+                setTzTouched(true);
+                set("arrival_timezone", value);
+              }}
             />
           </Field>
         </div>
@@ -636,42 +750,42 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
 
       <Section title={t("flights.section.airport")}>
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label={t("flights.departureTerminal")}>
+          <Field label={t("flights.departureTerminal")} marked={isChanged("departure_terminal")}>
             <Input
               value={form.departure_terminal}
               onChange={(e) => set("departure_terminal", e.target.value)}
               placeholder="T1"
             />
           </Field>
-          <Field label={t("flights.departureGate")}>
+          <Field label={t("flights.departureGate")} marked={isChanged("departure_gate")}>
             <Input
               value={form.departure_gate}
               onChange={(e) => set("departure_gate", e.target.value)}
               placeholder="23"
             />
           </Field>
-          <Field label={t("flights.arrivalTerminal")}>
+          <Field label={t("flights.arrivalTerminal")} marked={isChanged("arrival_terminal")}>
             <Input
               value={form.arrival_terminal}
               onChange={(e) => set("arrival_terminal", e.target.value)}
               placeholder="T4"
             />
           </Field>
-          <Field label={t("flights.arrivalGate")}>
+          <Field label={t("flights.arrivalGate")} marked={isChanged("arrival_gate")}>
             <Input
               value={form.arrival_gate}
               onChange={(e) => set("arrival_gate", e.target.value)}
               placeholder="B12"
             />
           </Field>
-          <Field label={t("flights.checkInDesk")}>
+          <Field label={t("flights.checkInDesk")} marked={isChanged("check_in_desk")}>
             <Input
               value={form.check_in_desk}
               onChange={(e) => set("check_in_desk", e.target.value)}
               placeholder="C"
             />
           </Field>
-          <Field label={t("flights.baggageBelt")}>
+          <Field label={t("flights.baggageBelt")} marked={isChanged("baggage_belt")}>
             <Input
               value={form.baggage_belt}
               onChange={(e) => set("baggage_belt", e.target.value)}
@@ -683,21 +797,21 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
 
       <Section title={t("flights.section.aircraft")}>
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label={t("flights.aircraftModel")}>
+          <Field label={t("flights.aircraftModel")} marked={isChanged("aircraft_model")}>
             <Input
               value={form.aircraft_model}
               onChange={(e) => set("aircraft_model", e.target.value)}
               placeholder="Airbus A330-300"
             />
           </Field>
-          <Field label={t("flights.aircraftReg")}>
+          <Field label={t("flights.aircraftReg")} marked={isChanged("aircraft_reg")}>
             <Input
               value={form.aircraft_reg}
               onChange={(e) => set("aircraft_reg", e.target.value)}
               placeholder="B-HWM"
             />
           </Field>
-          <Field label={t("flights.cabinClass")}>
+          <Field label={t("flights.cabinClass")} marked={isChanged("cabin_class")}>
             <Select
               value={form.cabin_class}
               onChange={(e) => set("cabin_class", e.target.value)}
@@ -709,7 +823,7 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
               <option value="first">{t("flights.cabin.first")}</option>
             </Select>
           </Field>
-          <Field label={t("flights.seat")}>
+          <Field label={t("flights.seat")} marked={isChanged("seat")}>
             <Input value={form.seat} onChange={(e) => set("seat", e.target.value)} placeholder="32A" />
           </Field>
         </div>
@@ -717,7 +831,7 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
 
       <Section title={t("flights.section.ticket")}>
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label={t("flights.price")}>
+          <Field label={t("flights.price")} marked={isChanged("price")}>
             <Input
               type="number"
               step="0.01"
@@ -725,14 +839,14 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
               onChange={(e) => set("price", e.target.value)}
             />
           </Field>
-          <Field label={t("flights.currency")}>
+          <Field label={t("flights.currency")} marked={isChanged("currency")}>
             <Input
               value={form.currency}
               maxLength={3}
               onChange={(e) => set("currency", e.target.value.toUpperCase())}
             />
           </Field>
-          <Field label={t("flights.distance")}>
+          <Field label={t("flights.distance")} marked={isChanged("distance")}>
             <Input
               type="number"
               step="0.01"
@@ -741,14 +855,14 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
               onChange={(e) => set("distance", e.target.value)}
             />
           </Field>
-          <Field label={t("flights.ticketNumber")}>
+          <Field label={t("flights.ticketNumber")} marked={isChanged("ticket_number")}>
             <Input
               value={form.ticket_number}
               onChange={(e) => set("ticket_number", e.target.value)}
               placeholder="160-1234567890"
             />
           </Field>
-          <Field label={t("flights.purchaseCredentialType")}>
+          <Field label={t("flights.purchaseCredentialType")} marked={isChanged("purchase_credential_type")}>
             <Select
               value={form.purchase_credential_type}
               onChange={(e) => set("purchase_credential_type", e.target.value)}
@@ -761,14 +875,18 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
               <option value="other">{t("flights.credentialType.other")}</option>
             </Select>
           </Field>
-          <Field label={t("flights.purchaseCredential")}>
+          <Field label={t("flights.purchaseCredential")} marked={isChanged("purchase_credential")}>
             <Input
               value={form.purchase_credential}
               onChange={(e) => set("purchase_credential", e.target.value)}
               placeholder="E12345678"
             />
           </Field>
-          <Field label={t("flights.bookingReference")} className="md:col-span-2">
+          <Field
+            label={t("flights.bookingReference")}
+            marked={isChanged("booking_reference")}
+            className="md:col-span-2"
+          >
             <Input
               value={form.booking_reference}
               onChange={(e) => set("booking_reference", e.target.value)}
@@ -781,13 +899,37 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
 
       <Section title={t("flights.section.notes")}>
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label={t("flights.notes")} className="md:col-span-2">
+          <Field
+            label={t("flights.notes")}
+            marked={isChanged("notes")}
+            className="md:col-span-2"
+          >
             <Textarea
               rows={3}
               value={form.notes}
               onChange={(e) => set("notes", e.target.value)}
             />
           </Field>
+          {editing ? (
+            <div className="md:col-span-2">
+              {summaryLabels.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-3.5 py-2.5">
+                  <Badge variant="primary">
+                    {summaryLabels.length === 1
+                      ? t("flights.changedOne")
+                      : t("flights.changedMany", { count: summaryLabels.length })}
+                  </Badge>
+                  <span className="text-sm text-foreground/80">
+                    {summaryLabels.join(joiner)}
+                  </span>
+                </div>
+              ) : (
+                <p className="px-0.5 text-sm text-muted-foreground">
+                  {t("flights.noChanges")}
+                </p>
+              )}
+            </div>
+          ) : null}
           <div className="flex items-center gap-3 md:col-span-2">
             <Button type="submit" disabled={submitting}>
               {t("common.save")}
@@ -849,21 +991,31 @@ function Section({
 function Field({
   label,
   required,
+  marked,
   className,
   children,
 }: {
   label: string;
   required?: boolean;
+  marked?: boolean;
   className?: string;
   children: React.ReactNode;
 }) {
+  const { t } = useI18n();
   return (
-    <div className={className}>
-      <Label className="mb-1.5 block">
-        {label}
-        {required ? (
-          <span className="text-danger" aria-hidden="true">
-            *
+    <div className={cn(className, marked && "field-changed")}>
+      <Label className="mb-1.5 flex items-center gap-2">
+        <span>
+          {label}
+          {required ? (
+            <span className="text-danger" aria-hidden="true">
+              *
+            </span>
+          ) : null}
+        </span>
+        {marked ? (
+          <span className="inline-flex items-center rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-primary">
+            {t("flights.changedMarker")}
           </span>
         ) : null}
       </Label>

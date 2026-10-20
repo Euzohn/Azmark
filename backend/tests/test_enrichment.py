@@ -163,6 +163,42 @@ def test_lookup_keeps_local_english_with_provider_chinese(client, monkeypatch):
     assert body["airline_name_zh"] == "金鹏航空"
 
 
+def test_merge_keeps_curated_name_when_codes_agree():
+    """VariFlight returns legal names; the curated short name should win."""
+    from app.services import reference
+    from app.services.flight_enrichment import _merge
+
+    local = reference.lookup_flight_number("MU5101")
+    remote = FlightLookupResult(
+        flight_number="MU5101",
+        airline_code="MU",
+        airline_name_zh="中国东方航空股份有限公司",
+        provider="variflight",
+    )
+    merged = _merge(local, remote)
+    assert merged.airline_code == "MU"
+    assert merged.airline_name_zh == "中国东方航空"
+    assert merged.airline_name == "China Eastern Airlines"
+
+
+def test_merge_drops_local_name_when_provider_corrects_the_code():
+    """A corrected carrier must not keep the prefix-guessed airline names."""
+    from app.services import reference
+    from app.services.flight_enrichment import _merge
+
+    local = reference.lookup_flight_number("MU5101")
+    remote = FlightLookupResult(
+        flight_number="MU5101",
+        airline_code="XX",
+        airline_name_zh="另一家航司",
+        provider="variflight",
+    )
+    merged = _merge(local, remote)
+    assert merged.airline_code == "XX"
+    assert merged.airline_name_zh == "另一家航司"
+    assert merged.airline_name is None
+
+
 def test_lookup_uses_configured_provider_by_default(client):
     token = register_and_login(client, "lk_default")["access_token"]
     assert _put_key(client, token, "fake").status_code == 200

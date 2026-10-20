@@ -2,10 +2,22 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.core.timezones import normalize_timezone
+
+
+def _normalize_tz(value: object) -> object:
+    """Pydantic before-validator: offset strings → IANA names."""
+    return normalize_timezone(value) if isinstance(value, str) else value
 
 
 class FlightBase(BaseModel):
+    @field_validator("departure_timezone", "arrival_timezone", mode="before")
+    @classmethod
+    def _normalize_timezone(cls, value: object) -> object:
+        return _normalize_tz(value)
+
     status: str = Field(default="scheduled", max_length=20)
     departure_time: datetime | None = None
     arrival_time: datetime | None = None
@@ -45,6 +57,11 @@ class FlightCreate(FlightBase):
 
 
 class FlightUpdate(BaseModel):
+    @field_validator("departure_timezone", "arrival_timezone", mode="before")
+    @classmethod
+    def _normalize_timezone(cls, value: object) -> object:
+        return _normalize_tz(value)
+
     status: str | None = Field(default=None, max_length=20)
     departure_time: datetime | None = None
     arrival_time: datetime | None = None
@@ -97,6 +114,11 @@ class FlightList(BaseModel):
 
 
 class TrainBase(BaseModel):
+    @field_validator("departure_timezone", "arrival_timezone", mode="before")
+    @classmethod
+    def _normalize_timezone(cls, value: object) -> object:
+        return _normalize_tz(value)
+
     status: str = Field(default="scheduled", max_length=20)
     departure_time: datetime | None = None
     arrival_time: datetime | None = None
@@ -133,6 +155,11 @@ class TrainCreate(TrainBase):
 
 
 class TrainUpdate(BaseModel):
+    @field_validator("departure_timezone", "arrival_timezone", mode="before")
+    @classmethod
+    def _normalize_timezone(cls, value: object) -> object:
+        return _normalize_tz(value)
+
     status: str | None = Field(default=None, max_length=20)
     departure_time: datetime | None = None
     arrival_time: datetime | None = None
@@ -182,6 +209,11 @@ class TrainList(BaseModel):
 
 
 class OtherTransportBase(BaseModel):
+    @field_validator("departure_timezone", "arrival_timezone", mode="before")
+    @classmethod
+    def _normalize_timezone(cls, value: object) -> object:
+        return _normalize_tz(value)
+
     status: str = Field(default="scheduled", max_length=20)
     departure_time: datetime | None = None
     arrival_time: datetime | None = None
@@ -214,6 +246,11 @@ class OtherTransportCreate(OtherTransportBase):
 
 
 class OtherTransportUpdate(BaseModel):
+    @field_validator("departure_timezone", "arrival_timezone", mode="before")
+    @classmethod
+    def _normalize_timezone(cls, value: object) -> object:
+        return _normalize_tz(value)
+
     status: str | None = Field(default=None, max_length=20)
     departure_time: datetime | None = None
     arrival_time: datetime | None = None

@@ -195,11 +195,16 @@ body {
  * Edit-diff marker: when a record is opened for editing, every field whose
  * value differs from the saved one picks up a soft brand tint plus a left
  * accent bar, so it is obvious what will change before hitting save.
- * Focus state (specificity 0,2,0) still wins over the tint (0,1,1).
+ * The `> div` branch reaches controls that are wrapped one level deep
+ * (search comboboxes, the date+time schedule pair); focus state (0,2,0) still
+ * wins over both the direct (0,1,1) and wrapped (0,1,2) tints.
  */
 .field-changed > input,
 .field-changed > select,
-.field-changed > textarea {
+.field-changed > textarea,
+.field-changed > div input,
+.field-changed > div select,
+.field-changed > div textarea {
   border-color: color-mix(in srgb, var(--primary) 50%, var(--border));
   background-color: color-mix(in srgb, var(--primary) 5%, var(--card));
   box-shadow: inset 3px 0 0 var(--primary);

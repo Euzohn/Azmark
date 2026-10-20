@@ -1,15 +1,21 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { TimezoneSelect } from "@/components/ui/timezone-select";
 import { api } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import { useAuth } from "@/lib/auth-store";
+import { useI18n, type TranslationKey } from "@/lib/i18n";
+import { defaultTimezone } from "@/lib/timezones";
+import { useFormDiff } from "@/lib/use-form-diff";
+import { cn } from "@/lib/utils";
 import type { Train, TrainInput } from "@/lib/types";
 
 function toLocalInput(value: string | null | undefined): string {
@@ -35,15 +41,40 @@ function autoStatus(departure: string): string | null {
   return date.getTime() < Date.now() ? "completed" : "scheduled";
 }
 
-interface TrainFormProps {
-  initial?: Train;
-  submitting?: boolean;
-  onSubmit: (data: TrainInput) => void | Promise<void>;
-}
+type TrainFormState = {
+  service_number: string;
+  carrier: string;
+  origin: string;
+  destination: string;
+  departure_time: string;
+  arrival_time: string;
+  actual_departure_time: string;
+  actual_arrival_time: string;
+  train_type: string;
+  carriage: string;
+  cabin_class: string;
+  seat: string;
+  seat_type: string;
+  ticket_type: string;
+  departure_gate: string;
+  arrival_gate: string;
+  departure_timezone: string;
+  arrival_timezone: string;
+  status: string;
+  price: string;
+  currency: string;
+  distance: string;
+  ticket_number: string;
+  booking_reference: string;
+  purchase_credential_type: string;
+  purchase_credential: string;
+  notes: string;
+  trip_id: string;
+};
 
-export function TrainForm({ initial, submitting, onSubmit }: TrainFormProps) {
-  const { t } = useI18n();
-  const [form, setForm] = useState({
+/** The value each field would hold if untouched: the saved record, or blank. */
+function snapshot(initial?: Train): TrainFormState {
+  return {
     service_number: initial?.service_number ?? "",
     carrier: initial?.carrier ?? "",
     origin: initial?.origin ?? "",
@@ -72,6 +103,59 @@ export function TrainForm({ initial, submitting, onSubmit }: TrainFormProps) {
     purchase_credential: initial?.purchase_credential ?? "",
     notes: initial?.notes ?? "",
     trip_id: initial?.trip_id ?? "",
+  };
+}
+
+const FIELD_LABELS: Record<keyof TrainFormState, TranslationKey> = {
+  service_number: "trains.serviceNumber",
+  carrier: "trains.carrier",
+  origin: "trains.origin",
+  destination: "trains.destination",
+  departure_time: "trains.departureTime",
+  arrival_time: "trains.arrivalTime",
+  actual_departure_time: "trains.actualDepartureTime",
+  actual_arrival_time: "trains.actualArrivalTime",
+  train_type: "trains.trainType",
+  carriage: "trains.carriage",
+  cabin_class: "trains.cabinClass",
+  seat: "trains.seat",
+  seat_type: "trains.seatType",
+  ticket_type: "trains.ticketType",
+  departure_gate: "trains.departurePlatform",
+  arrival_gate: "trains.arrivalPlatform",
+  departure_timezone: "trains.departureTimezone",
+  arrival_timezone: "trains.arrivalTimezone",
+  status: "trains.status",
+  price: "trains.price",
+  currency: "trains.currency",
+  distance: "trains.distance",
+  ticket_number: "trains.ticketNumber",
+  booking_reference: "trains.bookingReference",
+  purchase_credential_type: "trains.purchaseCredentialType",
+  purchase_credential: "trains.purchaseCredential",
+  notes: "trains.notes",
+  trip_id: "trains.trip",
+};
+
+interface TrainFormProps {
+  initial?: Train;
+  submitting?: boolean;
+  onSubmit: (data: TrainInput) => void | Promise<void>;
+}
+
+export function TrainForm({ initial, submitting, onSubmit }: TrainFormProps) {
+  const { user } = useAuth();
+  const { t, locale } = useI18n();
+  const [form, setForm] = useState<TrainFormState>(() => {
+    const base = snapshot(initial);
+    if (initial) return base;
+    // New records start in the traveller's own zone (profile setting).
+    const tz = defaultTimezone(user?.timezone);
+    return {
+      ...base,
+      departure_timezone: base.departure_timezone || tz,
+      arrival_timezone: base.arrival_timezone || tz,
+    };
   });
 
   const { data: trips } = useQuery({
@@ -84,6 +168,13 @@ export function TrainForm({ initial, submitting, onSubmit }: TrainFormProps) {
 
   const set = (key: keyof typeof form, value: string) =>
     setForm((prev) => ({ ...prev, [key]: value }));
+
+  const editing = Boolean(initial);
+  const baseline = useMemo(() => snapshot(initial), [initial]);
+  const { changed, changedLabels } = useFormDiff(form, baseline, FIELD_LABELS);
+  const joiner = locale === "zh-CN" ? "、" : ", ";
+  // Mark only when editing — a blank record is not "modified".
+  const isChanged = (key: keyof TrainFormState) => editing && changed.has(key);
 
   const setDepartureTime = (value: string) => {
     setForm((prev) => {
@@ -140,7 +231,7 @@ export function TrainForm({ initial, submitting, onSubmit }: TrainFormProps) {
     <form onSubmit={handleSubmit} className="flex flex-col gap-8">
       <Section title={t("trains.section.train")}>
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label={t("trains.serviceNumber")}>
+          <Field label={t("trains.serviceNumber")} marked={isChanged("service_number")}>
             <Input
               value={form.service_number}
               onChange={(e) => set("service_number", e.target.value)}
@@ -148,28 +239,28 @@ export function TrainForm({ initial, submitting, onSubmit }: TrainFormProps) {
               className="flex-1"
             />
           </Field>
-          <Field label={t("trains.carrier")}>
+          <Field label={t("trains.carrier")} marked={isChanged("carrier")}>
             <Input
               value={form.carrier}
               onChange={(e) => set("carrier", e.target.value)}
               placeholder={t("trains.carrier")}
             />
           </Field>
-          <Field label={t("trains.origin")} required>
+          <Field label={t("trains.origin")} required marked={isChanged("origin")}>
             <Input
               value={form.origin}
               onChange={(e) => set("origin", e.target.value)}
               placeholder={t("trains.origin")}
             />
           </Field>
-          <Field label={t("trains.destination")} required>
+          <Field label={t("trains.destination")} required marked={isChanged("destination")}>
             <Input
               value={form.destination}
               onChange={(e) => set("destination", e.target.value)}
               placeholder={t("trains.destination")}
             />
           </Field>
-          <Field label={t("trains.trainType")}>
+          <Field label={t("trains.trainType")} marked={isChanged("train_type")}>
             <Select
               value={form.train_type}
               onChange={(e) => set("train_type", e.target.value)}
@@ -181,7 +272,7 @@ export function TrainForm({ initial, submitting, onSubmit }: TrainFormProps) {
               <option value="night">{t("trains.trainType.night")}</option>
             </Select>
           </Field>
-          <Field label={t("trains.trip")}>
+          <Field label={t("trains.trip")} marked={isChanged("trip_id")}>
             <Select value={form.trip_id} onChange={(e) => set("trip_id", e.target.value)}>
               <option value="">{t("trains.tripNone")}</option>
               {trips?.items.map((trip) => (
@@ -191,7 +282,7 @@ export function TrainForm({ initial, submitting, onSubmit }: TrainFormProps) {
               ))}
             </Select>
           </Field>
-          <Field label={t("trains.status")}>
+          <Field label={t("trains.status")} marked={isChanged("status")}>
             <Select
               value={form.status}
               onChange={(e) => {
@@ -209,46 +300,44 @@ export function TrainForm({ initial, submitting, onSubmit }: TrainFormProps) {
 
       <Section title={t("trains.section.schedule")}>
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label={t("trains.departureTime")}>
+          <Field label={t("trains.departureTime")} marked={isChanged("departure_time")}>
             <Input
               type="datetime-local"
               value={form.departure_time}
               onChange={(e) => setDepartureTime(e.target.value)}
             />
           </Field>
-          <Field label={t("trains.arrivalTime")}>
+          <Field label={t("trains.arrivalTime")} marked={isChanged("arrival_time")}>
             <Input
               type="datetime-local"
               value={form.arrival_time}
               onChange={(e) => set("arrival_time", e.target.value)}
             />
           </Field>
-          <Field label={t("trains.actualDepartureTime")}>
+          <Field label={t("trains.actualDepartureTime")} marked={isChanged("actual_departure_time")}>
             <Input
               type="datetime-local"
               value={form.actual_departure_time}
               onChange={(e) => set("actual_departure_time", e.target.value)}
             />
           </Field>
-          <Field label={t("trains.actualArrivalTime")}>
+          <Field label={t("trains.actualArrivalTime")} marked={isChanged("actual_arrival_time")}>
             <Input
               type="datetime-local"
               value={form.actual_arrival_time}
               onChange={(e) => set("actual_arrival_time", e.target.value)}
             />
           </Field>
-          <Field label={t("trains.departureTimezone")}>
-            <Input
+          <Field label={t("trains.departureTimezone")} marked={isChanged("departure_timezone")}>
+            <TimezoneSelect
               value={form.departure_timezone}
-              onChange={(e) => set("departure_timezone", e.target.value)}
-              placeholder="Asia/Shanghai"
+              onChange={(value) => set("departure_timezone", value)}
             />
           </Field>
-          <Field label={t("trains.arrivalTimezone")}>
-            <Input
+          <Field label={t("trains.arrivalTimezone")} marked={isChanged("arrival_timezone")}>
+            <TimezoneSelect
               value={form.arrival_timezone}
-              onChange={(e) => set("arrival_timezone", e.target.value)}
-              placeholder="Asia/Beijing"
+              onChange={(value) => set("arrival_timezone", value)}
             />
           </Field>
         </div>
@@ -256,14 +345,14 @@ export function TrainForm({ initial, submitting, onSubmit }: TrainFormProps) {
 
       <Section title={t("trains.section.platform")}>
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label={t("trains.departurePlatform")}>
+          <Field label={t("trains.departurePlatform")} marked={isChanged("departure_gate")}>
             <Input
               value={form.departure_gate}
               onChange={(e) => set("departure_gate", e.target.value)}
               placeholder="12"
             />
           </Field>
-          <Field label={t("trains.arrivalPlatform")}>
+          <Field label={t("trains.arrivalPlatform")} marked={isChanged("arrival_gate")}>
             <Input
               value={form.arrival_gate}
               onChange={(e) => set("arrival_gate", e.target.value)}
@@ -275,7 +364,7 @@ export function TrainForm({ initial, submitting, onSubmit }: TrainFormProps) {
 
       <Section title={t("trains.section.seat")}>
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label={t("trains.cabinClass")}>
+          <Field label={t("trains.cabinClass")} marked={isChanged("cabin_class")}>
             <Select
               value={form.cabin_class}
               onChange={(e) => set("cabin_class", e.target.value)}
@@ -290,21 +379,21 @@ export function TrainForm({ initial, submitting, onSubmit }: TrainFormProps) {
               <option value="soft_seat">{t("trains.cabin.soft_seat")}</option>
             </Select>
           </Field>
-          <Field label={t("trains.carriage")}>
+          <Field label={t("trains.carriage")} marked={isChanged("carriage")}>
             <Input
               value={form.carriage}
               onChange={(e) => set("carriage", e.target.value)}
               placeholder="08"
             />
           </Field>
-          <Field label={t("trains.seat")}>
+          <Field label={t("trains.seat")} marked={isChanged("seat")}>
             <Input
               value={form.seat}
               onChange={(e) => set("seat", e.target.value)}
               placeholder="12A"
             />
           </Field>
-          <Field label={t("trains.seatType")}>
+          <Field label={t("trains.seatType")} marked={isChanged("seat_type")}>
             <Select
               value={form.seat_type}
               onChange={(e) => set("seat_type", e.target.value)}
@@ -318,7 +407,7 @@ export function TrainForm({ initial, submitting, onSubmit }: TrainFormProps) {
               <option value="standing">{t("trains.seatType.standing")}</option>
             </Select>
           </Field>
-          <Field label={t("trains.ticketType")}>
+          <Field label={t("trains.ticketType")} marked={isChanged("ticket_type")}>
             <Select
               value={form.ticket_type}
               onChange={(e) => set("ticket_type", e.target.value)}
@@ -335,7 +424,7 @@ export function TrainForm({ initial, submitting, onSubmit }: TrainFormProps) {
 
       <Section title={t("trains.section.ticket")}>
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label={t("trains.price")}>
+          <Field label={t("trains.price")} marked={isChanged("price")}>
             <Input
               type="number"
               step="0.01"
@@ -343,14 +432,14 @@ export function TrainForm({ initial, submitting, onSubmit }: TrainFormProps) {
               onChange={(e) => set("price", e.target.value)}
             />
           </Field>
-          <Field label={t("trains.currency")}>
+          <Field label={t("trains.currency")} marked={isChanged("currency")}>
             <Input
               value={form.currency}
               maxLength={3}
               onChange={(e) => set("currency", e.target.value.toUpperCase())}
             />
           </Field>
-          <Field label={t("trains.distance")}>
+          <Field label={t("trains.distance")} marked={isChanged("distance")}>
             <Input
               type="number"
               step="0.01"
@@ -359,14 +448,14 @@ export function TrainForm({ initial, submitting, onSubmit }: TrainFormProps) {
               onChange={(e) => set("distance", e.target.value)}
             />
           </Field>
-          <Field label={t("trains.ticketNumber")}>
+          <Field label={t("trains.ticketNumber")} marked={isChanged("ticket_number")}>
             <Input
               value={form.ticket_number}
               onChange={(e) => set("ticket_number", e.target.value)}
               placeholder="E123456789"
             />
           </Field>
-          <Field label={t("trains.purchaseCredentialType")}>
+          <Field label={t("trains.purchaseCredentialType")} marked={isChanged("purchase_credential_type")}>
             <Select
               value={form.purchase_credential_type}
               onChange={(e) => set("purchase_credential_type", e.target.value)}
@@ -383,14 +472,18 @@ export function TrainForm({ initial, submitting, onSubmit }: TrainFormProps) {
               <option value="other">{t("flights.credentialType.other")}</option>
             </Select>
           </Field>
-          <Field label={t("trains.purchaseCredential")}>
+          <Field label={t("trains.purchaseCredential")} marked={isChanged("purchase_credential")}>
             <Input
               value={form.purchase_credential}
               onChange={(e) => set("purchase_credential", e.target.value)}
               placeholder="123456789012345678"
             />
           </Field>
-          <Field label={t("trains.bookingReference")} className="md:col-span-2">
+          <Field
+            label={t("trains.bookingReference")}
+            marked={isChanged("booking_reference")}
+            className="md:col-span-2"
+          >
             <Input
               value={form.booking_reference}
               onChange={(e) => set("booking_reference", e.target.value)}
@@ -402,13 +495,37 @@ export function TrainForm({ initial, submitting, onSubmit }: TrainFormProps) {
 
       <Section title={t("trains.section.notes")}>
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label={t("trains.notes")} className="md:col-span-2">
+          <Field
+            label={t("trains.notes")}
+            marked={isChanged("notes")}
+            className="md:col-span-2"
+          >
             <Textarea
               rows={3}
               value={form.notes}
               onChange={(e) => set("notes", e.target.value)}
             />
           </Field>
+          {editing ? (
+            <div className="md:col-span-2">
+              {changed.size > 0 ? (
+                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-3.5 py-2.5">
+                  <Badge variant="primary">
+                    {changed.size === 1
+                      ? t("trains.changedOne")
+                      : t("trains.changedMany", { count: changed.size })}
+                  </Badge>
+                  <span className="text-sm text-foreground/80">
+                    {changedLabels.join(joiner)}
+                  </span>
+                </div>
+              ) : (
+                <p className="px-0.5 text-sm text-muted-foreground">
+                  {t("trains.noChanges")}
+                </p>
+              )}
+            </div>
+          ) : null}
           <div className="flex items-center gap-3 md:col-span-2">
             <Button type="submit" disabled={submitting}>
               {t("common.save")}
@@ -441,21 +558,31 @@ function Section({
 function Field({
   label,
   required,
+  marked,
   className,
   children,
 }: {
   label: string;
   required?: boolean;
+  marked?: boolean;
   className?: string;
   children: React.ReactNode;
 }) {
+  const { t } = useI18n();
   return (
-    <div className={className}>
-      <Label className="mb-1.5 block">
-        {label}
-        {required ? (
-          <span className="text-danger" aria-hidden="true">
-            *
+    <div className={cn(className, marked && "field-changed")}>
+      <Label className="mb-1.5 flex items-center gap-2">
+        <span>
+          {label}
+          {required ? (
+            <span className="text-danger" aria-hidden="true">
+              *
+            </span>
+          ) : null}
+        </span>
+        {marked ? (
+          <span className="inline-flex items-center rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-primary">
+            {t("trains.changedMarker")}
           </span>
         ) : null}
       </Label>

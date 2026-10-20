@@ -15,6 +15,10 @@ VariFlight field reference (confirmed against a live response):
   FlightDeptimePlanDate / FlightArrtimePlanDate  scheduled times (local)
   FlightDeptimeDate     / FlightArrtimeDate       actual times (local)
   FlightDeptimeReadyDate/ FlightArrtimeReadyDate  estimated times (local)
+
+  Note: the "Ready" fields are estimates, not actuals. The record model has
+  no estimated-time column, so they are deliberately not mapped onto
+  actual_departure_time / actual_arrival_time.
   FlightHTerminal / FlightTerminal  departure / arrival terminal
   BoardGate                          boarding (departure) gate
   CheckinTable                       check-in counters (e.g. "C03-D07")
@@ -344,7 +348,6 @@ class VariflightProvider(FlightProvider):
                     "FlightDeptimeDate",
                     "FlightDeptimeActual",
                     "DepTimeActual",
-                    "FlightDeptimeReadyDate",
                 ),
                 offset_seconds=org_tz_secs,
             ),
@@ -354,7 +357,6 @@ class VariflightProvider(FlightProvider):
                     "FlightArrtimeDate",
                     "FlightArrtimeActual",
                     "ArrTimeActual",
-                    "FlightArrtimeReadyDate",
                 ),
                 offset_seconds=dst_tz_secs,
             ),

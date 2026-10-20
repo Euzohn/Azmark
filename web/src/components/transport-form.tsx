@@ -1,15 +1,21 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { TimezoneSelect } from "@/components/ui/timezone-select";
 import { api } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import { useAuth } from "@/lib/auth-store";
+import { useI18n, type TranslationKey } from "@/lib/i18n";
+import { defaultTimezone } from "@/lib/timezones";
+import { useFormDiff } from "@/lib/use-form-diff";
+import { cn } from "@/lib/utils";
 import type { OtherTransport, OtherTransportInput } from "@/lib/types";
 
 function toLocalInput(value: string | null | undefined): string {
@@ -35,15 +41,36 @@ function autoStatus(departure: string): string | null {
   return date.getTime() < Date.now() ? "completed" : "scheduled";
 }
 
-interface TransportFormProps {
-  initial?: OtherTransport;
-  submitting?: boolean;
-  onSubmit: (data: OtherTransportInput) => void | Promise<void>;
-}
+type TransportFormState = {
+  vehicle_type: string;
+  service_number: string;
+  carrier: string;
+  origin: string;
+  destination: string;
+  departure_time: string;
+  arrival_time: string;
+  actual_departure_time: string;
+  actual_arrival_time: string;
+  departure_gate: string;
+  arrival_gate: string;
+  departure_timezone: string;
+  arrival_timezone: string;
+  seat: string;
+  status: string;
+  price: string;
+  currency: string;
+  distance: string;
+  ticket_number: string;
+  booking_reference: string;
+  purchase_credential_type: string;
+  purchase_credential: string;
+  notes: string;
+  trip_id: string;
+};
 
-export function TransportForm({ initial, submitting, onSubmit }: TransportFormProps) {
-  const { t } = useI18n();
-  const [form, setForm] = useState({
+/** The value each field would hold if untouched: the saved record, or blank. */
+function snapshot(initial?: OtherTransport): TransportFormState {
+  return {
     vehicle_type: initial?.vehicle_type ?? "",
     service_number: initial?.service_number ?? "",
     carrier: initial?.carrier ?? "",
@@ -68,6 +95,55 @@ export function TransportForm({ initial, submitting, onSubmit }: TransportFormPr
     purchase_credential: initial?.purchase_credential ?? "",
     notes: initial?.notes ?? "",
     trip_id: initial?.trip_id ?? "",
+  };
+}
+
+const FIELD_LABELS: Record<keyof TransportFormState, TranslationKey> = {
+  vehicle_type: "transports.vehicleType",
+  service_number: "transports.serviceNumber",
+  carrier: "transports.carrier",
+  origin: "transports.origin",
+  destination: "transports.destination",
+  departure_time: "transports.departureTime",
+  arrival_time: "transports.arrivalTime",
+  actual_departure_time: "transports.actualDepartureTime",
+  actual_arrival_time: "transports.actualArrivalTime",
+  departure_gate: "transports.departureStation",
+  arrival_gate: "transports.arrivalStation",
+  departure_timezone: "transports.departureTimezone",
+  arrival_timezone: "transports.arrivalTimezone",
+  seat: "transports.seat",
+  status: "transports.status",
+  price: "transports.price",
+  currency: "transports.currency",
+  distance: "transports.distance",
+  ticket_number: "transports.ticketNumber",
+  booking_reference: "transports.bookingReference",
+  purchase_credential_type: "transports.purchaseCredentialType",
+  purchase_credential: "transports.purchaseCredential",
+  notes: "transports.notes",
+  trip_id: "transports.trip",
+};
+
+interface TransportFormProps {
+  initial?: OtherTransport;
+  submitting?: boolean;
+  onSubmit: (data: OtherTransportInput) => void | Promise<void>;
+}
+
+export function TransportForm({ initial, submitting, onSubmit }: TransportFormProps) {
+  const { user } = useAuth();
+  const { t, locale } = useI18n();
+  const [form, setForm] = useState<TransportFormState>(() => {
+    const base = snapshot(initial);
+    if (initial) return base;
+    // New records start in the traveller's own zone (profile setting).
+    const tz = defaultTimezone(user?.timezone);
+    return {
+      ...base,
+      departure_timezone: base.departure_timezone || tz,
+      arrival_timezone: base.arrival_timezone || tz,
+    };
   });
 
   const { data: trips } = useQuery({
@@ -80,6 +156,13 @@ export function TransportForm({ initial, submitting, onSubmit }: TransportFormPr
 
   const set = (key: keyof typeof form, value: string) =>
     setForm((prev) => ({ ...prev, [key]: value }));
+
+  const editing = Boolean(initial);
+  const baseline = useMemo(() => snapshot(initial), [initial]);
+  const { changed, changedLabels } = useFormDiff(form, baseline, FIELD_LABELS);
+  const joiner = locale === "zh-CN" ? "、" : ", ";
+  // Mark only when editing — a blank record is not "modified".
+  const isChanged = (key: keyof TransportFormState) => editing && changed.has(key);
 
   const setDepartureTime = (value: string) => {
     setForm((prev) => {
@@ -132,7 +215,7 @@ export function TransportForm({ initial, submitting, onSubmit }: TransportFormPr
     <form onSubmit={handleSubmit} className="flex flex-col gap-8">
       <Section title={t("transports.section.transport")}>
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label={t("transports.vehicleType")}>
+          <Field label={t("transports.vehicleType")} marked={isChanged("vehicle_type")}>
             <Select
               value={form.vehicle_type}
               onChange={(e) => set("vehicle_type", e.target.value)}
@@ -149,35 +232,35 @@ export function TransportForm({ initial, submitting, onSubmit }: TransportFormPr
               <option value="other">{t("transports.vehicleType.other")}</option>
             </Select>
           </Field>
-          <Field label={t("transports.serviceNumber")}>
+          <Field label={t("transports.serviceNumber")} marked={isChanged("service_number")}>
             <Input
               value={form.service_number}
               onChange={(e) => set("service_number", e.target.value)}
               placeholder="BUS-5"
             />
           </Field>
-          <Field label={t("transports.carrier")}>
+          <Field label={t("transports.carrier")} marked={isChanged("carrier")}>
             <Input
               value={form.carrier}
               onChange={(e) => set("carrier", e.target.value)}
               placeholder={t("transports.carrier")}
             />
           </Field>
-          <Field label={t("transports.origin")} required>
+          <Field label={t("transports.origin")} required marked={isChanged("origin")}>
             <Input
               value={form.origin}
               onChange={(e) => set("origin", e.target.value)}
               placeholder={t("transports.origin")}
             />
           </Field>
-          <Field label={t("transports.destination")} required>
+          <Field label={t("transports.destination")} required marked={isChanged("destination")}>
             <Input
               value={form.destination}
               onChange={(e) => set("destination", e.target.value)}
               placeholder={t("transports.destination")}
             />
           </Field>
-          <Field label={t("transports.trip")}>
+          <Field label={t("transports.trip")} marked={isChanged("trip_id")}>
             <Select value={form.trip_id} onChange={(e) => set("trip_id", e.target.value)}>
               <option value="">{t("transports.tripNone")}</option>
               {trips?.items.map((trip) => (
@@ -187,7 +270,7 @@ export function TransportForm({ initial, submitting, onSubmit }: TransportFormPr
               ))}
             </Select>
           </Field>
-          <Field label={t("transports.status")}>
+          <Field label={t("transports.status")} marked={isChanged("status")}>
             <Select
               value={form.status}
               onChange={(e) => {
@@ -205,60 +288,64 @@ export function TransportForm({ initial, submitting, onSubmit }: TransportFormPr
 
       <Section title={t("transports.section.schedule")}>
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label={t("transports.departureTime")}>
+          <Field label={t("transports.departureTime")} marked={isChanged("departure_time")}>
             <Input
               type="datetime-local"
               value={form.departure_time}
               onChange={(e) => setDepartureTime(e.target.value)}
             />
           </Field>
-          <Field label={t("transports.arrivalTime")}>
+          <Field label={t("transports.arrivalTime")} marked={isChanged("arrival_time")}>
             <Input
               type="datetime-local"
               value={form.arrival_time}
               onChange={(e) => set("arrival_time", e.target.value)}
             />
           </Field>
-          <Field label={t("transports.actualDepartureTime")}>
+          <Field label={t("transports.actualDepartureTime")} marked={isChanged("actual_departure_time")}>
             <Input
               type="datetime-local"
               value={form.actual_departure_time}
               onChange={(e) => set("actual_departure_time", e.target.value)}
             />
           </Field>
-          <Field label={t("transports.actualArrivalTime")}>
+          <Field label={t("transports.actualArrivalTime")} marked={isChanged("actual_arrival_time")}>
             <Input
               type="datetime-local"
               value={form.actual_arrival_time}
               onChange={(e) => set("actual_arrival_time", e.target.value)}
             />
           </Field>
-          <Field label={t("transports.departureStation")}>
+          <Field label={t("transports.departureStation")} marked={isChanged("departure_gate")}>
             <Input
               value={form.departure_gate}
               onChange={(e) => set("departure_gate", e.target.value)}
               placeholder="A2"
             />
           </Field>
-          <Field label={t("transports.arrivalStation")}>
+          <Field label={t("transports.arrivalStation")} marked={isChanged("arrival_gate")}>
             <Input
               value={form.arrival_gate}
               onChange={(e) => set("arrival_gate", e.target.value)}
               placeholder="C5"
             />
           </Field>
-          <Field label={t("transports.departureTimezone")}>
-            <Input
+          <Field
+            label={t("transports.departureTimezone")}
+            marked={isChanged("departure_timezone")}
+          >
+            <TimezoneSelect
               value={form.departure_timezone}
-              onChange={(e) => set("departure_timezone", e.target.value)}
-              placeholder="Asia/Shanghai"
+              onChange={(value) => set("departure_timezone", value)}
             />
           </Field>
-          <Field label={t("transports.arrivalTimezone")}>
-            <Input
+          <Field
+            label={t("transports.arrivalTimezone")}
+            marked={isChanged("arrival_timezone")}
+          >
+            <TimezoneSelect
               value={form.arrival_timezone}
-              onChange={(e) => set("arrival_timezone", e.target.value)}
-              placeholder="Asia/Shanghai"
+              onChange={(value) => set("arrival_timezone", value)}
             />
           </Field>
         </div>
@@ -266,14 +353,14 @@ export function TransportForm({ initial, submitting, onSubmit }: TransportFormPr
 
       <Section title={t("transports.section.ticket")}>
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label={t("transports.seat")}>
+          <Field label={t("transports.seat")} marked={isChanged("seat")}>
             <Input
               value={form.seat}
               onChange={(e) => set("seat", e.target.value)}
               placeholder="12A"
             />
           </Field>
-          <Field label={t("transports.price")}>
+          <Field label={t("transports.price")} marked={isChanged("price")}>
             <Input
               type="number"
               step="0.01"
@@ -281,14 +368,14 @@ export function TransportForm({ initial, submitting, onSubmit }: TransportFormPr
               onChange={(e) => set("price", e.target.value)}
             />
           </Field>
-          <Field label={t("transports.currency")}>
+          <Field label={t("transports.currency")} marked={isChanged("currency")}>
             <Input
               value={form.currency}
               maxLength={3}
               onChange={(e) => set("currency", e.target.value.toUpperCase())}
             />
           </Field>
-          <Field label={t("transports.distance")}>
+          <Field label={t("transports.distance")} marked={isChanged("distance")}>
             <Input
               type="number"
               step="0.01"
@@ -297,14 +384,14 @@ export function TransportForm({ initial, submitting, onSubmit }: TransportFormPr
               onChange={(e) => set("distance", e.target.value)}
             />
           </Field>
-          <Field label={t("transports.ticketNumber")}>
+          <Field label={t("transports.ticketNumber")} marked={isChanged("ticket_number")}>
             <Input
               value={form.ticket_number}
               onChange={(e) => set("ticket_number", e.target.value)}
               placeholder="T123456"
             />
           </Field>
-          <Field label={t("transports.purchaseCredentialType")}>
+          <Field label={t("transports.purchaseCredentialType")} marked={isChanged("purchase_credential_type")}>
             <Select
               value={form.purchase_credential_type}
               onChange={(e) => set("purchase_credential_type", e.target.value)}
@@ -321,14 +408,18 @@ export function TransportForm({ initial, submitting, onSubmit }: TransportFormPr
               <option value="other">{t("flights.credentialType.other")}</option>
             </Select>
           </Field>
-          <Field label={t("transports.purchaseCredential")}>
+          <Field label={t("transports.purchaseCredential")} marked={isChanged("purchase_credential")}>
             <Input
               value={form.purchase_credential}
               onChange={(e) => set("purchase_credential", e.target.value)}
               placeholder="123456789012345678"
             />
           </Field>
-          <Field label={t("transports.bookingReference")} className="md:col-span-2">
+          <Field
+            label={t("transports.bookingReference")}
+            marked={isChanged("booking_reference")}
+            className="md:col-span-2"
+          >
             <Input
               value={form.booking_reference}
               onChange={(e) => set("booking_reference", e.target.value)}
@@ -340,13 +431,37 @@ export function TransportForm({ initial, submitting, onSubmit }: TransportFormPr
 
       <Section title={t("transports.section.notes")}>
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label={t("transports.notes")} className="md:col-span-2">
+          <Field
+            label={t("transports.notes")}
+            marked={isChanged("notes")}
+            className="md:col-span-2"
+          >
             <Textarea
               rows={3}
               value={form.notes}
               onChange={(e) => set("notes", e.target.value)}
             />
           </Field>
+          {editing ? (
+            <div className="md:col-span-2">
+              {changed.size > 0 ? (
+                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-3.5 py-2.5">
+                  <Badge variant="primary">
+                    {changed.size === 1
+                      ? t("transports.changedOne")
+                      : t("transports.changedMany", { count: changed.size })}
+                  </Badge>
+                  <span className="text-sm text-foreground/80">
+                    {changedLabels.join(joiner)}
+                  </span>
+                </div>
+              ) : (
+                <p className="px-0.5 text-sm text-muted-foreground">
+                  {t("transports.noChanges")}
+                </p>
+              )}
+            </div>
+          ) : null}
           <div className="flex items-center gap-3 md:col-span-2">
             <Button type="submit" disabled={submitting}>
               {t("common.save")}
@@ -379,21 +494,31 @@ function Section({
 function Field({
   label,
   required,
+  marked,
   className,
   children,
 }: {
   label: string;
   required?: boolean;
+  marked?: boolean;
   className?: string;
   children: React.ReactNode;
 }) {
+  const { t } = useI18n();
   return (
-    <div className={className}>
-      <Label className="mb-1.5 block">
-        {label}
-        {required ? (
-          <span className="text-danger" aria-hidden="true">
-            *
+    <div className={cn(className, marked && "field-changed")}>
+      <Label className="mb-1.5 flex items-center gap-2">
+        <span>
+          {label}
+          {required ? (
+            <span className="text-danger" aria-hidden="true">
+              *
+            </span>
+          ) : null}
+        </span>
+        {marked ? (
+          <span className="inline-flex items-center rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-primary">
+            {t("transports.changedMarker")}
           </span>
         ) : null}
       </Label>

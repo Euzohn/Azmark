@@ -13,6 +13,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 import app.providers as providers
+from app.core.timezones import normalize_timezone
 from app.providers.base import FlightLookupResult
 from app.schemas.flight_lookup import FlightLookupResponse
 from app.services import reference
@@ -67,9 +68,22 @@ def _merge(local: dict, remote: FlightLookupResult | None) -> FlightLookupRespon
     )
     if remote is not None:
         result.source = remote.provider
-        result.airline_code = remote.airline_code or result.airline_code
-        result.airline_name = remote.airline_name or result.airline_name
-        result.airline_name_zh = remote.airline_name_zh or result.airline_name_zh
+        local_code = result.airline_code
+        result.airline_code = remote.airline_code or local_code
+        same_airline = not (
+            remote.airline_code and local_code and remote.airline_code != local_code
+        )
+        if same_airline:
+            # The local reference is curated ("中国东方航空"); providers often
+            # return the registered legal name ("中国东方航空股份有限公司").
+            # Keep the short local name and only fill gaps from the provider.
+            result.airline_name = result.airline_name or remote.airline_name
+            result.airline_name_zh = result.airline_name_zh or remote.airline_name_zh
+        else:
+            # The provider corrected the prefix-inferred carrier, so the local
+            # names describe a different airline and must not be kept.
+            result.airline_name = remote.airline_name
+            result.airline_name_zh = remote.airline_name_zh
         result.origin_iata = remote.origin_iata
         result.destination_iata = remote.destination_iata
         result.origin_name = remote.origin_name
@@ -86,8 +100,11 @@ def _merge(local: dict, remote: FlightLookupResult | None) -> FlightLookupRespon
         result.baggage_belt = remote.baggage_belt
         result.aircraft_model = remote.aircraft_model
         result.aircraft_reg = remote.aircraft_reg
-        result.departure_timezone = remote.departure_timezone
-        result.arrival_timezone = remote.arrival_timezone
+        # VariFlight reports offsets ("+08:00"); the rest of the app only
+        # understands IANA names, so normalize at the aggregation point rather
+        # than inside the provider (which stays faithful to its source).
+        result.departure_timezone = normalize_timezone(remote.departure_timezone)
+        result.arrival_timezone = normalize_timezone(remote.arrival_timezone)
         result.aircraft = remote.aircraft
         result.status = _normalize_status(str(remote.status) if remote.status else None)
         result.distance = float(remote.distance) if remote.distance is not None else None

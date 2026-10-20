@@ -39,6 +39,32 @@ def test_cabin_class_roundtrip(client):
     assert listed["items"][0]["cabin_class"] == "premium_economy"
 
 
+def test_offset_timezone_normalized_to_iana(client):
+    token = register_and_login(client, "tz_user")["access_token"]
+    headers = auth_headers(token)
+
+    created = client.post(
+        "/api/v1/flights",
+        json={**FLIGHT, "departure_timezone": "+08:00", "arrival_timezone": "+09:00"},
+        headers=headers,
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    # VariFlight-style offsets are coerced to readable IANA names on write.
+    assert body["departure_timezone"] == "Asia/Shanghai"
+    assert body["arrival_timezone"] == "Asia/Tokyo"
+
+    # A PATCH with an offset is normalized too, so edits never reintroduce the
+    # mixed format.
+    patched = client.patch(
+        f"/api/v1/flights/{body['id']}",
+        json={"arrival_timezone": "+05:30"},
+        headers=headers,
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["arrival_timezone"] == "Asia/Kolkata"
+
+
 def test_create_and_list_flight(client):
     token = register_and_login(client, "flighter")["access_token"]
     headers = auth_headers(token)

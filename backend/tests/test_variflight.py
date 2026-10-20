@@ -178,6 +178,28 @@ def test_ascii_company_name_becomes_english_name():
     assert result.airline_name_zh is None
 
 
+def test_estimate_is_not_reported_as_actual_time():
+    # FlightDeptimeReadyDate / FlightArrtimeReadyDate are estimates; the record
+    # has no estimated-time field, so they must not surface as actual times.
+    flight = {
+        **SAMPLE_FLIGHT,
+        "FlightDeptimeDate": "",
+        "FlightArrtimeDate": "",
+        "FlightDeptimeReadyDate": "2026-10-20 08:05:00",
+        "FlightArrtimeReadyDate": "2026-10-20 10:15:00",
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_envelope(flight, as_repr=True))
+
+    result = asyncio.run(_lookup(handler))
+    assert result is not None
+    assert result.actual_departure_time is None
+    assert result.actual_arrival_time is None
+    assert result.departure_time.isoformat() == "2026-10-20T08:00:00+08:00"
+    assert result.arrival_time.isoformat() == "2026-10-20T10:10:00+08:00"
+
+
 def test_maps_states_and_timezone():
     from app.providers.variflight import _map_status
 

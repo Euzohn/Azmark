@@ -13,32 +13,7 @@ import { Select } from "@/components/ui/select";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-store";
 import { useI18n } from "@/lib/i18n";
-
-const FALLBACK_TIMEZONES = [
-  "UTC",
-  "Asia/Shanghai",
-  "Asia/Hong_Kong",
-  "Asia/Singapore",
-  "Asia/Tokyo",
-  "Asia/Seoul",
-  "Asia/Dubai",
-  "Europe/London",
-  "Europe/Paris",
-  "America/New_York",
-  "America/Los_Angeles",
-  "Australia/Sydney",
-];
-
-function timezoneOptions(): string[] {
-  try {
-    const zones = Intl.supportedValuesOf("timeZone");
-    return zones.length > 0 ? zones : FALLBACK_TIMEZONES;
-  } catch {
-    return FALLBACK_TIMEZONES;
-  }
-}
-
-const TIMEZONES = timezoneOptions();
+import { TIMEZONES } from "@/lib/timezones";
 
 const PROVIDER_LABELS: Record<string, string> = {
   aerodatabox: "AeroDataBox",
