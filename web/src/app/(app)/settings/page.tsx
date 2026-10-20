@@ -1,7 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, Trash2 } from "lucide-react";
+import { Download, KeyRound, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-store";
 import { useI18n } from "@/lib/i18n";
 import { TIMEZONES } from "@/lib/timezones";
@@ -26,8 +27,9 @@ const PROVIDER_LABELS: Record<string, string> = {
 
 export default function SettingsPage() {
   const { t } = useI18n();
-  const { user, setUser } = useAuth();
+  const { user, setUser, clear } = useAuth();
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   const [profile, setProfile] = useState({
     display_name: user?.display_name ?? "",
@@ -81,6 +83,47 @@ export default function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ["audit"] });
     },
     onError: () => setPasswordStatus("error"),
+  });
+
+  const [exportSensitive, setExportSensitive] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState(false);
+
+  const downloadExport = async () => {
+    setExportError(false);
+    setExporting(true);
+    try {
+      const blob = await api.exportData("json", exportSensitive);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "azmark-export.json";
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setExportError(true);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const [confirmUsername, setConfirmUsername] = useState("");
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteError, setDeleteError] = useState<"password" | "lastAdmin" | "failed" | null>(
+    null,
+  );
+
+  const deleteAccount = useMutation({
+    mutationFn: () => api.deleteAccount(deletePassword),
+    onSuccess: () => {
+      clear();
+      router.replace("/login");
+    },
+    onError: (error) => {
+      if (error instanceof ApiError && error.status === 409) setDeleteError("lastAdmin");
+      else if (error instanceof ApiError && error.status === 400) setDeleteError("password");
+      else setDeleteError("failed");
+    },
   });
 
   const { data: providerKeys } = useQuery({
@@ -498,6 +541,113 @@ export default function SettingsPage() {
               ) : null}
               {passwordStatus === "error" ? (
                 <span className="text-sm text-danger">{t("settings.wrongPassword")}</span>
+              ) : null}
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card
+        className="animate-fade-in-up border-danger/40"
+        style={{ animationDelay: "250ms" }}
+      >
+        <CardHeader>
+          <CardTitle className="text-danger">{t("settings.dangerZone")}</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-5">
+          <p className="text-sm text-muted-foreground">{t("settings.dangerZoneHint")}</p>
+
+          <div className="flex flex-col gap-3 rounded-lg border border-border p-4">
+            <div>
+              <div className="text-sm font-medium">{t("settings.exportFirst")}</div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t("settings.exportFirstHint")}
+              </p>
+            </div>
+            <label className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 accent-[var(--color-primary)]"
+                checked={exportSensitive}
+                onChange={(event) => setExportSensitive(event.target.checked)}
+              />
+              <span className="text-xs text-muted-foreground">
+                {t("data.includeSensitiveHint")}
+              </span>
+            </label>
+            <div className="flex items-center gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void downloadExport()}
+                disabled={exporting}
+              >
+                <Download className="h-4 w-4" />
+                {t("settings.exportFirstButton")}
+              </Button>
+              {exportError ? (
+                <span className="text-sm text-danger">{t("common.error")}</span>
+              ) : null}
+            </div>
+          </div>
+
+          <form
+            className="flex flex-col gap-3 rounded-lg border border-danger/40 p-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setDeleteError(null);
+              deleteAccount.mutate();
+            }}
+          >
+            <div>
+              <div className="text-sm font-medium">{t("settings.deleteAccount")}</div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t("settings.deleteAccountHint")}
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label className="mb-1.5 block">
+                  {t("settings.deleteAccountConfirm", { username: user?.username ?? "" })}
+                </Label>
+                <Input
+                  autoComplete="off"
+                  value={confirmUsername}
+                  onChange={(event) => setConfirmUsername(event.target.value)}
+                  required
+                />
+              </div>
+              <div>
+                <Label className="mb-1.5 block">{t("settings.currentPassword")}</Label>
+                <Input
+                  type="password"
+                  autoComplete="current-password"
+                  value={deletePassword}
+                  onChange={(event) => setDeletePassword(event.target.value)}
+                  required
+                />
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                type="submit"
+                variant="danger"
+                disabled={
+                  deleteAccount.isPending ||
+                  !deletePassword ||
+                  confirmUsername !== (user?.username ?? "")
+                }
+              >
+                {t("settings.deleteAccountButton")}
+              </Button>
+              {deleteError === "password" ? (
+                <span className="text-sm text-danger">{t("settings.wrongPassword")}</span>
+              ) : null}
+              {deleteError === "lastAdmin" ? (
+                <span className="text-sm text-danger">{t("settings.deleteAccountLastAdmin")}</span>
+              ) : null}
+              {deleteError === "failed" ? (
+                <span className="text-sm text-danger">{t("common.error")}</span>
               ) : null}
             </div>
           </form>

@@ -8,6 +8,13 @@ class Settings(BaseSettings):
 
     app_name: str = "Azmark API"
     api_v1_prefix: str = "/api/v1"
+    app_version: str = "0.1.0"
+
+    # Admin bootstrap (spec #78). Both email and password must be set; the
+    # account is created/promoted only while no active admin exists.
+    admin_email: str = ""
+    admin_username: str = ""
+    admin_password: str = ""
 
     database_url: str = "postgresql+psycopg://azmark:azmark@localhost:5432/azmark"
 

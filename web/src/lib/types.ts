@@ -300,6 +300,52 @@ export interface TokenResponse {
   token_type: string;
 }
 
+export interface AdminUser {
+  id: string;
+  username: string;
+  email: string | null;
+  display_name: string | null;
+  role: "USER" | "ADMIN";
+  status: "ACTIVE" | "DISABLED";
+  records: number;
+  trips: number;
+  created_at: string;
+}
+
+export interface AdminUserList {
+  items: AdminUser[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface AdminSystem {
+  version: string;
+  users: number;
+  active_users: number;
+  admins: number;
+  records: number;
+  trips: number;
+  audit_logs: number;
+}
+
+export interface AdminAuditLog {
+  id: string;
+  user_id: string | null;
+  action: string;
+  resource_type: string | null;
+  resource_id: string | null;
+  meta: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface AdminAuditLogList {
+  items: AdminAuditLog[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 export interface Airport {
   iata: string;
   icao: string | null;

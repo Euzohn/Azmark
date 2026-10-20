@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password, verify_password
-from app.models.user import User
+from app.models.user import User, UserRole, UserStatus
 from app.repositories.user import UserRepository
 
 
@@ -15,6 +15,10 @@ class UsernameTakenError(AuthError):
 
 class InvalidCredentialsError(AuthError):
     pass
+
+
+class LastAdminError(AuthError):
+    """Deleting this account would leave the instance without an active admin."""
 
 
 class AuthService:
@@ -59,3 +63,19 @@ class AuthService:
             raise UsernameTakenError(new_username)
         user.username = new_username
         return self.users.save(user)
+
+    def delete_account(self, *, user: User, password: str) -> None:
+        """Permanently delete the account and owned data (spec #48).
+
+        The caller must have already offered an export; this method only guards
+        the destructive action itself with the password and the last-admin rule.
+        """
+        if not verify_password(password, user.password_hash):
+            raise InvalidCredentialsError
+        if (
+            user.role == UserRole.ADMIN
+            and user.status == UserStatus.ACTIVE
+            and self.users.count_active_admins() <= 1
+        ):
+            raise LastAdminError
+        self.users.delete_account(user)

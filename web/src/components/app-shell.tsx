@@ -15,6 +15,7 @@ import {
   Plane,
   ScrollText,
   Settings,
+  Shield,
   TrainFront,
 } from "lucide-react";
 import Link from "next/link";
@@ -35,6 +36,7 @@ interface NavItem {
   href: string;
   key: TranslationKey;
   icon: LucideIcon;
+  adminOnly?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -49,6 +51,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/statistics", key: "nav.stats", icon: BarChart3 },
   { href: "/audit", key: "nav.audit", icon: ScrollText },
   { href: "/data", key: "nav.data", icon: Database },
+  { href: "/admin", key: "nav.admin", icon: Shield, adminOnly: true },
   { href: "/settings", key: "nav.settings", icon: Settings },
 ];
 
@@ -67,6 +70,7 @@ const MOBILE_MORE: NavItem[] = [
   { href: "/statistics", key: "nav.stats", icon: BarChart3 },
   { href: "/audit", key: "nav.audit", icon: ScrollText },
   { href: "/data", key: "nav.data", icon: Database },
+  { href: "/admin", key: "nav.admin", icon: Shield, adminOnly: true },
   { href: "/settings", key: "nav.settings", icon: Settings },
 ];
 
@@ -110,11 +114,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   const logout = () => {
+    // Record logout for the audit trail, but never block signing out.
+    void api.logout().catch(() => {});
     clear();
     router.replace("/login");
   };
 
   const identity = user?.display_name ?? user?.username ?? "";
+  const isAdmin = user?.role === "ADMIN";
+  const navItems = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin);
+  const mobileMoreItems = MOBILE_MORE.filter((item) => !item.adminOnly || isAdmin);
   const moreActive = MOBILE_MORE.some((item) => pathname.startsWith(item.href));
 
   return (
@@ -132,7 +141,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         <nav className="flex flex-col gap-1">
-          {NAV_ITEMS.map((item) => (
+          {navItems.map((item) => (
             <NavLink
               key={item.href}
               item={item}
@@ -249,7 +258,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </nav>
 
       <BottomSheet open={moreOpen} onClose={() => setMoreOpen(false)} title={t("nav.moreTitle")}>
-        {MOBILE_MORE.map((item) => {
+        {mobileMoreItems.map((item) => {
           const Icon = item.icon;
           const active = pathname.startsWith(item.href);
           return (

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.core.security import decode_access_token
-from app.models.user import User
+from app.models.user import User, UserRole, UserStatus
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -35,7 +35,16 @@ def get_current_user(
     user = db.get(User, user_id)
     if user is None:
         raise unauthorized
+    if user.status != UserStatus.ACTIVE:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
     return user
+
+
+def get_current_admin(current_user: User = Depends(get_current_user)) -> User:
+    """Admin-only dependency (spec #5). Non-admins get 403, never data."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    return current_user
 
 
 def get_flight_service(db: Session = Depends(get_db)):
@@ -108,3 +117,9 @@ def get_data_transfer_service(db: Session = Depends(get_db)):
     from app.services.data_transfer import DataTransferService
 
     return DataTransferService(db)
+
+
+def get_admin_service(db: Session = Depends(get_db)):
+    from app.services.admin import AdminService
+
+    return AdminService(db)

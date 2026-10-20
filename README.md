@@ -66,6 +66,16 @@ openssl rand -hex 32    # SECRET_KEY
 
 `deploy.sh` 会拉取代码 → 备份数据库 → 重建容器 → 执行迁移 → 健康检查 → 清理。完成后浏览器打开 `http://<服务器IP>:3000` → 注册 → 添加航班 → 在「地图」看到大圆航线。
 
+首个管理员（二选一）：
+
+```bash
+# A. 在 .env 设置 ADMIN_EMAIL / ADMIN_PASSWORD（可选 ADMIN_USERNAME），首次启动自动创建
+# B. 服务器上手动创建（密码交互输入，或追加 --password）
+docker compose exec api python -m app create-admin --username admin --email you@example.com
+```
+
+管理员登录后侧边栏会出现「管理」，可查看用户、全局操作日志与系统统计。
+
 > `POSTGRES_PASSWORD` 必须只用 URL 安全字符（推荐 hex），否则会破坏内部 `DATABASE_URL`。云服务器需在安全组放通入方向 TCP 3000；不要放通 8000/5432/6379。
 
 ## 本地开发

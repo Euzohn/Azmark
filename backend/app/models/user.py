@@ -11,6 +11,18 @@ def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+class UserRole:
+    """Roles defined by spec #5. Kept as constants to avoid magic strings."""
+
+    USER = "USER"
+    ADMIN = "ADMIN"
+
+
+class UserStatus:
+    ACTIVE = "ACTIVE"
+    DISABLED = "DISABLED"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -19,8 +31,8 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     display_name: Mapped[str | None] = mapped_column(String(100))
-    role: Mapped[str] = mapped_column(String(20), default="USER", nullable=False)
-    status: Mapped[str] = mapped_column(String(20), default="ACTIVE", nullable=False)
+    role: Mapped[str] = mapped_column(String(20), default=UserRole.USER, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default=UserStatus.ACTIVE, nullable=False)
     locale: Mapped[str] = mapped_column(String(10), default="zh-CN", nullable=False)
     timezone: Mapped[str] = mapped_column(String(64), default="UTC", nullable=False)
     currency: Mapped[str] = mapped_column(String(3), default="CNY", nullable=False)

@@ -49,3 +49,9 @@ class PasswordChange(BaseModel):
 class UsernameChange(BaseModel):
     new_username: str = Field(min_length=3, max_length=64)
     current_password: str
+
+
+class DeleteAccountRequest(BaseModel):
+    """Password confirmation for the destructive action (spec #48)."""
+
+    password: str

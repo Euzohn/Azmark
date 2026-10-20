@@ -5,6 +5,7 @@ from app.core.security import create_access_token
 from app.models.audit_log import AuditAction
 from app.models.user import User
 from app.schemas.auth import (
+    DeleteAccountRequest,
     LoginRequest,
     PasswordChange,
     RegisterRequest,
@@ -14,7 +15,12 @@ from app.schemas.auth import (
     UserUpdate,
 )
 from app.services.audit import AuditService
-from app.services.auth import AuthService, InvalidCredentialsError, UsernameTakenError
+from app.services.auth import (
+    AuthService,
+    InvalidCredentialsError,
+    LastAdminError,
+    UsernameTakenError,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -57,6 +63,16 @@ def login(
         ) from None
     audit.log(action=AuditAction.LOGIN, user_id=user.id, request=request)
     return TokenResponse(access_token=create_access_token(str(user.id)))
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    audit: AuditService = Depends(get_audit_service),
+) -> None:
+    """Tokens are stateless; clients drop them after this call (spec #4.3, #47)."""
+    audit.log(action=AuditAction.LOGOUT, user_id=current_user.id, request=request)
 
 
 @router.get("/me", response_model=UserRead)
@@ -133,3 +149,36 @@ def change_username(
         ) from None
     audit.log(action=AuditAction.USERNAME_CHANGE, user_id=user.id, request=request)
     return user
+
+
+@router.post("/me/delete", status_code=status.HTTP_204_NO_CONTENT)
+def delete_account(
+    payload: DeleteAccountRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    service: AuthService = Depends(get_auth_service),
+    audit: AuditService = Depends(get_audit_service),
+) -> None:
+    """Delete the account and owned data, keeping an anonymised audit trail (#48)."""
+    user_id = current_user.id
+    username = current_user.username
+    try:
+        service.delete_account(user=current_user, password=payload.password)
+    except InvalidCredentialsError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid current password"
+        ) from None
+    except LastAdminError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot delete the last active admin",
+        ) from None
+
+    audit.log(
+        action=AuditAction.ACCOUNT_DELETE,
+        user_id=None,
+        resource_type="user",
+        resource_id=str(user_id),
+        meta={"username": username},
+        request=request,
+    )

@@ -1,5 +1,9 @@
 import { useAuth } from "@/lib/auth-store";
 import type {
+  AdminAuditLogList,
+  AdminSystem,
+  AdminUser,
+  AdminUserList,
   AiChatResponse,
   AiSettingsRead,
   AiSettingsWrite,
@@ -116,6 +120,12 @@ export const api = {
     request<TokenResponse>("/auth/login", {
       method: "POST",
       body: JSON.stringify({ username, password }),
+    }),
+  logout: () => request<void>("/auth/logout", { method: "POST" }),
+  deleteAccount: (password: string) =>
+    request<void>("/auth/me/delete", {
+      method: "POST",
+      body: JSON.stringify({ password }),
     }),
   me: () => request<User>("/auth/me"),
   updateMe: (data: Partial<User>) =>
@@ -241,6 +251,28 @@ export const api = {
     if (params.page_size) query.set("page_size", String(params.page_size));
     const suffix = query.toString() ? `?${query.toString()}` : "";
     return request<AuditLogList>(`/audit-logs${suffix}`);
+  },
+
+  listAdminUsers: (params: { search?: string; page?: number; page_size?: number } = {}) => {
+    const query = new URLSearchParams();
+    if (params.search) query.set("search", params.search);
+    if (params.page) query.set("page", String(params.page));
+    if (params.page_size) query.set("page_size", String(params.page_size));
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return request<AdminUserList>(`/admin/users${suffix}`);
+  },
+  updateAdminUser: (id: string, data: { role?: string; status?: string }) =>
+    request<AdminUser>(`/admin/users/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  getAdminSystem: () => request<AdminSystem>("/admin/system"),
+  listAdminLogs: (params: { page?: number; page_size?: number } = {}) => {
+    const query = new URLSearchParams();
+    if (params.page) query.set("page", String(params.page));
+    if (params.page_size) query.set("page_size", String(params.page_size));
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return request<AdminAuditLogList>(`/admin/logs${suffix}`);
   },
 
   getDashboard: () => request<DashboardRead>("/dashboard"),

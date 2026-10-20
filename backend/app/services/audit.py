@@ -45,6 +45,35 @@ class AuditService:
         self.db.refresh(entry)
         return entry
 
+    def list_all(
+        self,
+        *,
+        page: int = 1,
+        page_size: int = 50,
+        user_id: uuid.UUID | None = None,
+        action: str | None = None,
+    ) -> tuple[list[AuditLog], int]:
+        """Cross-user audit trail for admins (spec #5, #47)."""
+        conditions = []
+        if user_id is not None:
+            conditions.append(AuditLog.user_id == user_id)
+        if action:
+            conditions.append(AuditLog.action == action)
+
+        count_stmt = select(func.count()).select_from(AuditLog)
+        stmt = select(AuditLog)
+        for condition in conditions:
+            count_stmt = count_stmt.where(condition)
+            stmt = stmt.where(condition)
+
+        total = self.db.scalar(count_stmt)
+        stmt = (
+            stmt.order_by(AuditLog.created_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        return list(self.db.scalars(stmt)), int(total or 0)
+
     def list_for_user(
         self, *, user_id: uuid.UUID, page: int = 1, page_size: int = 50
     ) -> tuple[list[AuditLog], int]:

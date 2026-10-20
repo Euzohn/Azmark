@@ -6,21 +6,8 @@ import { History } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
-import { useI18n, type TranslationKey } from "@/lib/i18n";
-
-const ACTION_LABELS: Record<string, TranslationKey> = {
-  login: "audit.action.login",
-  login_failed: "audit.action.login_failed",
-  register: "audit.action.register",
-  password_change: "audit.action.password_change",
-  username_change: "audit.action.username_change",
-  account_change: "audit.action.account_change",
-  create_record: "audit.action.create_record",
-  update_record: "audit.action.update_record",
-  delete_record: "audit.action.delete_record",
-  import: "audit.action.import",
-  export: "audit.action.export",
-};
+import { AUDIT_ACTION_LABELS } from "@/lib/audit-actions";
+import { useI18n } from "@/lib/i18n";
 
 function formatDateTime(value: string): string {
   const date = new Date(value);
@@ -78,7 +65,7 @@ export default function AuditPage() {
             </thead>
             <tbody>
               {data.items.map((log, index) => {
-                const label = ACTION_LABELS[log.action];
+                const label = AUDIT_ACTION_LABELS[log.action];
                 return (
                   <tr key={log.id} className="border-t border-border transition-colors hover:bg-accent/50" style={{ animationDelay: `${index * 20}ms` }}>
                     <td className="px-5 py-3 font-medium">{label ? t(label) : log.action}</td>

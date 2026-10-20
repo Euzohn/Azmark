@@ -56,6 +56,17 @@ def test_change_password(client):
     assert response.status_code == 200
 
 
+def test_logout_is_audited(client):
+    token = register_and_login(client, "frank")["access_token"]
+    headers = auth_headers(token)
+
+    response = client.post("/api/v1/auth/logout", headers=headers)
+    assert response.status_code == 204
+
+    logs = client.get("/api/v1/audit-logs", headers=headers).json()["items"]
+    assert "logout" in [item["action"] for item in logs]
+
+
 def test_change_username(client):
     token = register_and_login(client, "erin")["access_token"]
     headers = auth_headers(token)

@@ -36,6 +36,7 @@
   - 测试（SQLite 内存库，无需常驻服务）：`./.venv/bin/pytest -q`
   - Lint / 格式：`./.venv/bin/ruff check .`、`./.venv/bin/ruff format --check .`（修复用 `ruff check --fix .` / `ruff format .`）
   - 迁移：`./.venv/bin/alembic upgrade head`（需要 PostgreSQL，交给服务器环境）
+  - 创建管理员：`./.venv/bin/python -m app create-admin --username admin --email you@example.com`（需要 PostgreSQL；密码交互输入或加 `--password`）
 - 前端（在 `web/`）：`npm install`；`npm run lint`；`npm run typecheck`；`npm run build`；`npm run dev`
 - 测试用 SQLite 内存库，Postgres 专有特性（如 PostGIS）不要把测试依赖在 SQLite 上。
 - 变更后端 schema 时必须新增 Alembic migration（按编号顺序递增，当前 head：`0015_normalize_timezones`）。
