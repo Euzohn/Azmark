@@ -21,7 +21,6 @@ class ResolvedAiConfig:
     api_key: str | None
     temperature: float | None
     context_limit: int | None
-    web_search: bool
 
 
 class AiSettingsService:
@@ -42,7 +41,6 @@ class AiSettingsService:
             configured=bool(setting.api_key_enc),
             temperature=setting.temperature,
             context_limit=setting.context_limit,
-            web_search=setting.web_search,
         )
 
     def resolve(self, *, user_id: uuid.UUID) -> ResolvedAiConfig | None:
@@ -58,7 +56,6 @@ class AiSettingsService:
             api_key=api_key,
             temperature=setting.temperature,
             context_limit=setting.context_limit,
-            web_search=setting.web_search,
         )
 
     def upsert(self, *, user_id: uuid.UUID, payload: AiSettingsWrite) -> AiSettingsRead:
@@ -75,8 +72,6 @@ class AiSettingsService:
             setting.temperature = payload.temperature
         if payload.context_limit is not None:
             setting.context_limit = payload.context_limit
-        if payload.web_search is not None:
-            setting.web_search = payload.web_search
         self.db.commit()
         return self.get(user_id=user_id)
 

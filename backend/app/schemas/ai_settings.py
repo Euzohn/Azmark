@@ -8,7 +8,6 @@ class AiSettingsWrite(BaseModel):
     api_key: str | None = Field(default=None, max_length=256)
     temperature: float | None = Field(default=None, ge=0, le=2)
     context_limit: int | None = Field(default=None, ge=1000)
-    web_search: bool | None = None
 
 
 class AiSettingsRead(BaseModel):
@@ -18,4 +17,3 @@ class AiSettingsRead(BaseModel):
     configured: bool
     temperature: float | None = None
     context_limit: int | None = None
-    web_search: bool = False

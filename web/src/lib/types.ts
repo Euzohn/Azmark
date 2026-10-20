@@ -382,7 +382,6 @@ export interface AiSettingsRead {
   configured: boolean;
   temperature: number | null;
   context_limit: number | null;
-  web_search: boolean;
 }
 
 export interface AiSettingsWrite {
@@ -392,7 +391,6 @@ export interface AiSettingsWrite {
   api_key?: string | null;
   temperature?: number | null;
   context_limit?: number | null;
-  web_search?: boolean;
 }
 
 export interface DashboardStats {
