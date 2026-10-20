@@ -54,6 +54,26 @@ class OtherProvider:
         )
 
 
+class ChineseOnlyProvider:
+    """Mirrors VariFlight for domestic carriers: Chinese name only."""
+
+    name = "chinonly"
+
+    def __init__(self, api_key, *, client=None):
+        self.api_key = api_key
+
+    async def lookup(self, flight_number, *, date):
+        if not self.api_key:
+            return None
+        return FlightLookupResult(
+            flight_number=flight_number,
+            airline_code="Y8",
+            airline_name=None,
+            airline_name_zh="金鹏航空",
+            provider="chinonly",
+        )
+
+
 class EmptyProvider:
     name = "empty"
 
@@ -120,6 +140,27 @@ def test_lookup_with_provider(client):
     assert body["origin_iata"] == "HKG"
     assert body["destination_iata"] == "SIN"
     assert body["aircraft"] == "Boeing 777-300ER"
+
+
+def test_lookup_keeps_local_english_with_provider_chinese(client, monkeypatch):
+    import app.providers as providers
+
+    monkeypatch.setitem(providers.REGISTERED_PROVIDERS, "chinonly", ChineseOnlyProvider)
+    token = register_and_login(client, "lk_zh_name")["access_token"]
+    assert _put_key(client, token, "chinonly").status_code == 200
+
+    response = client.post(
+        "/api/v1/flights/lookup",
+        json={"flight_number": "Y87525", "provider": "chinonly"},
+        headers=auth_headers(token),
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["source"] == "chinonly"
+    assert body["airline_code"] == "Y8"
+    # en-US keeps the local English name; zh-CN gets the provider's Chinese one.
+    assert body["airline_name"] == "Suparna Airlines"
+    assert body["airline_name_zh"] == "金鹏航空"
 
 
 def test_lookup_uses_configured_provider_by_default(client):

@@ -293,15 +293,22 @@ class VariflightProvider(FlightProvider):
         org_tz_secs = _pick(flight, "org_timezone", "OrgTimezone", "dep_timezone")
         dst_tz_secs = _pick(flight, "dst_timezone", "DstTimezone", "arr_timezone")
 
-        airline_name = _as_str(
+        company_en = _as_str(
             _pick(flight, "FlightCompanyEn", "AirlineNameEn", "CompanyEn", "AirlineEn")
         )
-        if not airline_name:
-            company = _as_str(_pick(flight, "FlightCompany", "AirlineName", "Company"))
-            # VariFlight's Chinese company name would override the English
-            # reference name used by the en-US UI; keep ASCII values only.
-            if company and company.isascii():
-                airline_name = company
+        company_local = _as_str(_pick(flight, "FlightCompany", "AirlineName", "Company"))
+        airline_name = company_en
+        airline_name_zh: str | None = None
+        if company_local:
+            if company_local.isascii():
+                # VariFlight occasionally returns an English company name.
+                if not airline_name:
+                    airline_name = company_local
+            else:
+                # Chinese name: surface it via airline_name_zh so the zh-CN UI
+                # shows it. The en-US UI keeps the local reference's English
+                # name (merged in flight_enrichment), avoiding Chinese text.
+                airline_name_zh = company_local
         airline_code = _as_str(_pick(flight, "FlightCompanyCode", "AirlineCode", "CarrierCode"))
         if not airline_code:
             match = re.match(r"^([A-Z0-9]{2})\d", flight_number)
@@ -312,6 +319,7 @@ class VariflightProvider(FlightProvider):
             flight_number=flight_number,
             airline_code=airline_code,
             airline_name=airline_name,
+            airline_name_zh=airline_name_zh,
             origin_iata=_as_str(
                 _pick(flight, "FlightDepcode", "DepAirportCode", "DepCode", "OriginCode")
             ),

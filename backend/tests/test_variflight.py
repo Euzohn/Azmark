@@ -68,9 +68,10 @@ def _assert_flight(result):
     assert result is not None
     assert result.flight_number == "MU5101"
     assert result.airline_code == "MU"
-    # Chinese-only company name is dropped so the en-US UI keeps the English
-    # reference name; the local airline lookup fills it in.
+    # The Chinese company name is surfaced as airline_name_zh; without an
+    # English alias, airline_name stays None and the local reference fills it.
     assert result.airline_name is None
+    assert result.airline_name_zh == "中国东方航空股份有限公司"
     assert result.origin_iata == "SHA"
     assert result.destination_iata == "PEK"
     assert result.origin_name is None
@@ -162,6 +163,19 @@ def test_tool_error_returns_none():
         )
 
     assert asyncio.run(_lookup(handler)) is None
+
+
+def test_ascii_company_name_becomes_english_name():
+    flight = {**SAMPLE_FLIGHT, "FlightNo": "Y87525", "FlightCompany": "Suparna Airlines"}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_envelope(flight, as_repr=True))
+
+    result = asyncio.run(_lookup(handler, "Y87525"))
+    assert result is not None
+    assert result.airline_code == "Y8"
+    assert result.airline_name == "Suparna Airlines"
+    assert result.airline_name_zh is None
 
 
 def test_maps_states_and_timezone():

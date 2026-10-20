@@ -161,6 +161,10 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
     initial?.departure_time?.slice(0, 10) || new Date().toISOString().slice(0, 10),
   );
   const [statusTouched, setStatusTouched] = useState(Boolean(initial));
+  // Whether the user typed/picked the airline themselves. Provider lookups may
+  // correct an auto-inferred (prefix-based) carrier but never a manual edit.
+  const [carrierTouched, setCarrierTouched] = useState(Boolean(initial?.carrier));
+  const [lastVerified, setLastVerified] = useState<string | null>(null);
 
   const set = (key: keyof typeof form, value: string) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -254,15 +258,23 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
   }, [form.service_number, form.carrier, locale]);
 
   const applyLookupResult = useCallback(
-    (result: FlightLookup) => {
+    (result: FlightLookup, opts?: { force?: boolean }) => {
+      const force = opts?.force ?? false;
       setForm((prev) => {
         const next = { ...prev };
         const airlineName =
           locale === "zh-CN"
             ? (result.airline_name_zh ?? result.airline_name ?? "")
             : result.airline_name ?? "";
-        if (airlineName && !next.carrier.trim()) next.carrier = airlineName;
-        if (result.airline_code && !next.airline_code) next.airline_code = result.airline_code;
+        // The provider is authoritative for an auto-inferred carrier; a manual
+        // edit is kept unless the user explicitly applies a result (force).
+        // This is what lets the flight APIs verify/correct the prefix guess.
+        if (airlineName && (force || !carrierTouched || !next.carrier.trim())) {
+          next.carrier = airlineName;
+        }
+        if (result.airline_code && (force || !carrierTouched || !next.airline_code)) {
+          next.airline_code = result.airline_code;
+        }
         if (result.origin_iata && !next.origin.trim()) next.origin = result.origin_iata;
         if (result.destination_iata && !next.destination.trim())
           next.destination = result.destination_iata;
@@ -312,10 +324,10 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
         setLookupStatus("local");
       }
     },
-    [locale, statusTouched],
+    [locale, statusTouched, carrierTouched],
   );
 
-  const runLookup = async () => {
+  const runLookup = async (force = false) => {
     const number = form.service_number.trim();
     if (!/^[A-Za-z0-9]{2,3}\d{1,4}$/.test(number)) return;
     setLookupStatus("running");
@@ -326,10 +338,22 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
         date: datePart,
         provider: selectedProvider === "auto" ? undefined : selectedProvider,
       });
-      applyLookupResult(result);
+      applyLookupResult(result, { force });
     } catch {
       setLookupStatus("error");
     }
+  };
+
+  // With provider keys configured, verify the number against the flight APIs
+  // once the user leaves the field (one request per distinct number). The
+  // local prefix guess is instant; this confirms/corrects it.
+  const verifyOnBlur = () => {
+    const number = form.service_number.trim();
+    if (!/^[A-Za-z0-9]{2,3}\d{1,4}$/.test(number)) return;
+    if (!configuredProviders.length) return;
+    if (lookupStatus === "running" || lastVerified === number) return;
+    setLastVerified(number);
+    void runLookup(false);
   };
 
   const runCompare = async () => {
@@ -401,6 +425,7 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
               <Input
                 value={form.service_number}
                 onChange={(e) => set("service_number", e.target.value)}
+                onBlur={verifyOnBlur}
                 placeholder="CX659"
                 className="flex-1"
               />
@@ -408,7 +433,7 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
                 type="button"
                 variant="outline"
                 size="icon"
-                onClick={() => void runLookup()}
+                onClick={() => void runLookup(true)}
                 disabled={
                   lookupStatus === "running" ||
                   !/^[A-Za-z0-9]{2,3}\d{1,4}$/.test(form.service_number.trim())
@@ -486,8 +511,12 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
           <Field label={t("flights.carrier")}>
             <Combobox
               value={form.carrier}
-              onChange={(value) => set("carrier", value)}
+              onChange={(value) => {
+                setCarrierTouched(true);
+                set("carrier", value);
+              }}
               onSelect={(option) => {
+                setCarrierTouched(true);
                 const iata = option.data?.iata;
                 if (iata) set("airline_code", iata);
               }}
@@ -550,7 +579,7 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
           <ComparePanel
             results={compareResults}
             onUse={(data) => {
-              applyLookupResult(data);
+              applyLookupResult(data, { force: true });
               setCompareResults(null);
             }}
             onClose={() => setCompareResults(null)}

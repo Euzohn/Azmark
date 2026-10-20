@@ -88,6 +88,54 @@ def test_flight_number_lookup(client):
     assert body["airline"]["name"] == "Cathay Pacific"
 
 
+def test_flight_number_lookup_y8_suparna(client):
+    """Y8 is Jinpeng / Suparna; OpenFlights mislabels it, overrides must win."""
+    token = register_and_login(client, "ref_y8")["access_token"]
+    response = client.get(
+        "/api/v1/reference/flight-lookup",
+        params={"number": "Y87525"},
+        headers=auth_headers(token),
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["airline_code"] == "Y8"
+    airline = body["airline"]
+    assert airline["name"] == "Suparna Airlines"
+    assert airline["name_zh"] == "金鹏航空"
+    assert airline["icao"] == "YZR"
+    assert airline["country"] == "China"
+
+
+def test_flight_number_lookup_chinese_carriers_fixed(client):
+    """OpenFlights mislabeled many CN carrier IATA codes as defunct/foreign
+    airlines, and a few were missing entirely; overrides must restore the
+    correct Chinese carrier (verified against IATA/lawnwing/Wikipedia)."""
+    cases = [
+        ("PN6201", "PN", "West Air", "西部航空"),  # 西部航空 — was "West Air China"
+        ("TV9821", "TV", "Tibet Airlines", "西藏航空"),  # was Belgium Virgin Express
+        ("JD5101", "JD", "Beijing Capital Airlines", "首都航空"),  # was Japan Air System
+        ("GS7651", "GS", "Tianjin Airlines", "天津航空"),  # was UK Air Foyle
+        ("DZ6231", "DZ", "Donghai Airlines", "东海航空"),  # was Kazakhstan Starline
+        ("O36231", "O3", "SF Airlines", "顺丰航空"),  # was missing entirely
+    ]
+    token = register_and_login(client, "ref_cn")["access_token"]
+    headers = auth_headers(token)
+    for number, code, name, name_zh in cases:
+        response = client.get(
+            "/api/v1/reference/flight-lookup",
+            params={"number": number},
+            headers=headers,
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["airline_code"] == code, number
+        airline = body["airline"]
+        assert airline is not None, number
+        assert airline["name"] == name, number
+        assert airline["name_zh"] == name_zh, number
+        assert airline["country"] == "China", number
+
+
 def test_flight_number_lookup_unknown_airline(client):
     token = register_and_login(client, "ref_unknown")["access_token"]
     response = client.get(

@@ -17,6 +17,7 @@ class FlightLookupResult:
     flight_number: str
     airline_code: str | None = None
     airline_name: str | None = None
+    airline_name_zh: str | None = None
     origin_iata: str | None = None
     destination_iata: str | None = None
     origin_name: str | None = None

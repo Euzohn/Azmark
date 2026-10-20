@@ -66,9 +66,7 @@ async def _lookup(handler, flight_number: str = "CX659", lookup_date=None):
     transport = httpx.MockTransport(handler)
     async with httpx.AsyncClient(transport=transport) as client:
         provider = AviationStackProvider("test-key", client=client)
-        return await provider.lookup(
-            flight_number, date=lookup_date or date(2026, 1, 15)
-        )
+        return await provider.lookup(flight_number, date=lookup_date or date(2026, 1, 15))
 
 
 def test_parses_flight_and_params():

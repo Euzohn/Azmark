@@ -277,6 +277,10 @@ export const dictionaries = {
     "trips.records": "行程记录",
     "trips.flights": "航班",
     "trips.dates": "{start} — {end}",
+    "trips.changedMarker": "已修改",
+    "trips.changedOne": "1 个字段将更新",
+    "trips.changedMany": "{count} 个字段将更新",
+    "trips.noChanges": "未检测到修改",
 
     "audit.title": "操作日志",
     "audit.empty": "暂无操作记录",
@@ -731,6 +735,10 @@ export const dictionaries = {
     "trips.records": "Records",
     "trips.flights": "Flights",
     "trips.dates": "{start} — {end}",
+    "trips.changedMarker": "Modified",
+    "trips.changedOne": "1 field will be updated",
+    "trips.changedMany": "{count} fields will be updated",
+    "trips.noChanges": "No changes detected",
 
     "audit.title": "Activity",
     "audit.empty": "No activity yet",

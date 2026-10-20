@@ -15,7 +15,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import type { OtherTransport, TimelineRecord, Train, TripInput } from "@/lib/types";
+import type { OtherTransport, TimelineRecord, Train, TripDetail, TripInput } from "@/lib/types";
 
 function formatDateTime(value: string | null): string {
   if (!value) return "-";
@@ -59,9 +59,13 @@ export default function TripDetailPage() {
 
   const update = useMutation({
     mutationFn: (input: TripInput) => api.updateTrip(id, input),
-    onSuccess: () => {
+    onSuccess: (updated) => {
+      // Write the server's answer straight into the cache so the header and the
+      // edit-diff markers settle immediately instead of waiting on a refetch.
+      queryClient.setQueryData<TripDetail>(["trip", id], (prev) =>
+        prev ? { ...prev, ...updated } : prev,
+      );
       queryClient.invalidateQueries({ queryKey: ["trips"] });
-      queryClient.invalidateQueries({ queryKey: ["trip", id] });
     },
   });
 

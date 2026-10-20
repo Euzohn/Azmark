@@ -28,9 +28,115 @@ USER_AGENT = "Azmark-reference-builder (+https://github.com/)"
 
 # OpenFlights 数据更新时间较旧，部分航司已改名/被并入。这里维护字段覆盖，
 # 保证重建数据后仍显示当前正确信息（IATA 代码不变）。
-AIRLINE_OVERRIDES: dict[str, dict[str, str]] = {
+AIRLINE_OVERRIDES: dict[str, dict[str, str | None]] = {
+    # ── 国际航司更名修正 ──
     "TR": {"name": "Scoot"},  # 酷航（原 Tiger Airways，2012 年更名）
     "AZ": {"name": "ITA Airways", "icao": "ITY"},  # 意大利航空（原 Alitalia）
+    # ── 中国大陆客运航司 ──
+    # OpenFlights 数据较旧，大量二字码被已停飞或外国航司占用，这里整体纠正。
+    # 字段来源：lawnwing.com 190 家代码表（2026-10）、IATA 官方名录、维基百科。
+    # ICAO 三字码均已联网核实，避免三字航班号解析走偏。
+    "9C": {"name": "Spring Airlines", "icao": "CQH", "country": "China", "name_zh": "春秋航空"},
+    "KN": {
+        "name": "China United Airlines",
+        "icao": "CUA",
+        "country": "China",
+        "name_zh": "中国联合航空",
+    },
+    "GS": {"name": "Tianjin Airlines", "icao": "GCR", "country": "China", "name_zh": "天津航空"},
+    "JD": {
+        "name": "Beijing Capital Airlines",
+        "icao": "CBJ",
+        "country": "China",
+        "name_zh": "首都航空",
+    },
+    "8L": {"name": "Lucky Air", "icao": "LKE", "country": "China", "name_zh": "祥鹏航空"},
+    "PN": {"name": "West Air", "icao": "CHB", "country": "China", "name_zh": "西部航空"},
+    "EU": {"name": "Chengdu Airlines", "icao": "UEA", "country": "China", "name_zh": "成都航空"},
+    "KY": {"name": "Kunming Airlines", "icao": "KNA", "country": "China", "name_zh": "昆明航空"},
+    "G5": {
+        "name": "China Express Airlines",
+        "icao": "HXA",
+        "country": "China",
+        "name_zh": "华夏航空",
+    },
+    "DZ": {"name": "Donghai Airlines", "icao": "EPA", "country": "China", "name_zh": "东海航空"},
+    "DR": {"name": "Ruili Airlines", "icao": "RLH", "country": "China", "name_zh": "瑞丽航空"},
+    "QW": {"name": "Qingdao Airlines", "icao": "QDA", "country": "China", "name_zh": "青岛航空"},
+    "GY": {
+        "name": "Colorful Guizhou Airlines",
+        "icao": "CGZ",
+        "country": "China",
+        "name_zh": "多彩贵州航空",
+    },
+    "NS": {"name": "Hebei Airlines", "icao": "HBH", "country": "China", "name_zh": "河北航空"},
+    "RY": {"name": "Jiangxi Air", "icao": "CJX", "country": "China", "name_zh": "江西航空"},
+    "UQ": {"name": "Urumqi Air", "icao": "CUH", "country": "China", "name_zh": "乌鲁木齐航空"},
+    "FU": {"name": "Fuzhou Airlines", "icao": "FZA", "country": "China", "name_zh": "福州航空"},
+    "GX": {
+        "name": "Guangxi Beibu Gulf Airlines",
+        "icao": "CBG",
+        "country": "China",
+        "name_zh": "北部湾航空",
+    },
+    "GT": {"name": "Air Guilin", "icao": "CGH", "country": "China", "name_zh": "桂林航空"},
+    "LT": {"name": "Longjiang Airlines", "icao": "SNG", "country": "China", "name_zh": "龙江航空"},
+    "GJ": {"name": "Loong Air", "icao": "CDC", "country": "China", "name_zh": "长龙航空"},
+    "TV": {"name": "Tibet Airlines", "icao": "TBA", "country": "China", "name_zh": "西藏航空"},
+    "AQ": {"name": "9 Air", "icao": "JYH", "country": "China", "name_zh": "九元航空"},
+    "OQ": {"name": "Chongqing Airlines", "icao": "CQN", "country": "China", "name_zh": "重庆航空"},
+    "CN": {"name": "Grand China Air", "icao": "GDC", "country": "China", "name_zh": "大新华航空"},
+    "BK": {"name": "Okay Airways", "icao": "OKA", "country": "China", "name_zh": "奥凯航空"},
+    "9H": {"name": "Air Changan", "icao": "CGN", "country": "China", "name_zh": "长安航空"},
+    "Y8": {"name": "Suparna Airlines", "icao": "YZR", "country": "China", "name_zh": "金鹏航空"},
+    # ── 中国大陆货运航司（部分在 OpenFlights 缺失，由 append 流程补入）──
+    "CF": {
+        "name": "China Postal Airlines",
+        "icao": "CYZ",
+        "country": "China",
+        "name_zh": "中国邮政航空",
+    },
+    "CK": {
+        "name": "China Cargo Airlines",
+        "icao": "CKK",
+        "country": "China",
+        "name_zh": "中国货运航空",
+    },
+    "O3": {"name": "SF Airlines", "icao": "CSS", "country": "China", "name_zh": "顺丰航空"},
+    "YG": {
+        "name": "YTO Cargo Airlines",
+        "icao": "HYT",
+        "country": "China",
+        "name_zh": "圆通货运航空",
+    },
+    "HT": {
+        "name": "Tianjin Air Cargo",
+        "icao": "CTJ",
+        "country": "China",
+        "name_zh": "天津货运航空",
+    },
+    "JG": {
+        "name": "Jiangsu Jingdong Cargo Airlines",
+        "icao": "JDL",
+        "country": "China",
+        "name_zh": "江苏京东货运航空",
+    },
+    "GI": {"name": "Air Central", "icao": "LHA", "country": "China", "name_zh": "中原龙浩航空"},
+    "I9": {"name": "Central Airlines", "icao": "HLF", "country": "China", "name_zh": "中州航空"},
+    # ── 港澳台 ──
+    "RH": {
+        "name": "Hong Kong Air Cargo",
+        "icao": "HKC",
+        "country": "Hong Kong SAR of China",
+        "name_zh": "香港货运航空",
+    },
+    "LD": {
+        "name": "Air Hong Kong",
+        "icao": "AHK",
+        "country": "Hong Kong SAR of China",
+        "name_zh": "香港华民航空",
+    },
+    "JX": {"name": "STARLUX Airlines", "icao": "SJX", "country": "Taiwan", "name_zh": "星宇航空"},
 }
 
 # 常用航司/机场中文名（数据层提供，前端按 locale 显示；未收录的回退英文）。
@@ -60,6 +166,7 @@ AIRLINE_ZH = {
     "KA": "国泰港龙航空",
     "HX": "香港航空",
     "UO": "香港快运航空",
+    "NX": "澳门航空",
     "BR": "长荣航空",
     "CI": "中华航空",
     "AE": "华信航空",
@@ -447,16 +554,34 @@ def build_airlines() -> list[dict]:
         if iata in by_iata:
             continue  # controlled duplicates: keep the first (primary) holder
         override = AIRLINE_OVERRIDES.get(iata, {})
-        if override.get("name"):
-            name = override["name"]
+        name = override.get("name") or name
         icao = (override.get("icao") or icao).upper()
+        country = override.get("country") or country
         by_iata[iata] = {
             "iata": iata,
             "icao": icao if re.match(r"^[A-Z0-9]{3}$", icao) else None,
             "name": name,
-            "name_zh": AIRLINE_ZH.get(iata),
+            "name_zh": override.get("name_zh") or AIRLINE_ZH.get(iata),
             "country": clean(country),
-            "alliance": next(
+            "alliance": override.get("alliance")
+            or next(
+                (key for key, codes in AIRLINE_ALLIANCES.items() if iata in codes),
+                None,
+            ),
+        }
+    # Overrides may also cover carriers the upstream dataset lacks entirely.
+    for iata, override in AIRLINE_OVERRIDES.items():
+        if iata in by_iata or not override.get("name"):
+            continue
+        icao = (override.get("icao") or "").upper()
+        by_iata[iata] = {
+            "iata": iata,
+            "icao": icao if re.match(r"^[A-Z0-9]{3}$", icao) else None,
+            "name": override["name"],
+            "name_zh": override.get("name_zh") or AIRLINE_ZH.get(iata),
+            "country": clean(override.get("country")),
+            "alliance": override.get("alliance")
+            or next(
                 (key for key, codes in AIRLINE_ALLIANCES.items() if iata in codes),
                 None,
             ),

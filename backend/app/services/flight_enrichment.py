@@ -69,6 +69,7 @@ def _merge(local: dict, remote: FlightLookupResult | None) -> FlightLookupRespon
         result.source = remote.provider
         result.airline_code = remote.airline_code or result.airline_code
         result.airline_name = remote.airline_name or result.airline_name
+        result.airline_name_zh = remote.airline_name_zh or result.airline_name_zh
         result.origin_iata = remote.origin_iata
         result.destination_iata = remote.destination_iata
         result.origin_name = remote.origin_name

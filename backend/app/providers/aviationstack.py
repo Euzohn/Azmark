@@ -85,9 +85,7 @@ class AviationStackProvider(FlightProvider):
                 logger.info("AviationStack: no flights for %s", flight_number)
                 return None
             target = f"{date:%Y-%m-%d}"
-            match = next(
-                (f for f in flights if f.get("flight_date") == target), None
-            )
+            match = next((f for f in flights if f.get("flight_date") == target), None)
             if match is None:
                 match = flights[0]
                 logger.info(
@@ -121,9 +119,7 @@ class AviationStackProvider(FlightProvider):
             actual_departure_time=_parse_datetime(
                 departure.get("actual") or departure.get("estimated")
             ),
-            actual_arrival_time=_parse_datetime(
-                arrival.get("actual") or arrival.get("estimated")
-            ),
+            actual_arrival_time=_parse_datetime(arrival.get("actual") or arrival.get("estimated")),
             departure_terminal=_as_str(departure.get("terminal")),
             departure_gate=_as_str(departure.get("gate")),
             arrival_terminal=_as_str(arrival.get("terminal")),
