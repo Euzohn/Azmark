@@ -202,7 +202,7 @@ def test_lookup_all_returns_each_provider(client, monkeypatch):
     assert results["fake"]["aircraft"] == "Boeing 777-300ER"
     assert results["other"]["source"] == "other"
     assert results["other"]["aircraft"] == "Airbus A350-900"
-    assert results["other"]["status"] == "landed"
+    assert results["other"]["status"] == "completed"
 
 
 def test_lookup_all_skips_provider_without_key(client, monkeypatch):
@@ -259,9 +259,10 @@ def test_lookup_all_no_keys_returns_empty(client):
 
 
 def test_lookup_all_requires_auth(client):
-    assert client.post(
-        "/api/v1/flights/lookup-all", json={"flight_number": "CX659"}
-    ).status_code == 401
+    assert (
+        client.post("/api/v1/flights/lookup-all", json={"flight_number": "CX659"}).status_code
+        == 401
+    )
 
 
 def test_provider_keys_list_and_crud(client):

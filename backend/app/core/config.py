@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     aerodatabox_host: str = "aerodatabox.p.rapidapi.com"
     aviationstack_base_url: str = "http://api.aviationstack.com/v1"
 
+    # VariFlight (飞常准) Aviation MCP endpoint — see spec #66.
+    variflight_mcp_url: str = "https://ai.variflight.com/servers/aviation/mcp"
+
     # SearchProvider (spec #37) — used for train schedules and travel lookups.
     search_provider: str = ""
     search_api_key: str = ""

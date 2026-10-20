@@ -82,6 +82,7 @@ function formatDateTime(value: string | null | undefined): string {
 function providerLabel(name: string): string {
   if (name === "aerodatabox") return "AeroDataBox";
   if (name === "aviationstack") return "AviationStack";
+  if (name === "variflight") return "VariFlight";
   return name;
 }
 
@@ -278,6 +279,7 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
           next.actual_departure_time = toLocalInput(result.actual_departure_time);
         if (result.actual_arrival_time && !next.actual_arrival_time)
           next.actual_arrival_time = toLocalInput(result.actual_arrival_time);
+        if (result.status && !statusTouched) next.status = result.status;
         if (result.departure_terminal && !next.departure_terminal)
           next.departure_terminal = result.departure_terminal;
         if (result.departure_gate && !next.departure_gate)

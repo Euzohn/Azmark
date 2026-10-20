@@ -43,6 +43,7 @@ const TIMEZONES = timezoneOptions();
 const PROVIDER_LABELS: Record<string, string> = {
   aerodatabox: "AeroDataBox",
   aviationstack: "AviationStack",
+  variflight: "VariFlight (飞常准)",
   tavily: "Tavily",
   brave: "Brave Search",
   searxng: "SearXNG",

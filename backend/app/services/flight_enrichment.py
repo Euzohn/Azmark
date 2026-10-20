@@ -25,6 +25,37 @@ class ProviderNotFoundError(Exception):
     """Requested provider name is not registered (spec #66)."""
 
 
+_STATUS_ALIASES = {
+    "scheduled": "scheduled",
+    "planned": "scheduled",
+    "active": "scheduled",
+    "departed": "scheduled",
+    "en-route": "scheduled",
+    "enroute": "scheduled",
+    "delayed": "scheduled",
+    "boarding": "scheduled",
+    "计划": "scheduled",
+    "起飞": "scheduled",
+    "completed": "completed",
+    "landed": "completed",
+    "arrived": "completed",
+    "arrival": "completed",
+    "到达": "completed",
+    "落地": "completed",
+    "cancelled": "cancelled",
+    "canceled": "cancelled",
+    "cancel": "cancelled",
+    "取消": "cancelled",
+}
+
+
+def _normalize_status(raw: str | None) -> str | None:
+    """Map provider-specific states onto the record's status vocabulary."""
+    if not raw:
+        return None
+    return _STATUS_ALIASES.get(str(raw).strip().lower())
+
+
 def _merge(local: dict, remote: FlightLookupResult | None) -> FlightLookupResponse:
     airline = local.get("airline")
     result = FlightLookupResponse(
@@ -57,7 +88,7 @@ def _merge(local: dict, remote: FlightLookupResult | None) -> FlightLookupRespon
         result.departure_timezone = remote.departure_timezone
         result.arrival_timezone = remote.arrival_timezone
         result.aircraft = remote.aircraft
-        result.status = str(remote.status) if remote.status else None
+        result.status = _normalize_status(str(remote.status) if remote.status else None)
         result.distance = float(remote.distance) if remote.distance is not None else None
     return result
 
