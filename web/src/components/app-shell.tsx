@@ -16,6 +16,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { AzmarkLoader } from "@/components/azmark-loader";
 import { AzmarkMark } from "@/components/azmark-mark";
 import { LanguageToggle } from "@/components/language-toggle";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -97,16 +98,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   if (!hasHydrated) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-muted-foreground">
-        {t("common.loading")}
+      <div className="flex min-h-screen items-center justify-center">
+        <AzmarkLoader className="h-20 w-auto text-foreground" label={t("common.loading")} />
       </div>
     );
   }
 
   if (!token) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-muted-foreground">
-        {t("common.loading")}
+      <div className="flex min-h-screen items-center justify-center">
+        <AzmarkLoader className="h-20 w-auto text-foreground" label={t("common.loading")} />
       </div>
     );
   }
@@ -129,7 +130,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <aside className="hidden md:sticky md:top-0 md:flex md:h-dvh md:w-60 md:shrink-0 md:flex-col md:gap-1 md:overflow-y-auto md:border-r md:border-border md:px-5 md:py-8">
         <div className="mb-8 flex items-center gap-3 px-2">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#1a1816] text-[#f7f5f0] shadow-md shadow-black/20 dark:bg-[#f7f5f0] dark:text-[#1a1816]">
-            <AzmarkMark className="h-6 w-auto" />
+            <AzmarkMark className="h-5 w-auto" />
           </div>
           <div>
             <div className="font-display text-xl font-semibold leading-none tracking-tight">
@@ -192,7 +193,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-20 flex items-center justify-between border-b border-border bg-background/90 px-4 py-3 backdrop-blur-md md:hidden">
         <div className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1a1816] text-[#f7f5f0] dark:bg-[#f7f5f0] dark:text-[#1a1816]">
-            <AzmarkMark className="h-5 w-auto" />
+            <AzmarkMark className="h-4 w-auto" />
           </div>
           <span className="font-display text-lg font-semibold tracking-tight">{t("app.name")}</span>
         </div>

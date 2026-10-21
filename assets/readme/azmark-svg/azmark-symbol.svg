@@ -1,9 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 208 120" role="img" aria-labelledby="title desc">
   <title id="title">Azmark symbol</title>
-  <desc id="desc">A rounded-peak A whose right stroke flows into a Z, ending in a terracotta destination dot.</desc>
-  <g fill="none" stroke="#252822" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M12 78 L43 20 Q47 12 52 21 L66 43"/>
-    <path d="M69 40 H96 L66 72 H94"/>
+  <desc id="desc">A folded AZ monogram with tapered Z strokes, ending in a saffron destination dot.</desc>
+  <g fill="#1a1816">
+    <path d="M8.5 97 C8.5 99.5 9.5 100 11.5 100 H30 Q33 100 34.2 96 L73 36 Q75.5 32.8 78 36 L101 72 Q103 74 105 71 C108.5 66.5 110 63 110 61 C110 55 105 46 101 33 C97 20 89 9 80 8 C73 8 66 12 61 20 Z"/>
+    <rect x="112" y="33" width="57" height="15" rx="7.5"/>
+    <rect x="102" y="92" width="72.5" height="19" rx="9.5"/>
   </g>
-  <circle cx="106" cy="72" r="6.5" fill="#C66B4E"/>
+  <path d="M158 44 L110 100" fill="none" stroke="#1a1816" stroke-width="23" stroke-linecap="round"/>
+  <circle cx="191.5" cy="85.5" r="11" fill="#b45309"/>
 </svg>

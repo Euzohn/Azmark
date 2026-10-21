@@ -5,6 +5,7 @@ import { Trash2 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 
 import { AttachmentPanel } from "@/components/attachment-panel";
+import { AzmarkLoader } from "@/components/azmark-loader";
 import { FlightForm } from "@/components/flight-form";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -43,7 +44,11 @@ export default function FlightDetailPage() {
   });
 
   if (isLoading) {
-    return <p className="text-sm text-muted-foreground">{t("common.loading")}</p>;
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <AzmarkLoader className="h-16 w-auto text-foreground" label={t("common.loading")} />
+      </div>
+    );
   }
   if (!data) {
     return <p className="text-sm text-muted-foreground">{t("common.empty")}</p>;

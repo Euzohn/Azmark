@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ShieldAlert, Users } from "lucide-react";
 import { useState } from "react";
 
+import { AzmarkLoader } from "@/components/azmark-loader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -69,7 +70,11 @@ export default function AdminPage({ embedded = false }: { embedded?: boolean } =
   });
 
   if (!user) {
-    return <div className="text-muted-foreground">{t("common.loading")}</div>;
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <AzmarkLoader className="h-16 w-auto text-foreground" label={t("common.loading")} />
+      </div>
+    );
   }
 
   if (!isAdmin) {

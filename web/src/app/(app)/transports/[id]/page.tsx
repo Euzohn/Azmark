@@ -5,6 +5,7 @@ import { Trash2 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 
 import { AttachmentPanel } from "@/components/attachment-panel";
+import { AzmarkLoader } from "@/components/azmark-loader";
 import { PageHeader } from "@/components/page-header";
 import { TransportForm } from "@/components/transport-form";
 import { Button } from "@/components/ui/button";
@@ -43,7 +44,11 @@ export default function TransportDetailPage() {
   });
 
   if (isLoading) {
-    return <p className="text-sm text-muted-foreground">{t("common.loading")}</p>;
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <AzmarkLoader className="h-16 w-auto text-foreground" label={t("common.loading")} />
+      </div>
+    );
   }
   if (!data) {
     return <p className="text-sm text-muted-foreground">{t("common.empty")}</p>;
