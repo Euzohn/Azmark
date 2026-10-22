@@ -445,6 +445,9 @@ export default function AiChatPage() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Skip when an IME is mid-composition (e.g. typing English under a Chinese
+    // input method): Enter then confirms the candidate, it must not send.
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       void handleSend();
