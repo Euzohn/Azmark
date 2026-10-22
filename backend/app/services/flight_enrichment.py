@@ -5,8 +5,12 @@ stored encrypted (spec #66). Provider failures never surface to the caller;
 they degrade to the local airline result.
 """
 
+from __future__ import annotations
+
+import asyncio
 import uuid
-from datetime import date
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta
 from logging import getLogger
 
 import httpx
@@ -33,6 +37,64 @@ _PROVIDER_CONFIDENCE = {
     "variflight": 0.85,
     "aviationstack": 0.6,
 }
+
+# Fields filled from lower-confidence sources only when the better source omitted
+# them (never overwriting a value that is already known).
+_FILL_FIELDS = (
+    "airline_code",
+    "airline_name",
+    "airline_name_zh",
+    "origin_iata",
+    "destination_iata",
+    "origin_name",
+    "destination_name",
+    "departure_time",
+    "arrival_time",
+    "actual_departure_time",
+    "actual_arrival_time",
+    "departure_terminal",
+    "departure_gate",
+    "arrival_terminal",
+    "arrival_gate",
+    "check_in_desk",
+    "baggage_belt",
+    "aircraft_model",
+    "aircraft_reg",
+    "departure_timezone",
+    "arrival_timezone",
+    "aircraft",
+    "status",
+    "distance",
+)
+
+# Discrete fields where providers must agree; a mismatch is worth surfacing.
+_CONFLICT_FIELDS = (
+    "origin_iata",
+    "destination_iata",
+    "departure_terminal",
+    "arrival_terminal",
+    "departure_gate",
+    "arrival_gate",
+    "status",
+)
+_TIME_CONFLICT_FIELDS = (
+    "departure_time",
+    "arrival_time",
+    "actual_departure_time",
+    "actual_arrival_time",
+)
+# Providers report estimates vs actuals with slight skew; only material gaps count.
+_TIME_CONFLICT_TOLERANCE = timedelta(minutes=30)
+
+
+def _priority(name: str) -> float:
+    return _PROVIDER_CONFIDENCE.get(name, 0.5)
+
+
+def _ordered_provider_names(available: dict[str, str]) -> list[str]:
+    """Configured providers, most trustworthy first (spec #66)."""
+    names = [name for name in providers.REGISTERED_PROVIDERS if name in available]
+    return sorted(names, key=_priority, reverse=True)
 
 
 class ProviderNotFoundError(Exception):
@@ -124,6 +186,119 @@ def _merge(local: dict, remote: FlightLookupResult | None) -> FlightLookupRespon
     return result
 
 
+@dataclass
+class FlightFieldConflict:
+    """A field where configured providers returned different values."""
+
+    field: str
+    values: dict[str, str]
+
+
+@dataclass
+class MergedFlightLookup:
+    """Best-effort merge of every configured provider (spec #31/#66)."""
+
+    result: FlightLookupResponse
+    sources: list[dict]
+    conflicts: list[FlightFieldConflict]
+
+
+def _display(field: str, value: object) -> str:
+    if field == "status":
+        return _normalize_status(str(value)) or str(value)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value)
+
+
+def _normalized_code(field: str, value: str) -> str:
+    text = str(value).strip().upper()
+    # "T1" and "1" denote the same terminal; that is not a disagreement.
+    if field.endswith("terminal") and text.startswith("T") and text[1:].isdigit():
+        return text[1:]
+    return text
+
+
+def _coerce(field: str, value: object) -> object:
+    """Normalise a raw provider value when filling a gap from a weaker source."""
+    if field == "status":
+        return _normalize_status(str(value))
+    if field in ("departure_timezone", "arrival_timezone"):
+        return normalize_timezone(value)  # type: ignore[arg-type]
+    if field == "distance":
+        try:
+            return float(value)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return None
+    return value
+
+
+def _merge_sources(
+    local: dict, found: list[tuple[str, FlightLookupResult]]
+) -> FlightLookupResponse:
+    """Merge provider results by confidence, keeping the best value per field."""
+    ordered = sorted(found, key=lambda item: _priority(item[0]), reverse=True)
+    primary_name, primary = ordered[0]
+    merged = _merge(local, primary)
+    merged.source = primary_name
+    for _name, remote in ordered[1:]:
+        for field in _FILL_FIELDS:
+            if getattr(merged, field) is not None:
+                continue
+            # Never attach a name from a source that identified a different
+            # airline/airport — that would silently mismatch the code we kept.
+            if field in ("airline_name", "airline_name_zh"):
+                if remote.airline_code and merged.airline_code != remote.airline_code:
+                    continue
+            elif field == "origin_name":
+                if remote.origin_iata and merged.origin_iata != remote.origin_iata:
+                    continue
+            elif field == "destination_name":
+                if remote.destination_iata and merged.destination_iata != remote.destination_iata:
+                    continue
+            value = _coerce(field, getattr(remote, field))
+            if value is not None:
+                setattr(merged, field, value)
+    return merged
+
+
+def _detect_conflicts(
+    found: list[tuple[str, FlightLookupResult]],
+) -> list[FlightFieldConflict]:
+    """Report fields where providers disagree (material differences only)."""
+    conflicts: list[FlightFieldConflict] = []
+    for field in _CONFLICT_FIELDS:
+        values = {
+            name: _display(field, getattr(remote, field))
+            for name, remote in found
+            if getattr(remote, field) not in (None, "")
+        }
+        if len(values) < 2:
+            continue
+        if len({_normalized_code(field, value) for value in values.values()}) > 1:
+            conflicts.append(FlightFieldConflict(field=field, values=values))
+
+    for field in _TIME_CONFLICT_FIELDS:
+        points = {
+            name: value
+            for name, remote in found
+            if isinstance(value := getattr(remote, field), datetime) and value.tzinfo is not None
+        }
+        if len(points) < 2:
+            continue
+        reference_instant = next(iter(points.values()))
+        if any(
+            abs(point - reference_instant) > _TIME_CONFLICT_TOLERANCE for point in points.values()
+        ):
+            conflicts.append(
+                FlightFieldConflict(
+                    field=field,
+                    values={name: _display(field, value) for name, value in points.items()},
+                )
+            )
+    return conflicts
+
+
 class FlightEnrichmentService:
     def __init__(self, db: Session) -> None:
         self.keys = ProviderKeyStore(db)
@@ -173,11 +348,7 @@ class FlightEnrichmentService:
             raise ProviderNotFoundError(provider)
 
         available = self.keys.get_decrypted(user_id=user_id)
-        order = (
-            [provider]
-            if provider
-            else [name for name in providers.REGISTERED_PROVIDERS if name in available]
-        )
+        order = [provider] if provider else _ordered_provider_names(available)
         if not order:
             logger.info(
                 "FlightLookup: no provider key configured (user=%s) — local fallback for %s",
@@ -214,6 +385,75 @@ class FlightEnrichmentService:
         logger.info("FlightLookup: local-only result for %s", number)
         return _merge(local, None)
 
+    async def _query_all(
+        self,
+        *,
+        user_id: uuid.UUID,
+        number: str,
+        date: date,
+        order: list[str],
+        available: dict[str, str],
+        local: dict,
+        log_label: str,
+    ) -> list[tuple[str, FlightLookupResult | None, FlightLookupResponse | None]]:
+        """Run every provider concurrently; order is preserved in the result."""
+        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
+            return list(
+                await asyncio.gather(
+                    *(
+                        self._query_one(
+                            name=name,
+                            api_key=available[name],
+                            client=client,
+                            number=number,
+                            date=date,
+                            user_id=user_id,
+                            local=local,
+                            log_label=log_label,
+                        )
+                        for name in order
+                    )
+                )
+            )
+
+    async def _query_one(
+        self,
+        *,
+        name: str,
+        api_key: str,
+        client: httpx.AsyncClient,
+        number: str,
+        date: date,
+        user_id: uuid.UUID,
+        local: dict,
+        log_label: str,
+    ) -> tuple[str, FlightLookupResult | None, FlightLookupResponse | None]:
+        """Query a single provider; failures degrade to "no result" (spec #66)."""
+        provider_obj = providers.REGISTERED_PROVIDERS[name](api_key, client=client)
+        try:
+            remote = await provider_obj.lookup(number, date=date)
+        except Exception as exc:  # noqa: BLE001 - one bad source must not break the rest
+            logger.warning(
+                "%s: provider %s raised %r for %s — skipped",
+                log_label,
+                name,
+                exc,
+                number,
+            )
+            return name, None, None
+        if remote is None:
+            logger.info("%s: %s returned no result for %s", log_label, name, number)
+            return name, None, None
+        logger.info("%s: %s returned a result for %s", log_label, name, number)
+        merged = _merge(local, remote)
+        self._record_source(
+            user_id=user_id,
+            flight_number=number,
+            date=date,
+            result=merged,
+        )
+        return name, remote, merged
+
     async def lookup_all(
         self,
         *,
@@ -225,47 +465,78 @@ class FlightEnrichmentService:
 
         Unlike ``lookup``, this does not stop at the first match — the caller
         (e.g. the flight form's compare view) wants to see what each provider
-        returned so the user can pick one.
+        returned so the user can pick one. Providers are queried concurrently
+        and listed most trustworthy first.
         """
         local = reference.lookup_flight_number(flight_number)
         number = local["flight_number"]
         available = self.keys.get_decrypted(user_id=user_id)
-        order = [name for name in providers.REGISTERED_PROVIDERS if name in available]
-        results: list[dict] = []
+        order = _ordered_provider_names(available)
         if not order:
             logger.info(
                 "FlightLookupAll: no provider key configured (user=%s) for %s",
                 user_id,
                 number,
             )
-            return results
-        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
-            for name in order:
-                api_key = available.get(name)
-                if not api_key:
-                    continue
-                provider_obj = providers.REGISTERED_PROVIDERS[name](api_key, client=client)
-                try:
-                    remote = await provider_obj.lookup(number, date=date)
-                except Exception as exc:
-                    logger.warning(
-                        "FlightLookupAll: provider %s raised %r for %s",
-                        name,
-                        exc,
-                        number,
-                    )
-                    remote = None
-                if remote is not None:
-                    logger.info("FlightLookupAll: %s returned a result for %s", name, number)
-                    merged = _merge(local, remote)
-                    self._record_source(
-                        user_id=user_id,
-                        flight_number=number,
-                        date=date,
-                        result=merged,
-                    )
-                    results.append({"provider": name, "data": merged})
-                else:
-                    logger.info("FlightLookupAll: %s returned no result for %s", name, number)
-                    results.append({"provider": name, "data": None})
-        return results
+            return []
+        pairs = await self._query_all(
+            user_id=user_id,
+            number=number,
+            date=date,
+            order=order,
+            available=available,
+            local=local,
+            log_label="FlightLookupAll",
+        )
+        return [{"provider": name, "data": merged} for name, _raw, merged in pairs]
+
+    async def lookup_merged(
+        self,
+        *,
+        user_id: uuid.UUID,
+        flight_number: str,
+        date: date,
+    ) -> MergedFlightLookup:
+        """Cross-check every configured provider and merge by confidence.
+
+        This is what the AI tool uses: it needs the best value per field plus
+        any disagreement between sources, so the assistant can tell the user
+        instead of silently trusting one vendor (spec #31/#66/#70).
+        """
+        local = reference.lookup_flight_number(flight_number)
+        number = local["flight_number"]
+        available = self.keys.get_decrypted(user_id=user_id)
+        order = _ordered_provider_names(available)
+        if not order:
+            logger.info(
+                "FlightLookupMerged: no provider key configured (user=%s) — local fallback for %s",
+                user_id,
+                number,
+            )
+            return MergedFlightLookup(result=_merge(local, None), sources=[], conflicts=[])
+
+        pairs = await self._query_all(
+            user_id=user_id,
+            number=number,
+            date=date,
+            order=order,
+            available=available,
+            local=local,
+            log_label="FlightLookupMerged",
+        )
+        sources = [
+            {"provider": name, "confidence": _priority(name), "data": merged}
+            for name, _raw, merged in pairs
+        ]
+        found = [(name, raw) for name, raw, _merged in pairs if raw is not None]
+        if not found:
+            return MergedFlightLookup(
+                result=_merge(local, None),
+                sources=sources,
+                conflicts=[],
+            )
+        return MergedFlightLookup(
+            result=_merge_sources(local, found),
+            sources=sources,
+            conflicts=_detect_conflicts(found),
+        )

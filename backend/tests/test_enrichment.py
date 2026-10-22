@@ -389,3 +389,131 @@ def test_empty_api_key_rejected(client):
         headers=auth_headers(token),
     )
     assert response.status_code == 422
+
+
+def test_merge_sources_prefers_confidence_and_fills_gaps():
+    from app.services import reference
+    from app.services.flight_enrichment import _merge_sources
+
+    local = reference.lookup_flight_number("CX659")
+    strong = FlightLookupResult(
+        flight_number="CX659",
+        airline_code="CX",
+        origin_iata="HKG",
+        status="scheduled",
+        provider="aerodatabox",
+    )
+    weak = FlightLookupResult(
+        flight_number="CX659",
+        airline_code="CX",
+        origin_iata="XXX",
+        origin_name="Wrong Airport",
+        destination_iata="SIN",
+        destination_name="Singapore Changi Airport",
+        arrival_gate="B7",
+        status="completed",
+        provider="variflight",
+    )
+
+    merged = _merge_sources(local, [("variflight", weak), ("aerodatabox", strong)])
+
+    assert merged.source == "aerodatabox"
+    assert merged.origin_iata == "HKG"  # the better source wins
+    assert merged.origin_name is None  # name from a different airport is not borrowed
+    assert merged.destination_iata == "SIN"  # gap filled by the weaker source
+    assert merged.destination_name == "Singapore Changi Airport"
+    assert merged.arrival_gate == "B7"
+    assert merged.status == "scheduled"
+
+
+def test_detect_conflicts_ignores_synonyms_and_small_time_skew():
+    from datetime import UTC, datetime
+
+    from app.services.flight_enrichment import _detect_conflicts
+
+    a = FlightLookupResult(
+        flight_number="CX659",
+        origin_iata="HKG",
+        departure_terminal="T1",
+        departure_gate="A12",
+        status="scheduled",
+        departure_time=datetime(2026, 9, 26, 1, 45, tzinfo=UTC),
+        provider="aerodatabox",
+    )
+    b = FlightLookupResult(
+        flight_number="CX659",
+        origin_iata="HKG",
+        departure_terminal="1",
+        departure_gate="A12",
+        status="active",
+        departure_time=datetime(2026, 9, 26, 1, 50, tzinfo=UTC),
+        provider="variflight",
+    )
+
+    assert _detect_conflicts([("aerodatabox", a), ("variflight", b)]) == []
+
+
+def test_detect_conflicts_reports_disagreements():
+    from datetime import UTC, datetime
+
+    from app.services.flight_enrichment import _detect_conflicts
+
+    a = FlightLookupResult(
+        flight_number="CX659",
+        origin_iata="HKG",
+        status="scheduled",
+        departure_time=datetime(2026, 9, 26, 1, 45, tzinfo=UTC),
+        provider="aerodatabox",
+    )
+    b = FlightLookupResult(
+        flight_number="CX659",
+        origin_iata="SIN",
+        status="landed",
+        departure_time=datetime(2026, 9, 26, 3, 0, tzinfo=UTC),
+        provider="variflight",
+    )
+
+    conflicts = {
+        item.field: item.values
+        for item in _detect_conflicts([("aerodatabox", a), ("variflight", b)])
+    }
+
+    assert conflicts["origin_iata"] == {"aerodatabox": "HKG", "variflight": "SIN"}
+    # Provider-specific status synonyms are normalised before comparison.
+    assert conflicts["status"] == {"aerodatabox": "scheduled", "variflight": "completed"}
+    assert "departure_time" in conflicts
+
+
+def test_lookup_merged_cross_checks_all_configured_providers(client, db, monkeypatch):
+    import asyncio
+    from datetime import date
+
+    from sqlalchemy import select
+
+    import app.providers as providers
+    from app.models.user import User
+    from app.services.flight_enrichment import FlightEnrichmentService
+
+    monkeypatch.setitem(providers.REGISTERED_PROVIDERS, "fake", FakeProvider)
+    monkeypatch.setitem(providers.REGISTERED_PROVIDERS, "other", OtherProvider)
+    token = register_and_login(client, "lk_merged")["access_token"]
+    _put_key(client, token, "fake", api_key="k1")
+    _put_key(client, token, "other", api_key="k2")
+
+    user = db.scalar(select(User).where(User.username == "lk_merged"))
+    assert user is not None
+    merged = asyncio.run(
+        FlightEnrichmentService(db).lookup_merged(
+            user_id=user.id,
+            flight_number="CX659",
+            date=date(2026, 9, 26),
+        )
+    )
+
+    assert merged.result.source == "fake"
+    assert merged.result.origin_iata == "HKG"
+    assert merged.result.aircraft == "Boeing 777-300ER"
+    assert [item["provider"] for item in merged.sources] == ["fake", "other"]
+    assert all(item["data"] is not None for item in merged.sources)
+    conflicts = {item.field: item.values for item in merged.conflicts}
+    assert conflicts["status"] == {"fake": "scheduled", "other": "completed"}

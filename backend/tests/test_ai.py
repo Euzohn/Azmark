@@ -263,8 +263,120 @@ def test_tool_permissions_classified():
     assert TOOLS["get_statistics"].permission == ToolPermission.READ
     assert TOOLS["get_record"].permission == ToolPermission.READ
     assert TOOLS["lookup_flight"].permission == ToolPermission.READ
+    assert TOOLS["lookup_train"].permission == ToolPermission.READ
+    assert TOOLS["search_web"].permission == ToolPermission.EXTERNAL
     assert TOOLS["create_transport"].permission == ToolPermission.WRITE
     assert TOOLS["delete_transport"].permission == ToolPermission.DESTRUCTIVE
+
+
+def _fake_search_provider():
+    from app.providers.search import SearchProvider, SearchResult
+
+    class _FakeSearch(SearchProvider):
+        name = "fake"
+
+        async def search(self, query, *, max_results=6):
+            return [
+                SearchResult(
+                    title="HKIA Terminal 1 lounges",
+                    url="https://example.com/hkg-lounges",
+                    snippet="The Pier and The Wing are in Terminal 1.",
+                )
+            ][:max_results]
+
+    return _FakeSearch()
+
+
+def test_chat_search_web_executes_external_tool(client, monkeypatch):
+    """EXTERNAL tools must execute (not be silently skipped) and feed results back."""
+    token = register_and_login(client, "ai_web")["access_token"]
+    headers = auth_headers(token)
+    _configure_ai(client, headers)
+
+    from app.services import ai_agent as agent_mod
+    from app.services import search as search_mod
+
+    provider = _fake_search_provider()
+    monkeypatch.setattr(search_mod, "resolve_search_provider", lambda keys: provider)
+
+    fake = _ScriptedProvider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    LLMToolCall(
+                        id="call_1",
+                        name="search_web",
+                        arguments={"query": "HKG terminal 1 lounges"},
+                    )
+                ],
+            ),
+            LLMResponse(content="Terminal 1 has The Pier and The Wing."),
+        ]
+    )
+    monkeypatch.setattr(
+        agent_mod.AiAgentService,
+        "_build_provider",
+        lambda self, user_id: fake,
+    )
+
+    response = client.post(
+        "/api/v1/ai/chat",
+        json={"message": "what lounges are in HKG terminal 1?"},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    tool_msgs = [m for m in fake.last_messages if m["role"] == "tool"]
+    assert tool_msgs, "EXTERNAL tool result was not returned to the model"
+    payload = json.loads(tool_msgs[0]["content"])
+    assert payload["provider"] == "fake"
+    assert payload["query"] == "HKG terminal 1 lounges"
+    assert payload["results"][0]["title"] == "HKIA Terminal 1 lounges"
+    assert "untrusted" in payload["hint"].lower()
+
+
+def test_chat_search_web_without_provider(client, monkeypatch):
+    """With no search provider, search_web returns a structured error (never raises)."""
+    token = register_and_login(client, "ai_web_none")["access_token"]
+    headers = auth_headers(token)
+    _configure_ai(client, headers)
+
+    from app.services import ai_agent as agent_mod
+    from app.services import search as search_mod
+
+    monkeypatch.setattr(search_mod, "resolve_search_provider", lambda keys: None)
+
+    fake = _ScriptedProvider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    LLMToolCall(
+                        id="call_1",
+                        name="search_web",
+                        arguments={"query": "visa for Japan"},
+                    )
+                ],
+            ),
+            LLMResponse(content="I can't search the web right now."),
+        ]
+    )
+    monkeypatch.setattr(
+        agent_mod.AiAgentService,
+        "_build_provider",
+        lambda self, user_id: fake,
+    )
+
+    response = client.post(
+        "/api/v1/ai/chat",
+        json={"message": "do I need a visa for Japan?"},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    tool_msgs = [m for m in fake.last_messages if m["role"] == "tool"]
+    assert tool_msgs
+    payload = json.loads(tool_msgs[0]["content"])
+    assert payload["error"] == "no_search_provider"
 
 
 def test_chat_lookup_flight_then_create(client, monkeypatch):
@@ -607,7 +719,7 @@ def test_lookup_flight_returns_all_fields_to_llm(client, monkeypatch):
 
     from app.schemas.flight_lookup import FlightLookupResponse
     from app.services import ai_agent as agent_mod
-    from app.services.flight_enrichment import FlightEnrichmentService
+    from app.services.flight_enrichment import FlightEnrichmentService, MergedFlightLookup
 
     token = register_and_login(client, "ai_lookup_fields")["access_token"]
     headers = auth_headers(token)
@@ -641,10 +753,14 @@ def test_lookup_flight_returns_all_fields_to_llm(client, monkeypatch):
         source="aerodatabox",
     )
 
-    async def fake_lookup(self, *, user_id, flight_number, date, provider=None):
-        return full
+    async def fake_lookup(self, *, user_id, flight_number, date):
+        return MergedFlightLookup(
+            result=full,
+            sources=[{"provider": "aerodatabox", "confidence": 0.9, "data": full}],
+            conflicts=[],
+        )
 
-    monkeypatch.setattr(FlightEnrichmentService, "lookup", fake_lookup)
+    monkeypatch.setattr(FlightEnrichmentService, "lookup_merged", fake_lookup)
 
     fake = _ScriptedProvider(
         [
@@ -689,6 +805,22 @@ def test_lookup_flight_returns_all_fields_to_llm(client, monkeypatch):
     assert payload["arrival_timezone"] == "Asia/Singapore"
     assert payload["actual_departure_time"] is not None
     assert payload["actual_arrival_time"] is not None
+    assert payload["sources"] == [
+        {
+            "provider": "aerodatabox",
+            "confidence": 0.9,
+            "found": True,
+            "summary": {
+                "provider": "aerodatabox",
+                "origin_iata": "HKG",
+                "destination_iata": "SIN",
+                "departure_time": "2026-09-26T01:45:00+00:00",
+                "arrival_time": "2026-09-26T05:50:00+00:00",
+                "status": "scheduled",
+            },
+        }
+    ]
+    assert payload["conflicts"] == []
 
 
 def test_create_transport_schema_exposes_inference_fields():
