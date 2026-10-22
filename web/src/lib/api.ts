@@ -269,6 +269,8 @@ export const api = {
     request<Airline[]>(`/reference/airlines?q=${encodeURIComponent(query)}`),
   getAirlineByCode: (iata: string) =>
     request<Airline>(`/reference/airlines/${encodeURIComponent(iata)}`),
+  getAirportByIata: (iata: string) =>
+    request<Airport>(`/reference/airports/${encodeURIComponent(iata)}`),
   lookupFlightNumber: (number: string) =>
     request<FlightNumberLookup>(`/reference/flight-lookup?number=${encodeURIComponent(number)}`),
   lookupFlight: (data: { flight_number: string; date?: string; provider?: string }) =>

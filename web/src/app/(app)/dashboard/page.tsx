@@ -13,6 +13,7 @@ import Link from "next/link";
 
 import { AirlineLogo } from "@/components/airline-logo";
 import { AirlineName } from "@/components/airline-name";
+import { AirportName } from "@/components/airport-name";
 import { FlightStatusBadge } from "@/components/status-badge";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -67,9 +68,9 @@ function RecordRow({ record, delay = 0 }: { record: DashboardRecord; delay?: num
       )}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 truncate text-sm font-medium">
-          <span>{record.origin ?? "—"}</span>
+          <span>{record.origin ? <AirportName value={record.origin} /> : "—"}</span>
           <ArrowRight className="h-3.5 w-3.5 shrink-0 text-primary" strokeWidth={2.5} />
-          <span>{record.destination ?? "—"}</span>
+          <span>{record.destination ? <AirportName value={record.destination} /> : "—"}</span>
           {record.service_number ? (
             <span className="ml-1 shrink-0 text-xs font-normal text-muted-foreground">
               {record.service_number}
@@ -174,12 +175,28 @@ export default function DashboardPage() {
                   )}
                   <div className="min-w-0 flex-1">
                     <div className="font-display text-2xl font-semibold tracking-tight">
-                      {data.upcoming.origin ?? "—"}
+                      {data.upcoming.origin ? (
+                        <AirportName
+                          value={data.upcoming.origin}
+                          showCode
+                          codeClassName="text-base align-baseline"
+                        />
+                      ) : (
+                        "—"
+                      )}
                       <ArrowRight
                         className="mx-2 inline h-5 w-5 text-primary align-middle"
                         strokeWidth={2.25}
                       />
-                      {data.upcoming.destination ?? "—"}
+                      {data.upcoming.destination ? (
+                        <AirportName
+                          value={data.upcoming.destination}
+                          showCode
+                          codeClassName="text-base align-baseline"
+                        />
+                      ) : (
+                        "—"
+                      )}
                     </div>
                     <div className="mt-1 text-sm text-muted-foreground">
                       {formatDate(data.upcoming.departure_time)}

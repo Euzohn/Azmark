@@ -17,6 +17,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
 
 import { AirlineLogo } from "@/components/airline-logo";
+import { AirportName } from "@/components/airport-name";
 import { FlightStatusBadge } from "@/components/status-badge";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -141,16 +142,24 @@ function RecordCard({ record, index = 0 }: { record: TimelineRecord; index?: num
           )}
           <div className="min-w-0">
             <div className="flex items-center gap-2 truncate">
-              <span className="font-display text-lg font-semibold tracking-tight">
-                {record.origin ?? "—"}
-              </span>
+              {record.origin ? (
+                <span className="font-display text-lg font-semibold tracking-tight">
+                  <AirportName value={record.origin} />
+                </span>
+              ) : (
+                <span className="font-display text-lg font-semibold tracking-tight">—</span>
+              )}
               <ArrowRight
                 className="h-4 w-4 shrink-0 text-primary transition-transform group-hover:translate-x-0.5"
                 strokeWidth={2.25}
               />
-              <span className="font-display text-lg font-semibold tracking-tight">
-                {record.destination ?? "—"}
-              </span>
+              {record.destination ? (
+                <span className="font-display text-lg font-semibold tracking-tight">
+                  <AirportName value={record.destination} />
+                </span>
+              ) : (
+                <span className="font-display text-lg font-semibold tracking-tight">—</span>
+              )}
               {record.service_number ? (
                 <span className="ml-1 shrink-0 text-xs font-medium text-muted-foreground">
                   {record.service_number}

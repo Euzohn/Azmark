@@ -17,6 +17,7 @@ import { useParams, useRouter } from "next/navigation";
 
 import { AirlineLogo } from "@/components/airline-logo";
 import { AirlineName } from "@/components/airline-name";
+import { AirportName } from "@/components/airport-name";
 import { FlightStatusBadge, TripStatusBadge } from "@/components/status-badge";
 import { TripForm } from "@/components/trip-form";
 import { Button } from "@/components/ui/button";
@@ -249,11 +250,11 @@ export default function TripDetailPage() {
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="font-display text-base font-semibold tracking-tight">
-                            {record.origin ?? "—"}
+                            {record.origin ? <AirportName value={record.origin} /> : "—"}
                           </span>
                           <ArrowRight className="h-3.5 w-3.5 text-primary transition-transform group-hover:translate-x-0.5" strokeWidth={2.25} />
                           <span className="font-display text-base font-semibold tracking-tight">
-                            {record.destination ?? "—"}
+                            {record.destination ? <AirportName value={record.destination} /> : "—"}
                           </span>
                           {record.service_number ? (
                             <span className="ml-1 text-xs font-medium text-muted-foreground">
