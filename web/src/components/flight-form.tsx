@@ -18,27 +18,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { TimezoneSelect } from "@/components/ui/timezone-select";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-store";
+import { fromZonedInput, toZonedInput, todayInZone } from "@/lib/datetime";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
 import { defaultTimezone } from "@/lib/timezones";
 import { useFormDiff } from "@/lib/use-form-diff";
 import { cn } from "@/lib/utils";
 import type { Flight, FlightInput, FlightLookup, ProviderLookupResult } from "@/lib/types";
-
-function toLocalInput(value: string | null | undefined): string {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
-    date.getHours(),
-  )}:${pad(date.getMinutes())}`;
-}
-
-function fromLocalInput(value: string): string | null {
-  if (!value || !value.includes("T")) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
-}
 
 function timePart(value: string): string {
   return value.includes("T") ? value.slice(11, 16) : "";
@@ -53,35 +38,28 @@ function joinDateTime(date: string, time: string): string {
   return time ? `${date}T${time}` : date;
 }
 
-function todayISO(): string {
-  const now = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-}
-
 // 航班日期已过 → 默认「已完成」，否则「计划中」。空/非法返回 null 表示不干预。
-function autoStatus(departure: string): string | null {
+// `tz` is the record's IANA timezone; the naive `departure` wall-clock is read
+// in that zone so the comparison is correct across timezones.
+function autoStatus(departure: string, tz: string): string | null {
   if (!departure) return null;
-  const date = new Date(departure);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.getTime() < Date.now() ? "completed" : "scheduled";
+  const iso = fromZonedInput(departure, tz);
+  if (!iso) return null;
+  return new Date(iso).getTime() < Date.now() ? "completed" : "scheduled";
 }
 
 // 只有日期时按日历日比较：今天及以后仍是「计划中」，避免把今天晚些的航班误判为已完成。
-function autoStatusByDate(value: string): string | null {
+function autoStatusByDate(value: string, tz: string): string | null {
   const date = value.slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
-  return date < todayISO() ? "completed" : "scheduled";
+  return date < todayInZone(tz) ? "completed" : "scheduled";
 }
 
-function formatDateTime(value: string | null | undefined): string {
+// Display an ISO instant as a wall-clock in the record's timezone.
+function formatDateTime(value: string | null | undefined, tz?: string | null): string {
   if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(
-    date.getHours(),
-  )}:${pad(date.getMinutes())}`;
+  const zoned = toZonedInput(value, tz);
+  return zoned ? zoned.replace("T", " ") : "";
 }
 
 function providerLabel(name: string): string {
@@ -141,10 +119,16 @@ function snapshot(initial?: Flight): FlightFormState {
     airline_code: initial?.airline_code ?? "",
     origin: initial?.origin ?? "",
     destination: initial?.destination ?? "",
-    departure_time: toLocalInput(initial?.departure_time),
-    arrival_time: toLocalInput(initial?.arrival_time),
-    actual_departure_time: toLocalInput(initial?.actual_departure_time),
-    actual_arrival_time: toLocalInput(initial?.actual_arrival_time),
+    departure_time: toZonedInput(initial?.departure_time, initial?.departure_timezone),
+    arrival_time: toZonedInput(initial?.arrival_time, initial?.arrival_timezone),
+    actual_departure_time: toZonedInput(
+      initial?.actual_departure_time,
+      initial?.departure_timezone,
+    ),
+    actual_arrival_time: toZonedInput(
+      initial?.actual_arrival_time,
+      initial?.arrival_timezone,
+    ),
     seat: initial?.seat ?? "",
     seat_type: initial?.seat_type ?? "",
     cabin_class: initial?.cabin_class ?? "",
@@ -289,7 +273,7 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
         if (prev[key]) next[key] = joinDateTime(date, timePart(prev[key]));
       }
       if (!statusTouched) {
-        const status = autoStatusByDate(date);
+        const status = autoStatusByDate(date, prev.departure_timezone);
         if (status) next.status = status;
       }
       return next;
@@ -302,7 +286,9 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
     setForm((prev) => {
       const next = { ...prev, departure_time: value };
       if (!statusTouched) {
-        const status = value.includes("T") ? autoStatus(value) : autoStatusByDate(value);
+        const status = value.includes("T")
+          ? autoStatus(value, prev.departure_timezone)
+          : autoStatusByDate(value, prev.departure_timezone);
         if (status) next.status = status;
       }
       return next;
@@ -389,18 +375,33 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
         if (result.destination_iata && !next.destination.trim())
           next.destination = result.destination_iata;
         if (result.departure_time && !next.departure_time) {
-          next.departure_time = toLocalInput(result.departure_time);
+          next.departure_time = toZonedInput(
+            result.departure_time,
+            result.departure_timezone || next.departure_timezone,
+          );
           if (!statusTouched) {
-            const status = autoStatus(next.departure_time);
+            const status = autoStatus(
+              next.departure_time,
+              result.departure_timezone || next.departure_timezone,
+            );
             if (status) next.status = status;
           }
         }
         if (result.arrival_time && !next.arrival_time)
-          next.arrival_time = toLocalInput(result.arrival_time);
+          next.arrival_time = toZonedInput(
+            result.arrival_time,
+            result.arrival_timezone || next.arrival_timezone,
+          );
         if (result.actual_departure_time && !next.actual_departure_time)
-          next.actual_departure_time = toLocalInput(result.actual_departure_time);
+          next.actual_departure_time = toZonedInput(
+            result.actual_departure_time,
+            result.departure_timezone || next.departure_timezone,
+          );
         if (result.actual_arrival_time && !next.actual_arrival_time)
-          next.actual_arrival_time = toLocalInput(result.actual_arrival_time);
+          next.actual_arrival_time = toZonedInput(
+            result.actual_arrival_time,
+            result.arrival_timezone || next.arrival_timezone,
+          );
         if (result.status && !statusTouched) next.status = result.status;
         if (result.departure_terminal && !next.departure_terminal)
           next.departure_terminal = result.departure_terminal;
@@ -496,10 +497,16 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
       airline_code: form.airline_code || null,
       origin: form.origin || null,
       destination: form.destination || null,
-      departure_time: fromLocalInput(form.departure_time),
-      arrival_time: fromLocalInput(form.arrival_time),
-      actual_departure_time: fromLocalInput(form.actual_departure_time),
-      actual_arrival_time: fromLocalInput(form.actual_arrival_time),
+      departure_time: fromZonedInput(form.departure_time, form.departure_timezone),
+      arrival_time: fromZonedInput(form.arrival_time, form.arrival_timezone),
+      actual_departure_time: fromZonedInput(
+        form.actual_departure_time,
+        form.departure_timezone,
+      ),
+      actual_arrival_time: fromZonedInput(
+        form.actual_arrival_time,
+        form.arrival_timezone,
+      ),
       seat: form.seat || null,
       seat_type: form.seat_type || null,
       cabin_class: form.cabin_class || null,
@@ -1058,13 +1065,13 @@ function ComparePanel({
     },
     { label: t("flights.origin"), get: (d) => d.origin_iata ?? "" },
     { label: t("flights.destination"), get: (d) => d.destination_iata ?? "" },
-    { label: t("flights.departureTime"), get: (d) => formatDateTime(d.departure_time) },
-    { label: t("flights.arrivalTime"), get: (d) => formatDateTime(d.arrival_time) },
+    { label: t("flights.departureTime"), get: (d) => formatDateTime(d.departure_time, d.departure_timezone) },
+    { label: t("flights.arrivalTime"), get: (d) => formatDateTime(d.arrival_time, d.arrival_timezone) },
     {
       label: t("flights.actualDepartureTime"),
-      get: (d) => formatDateTime(d.actual_departure_time),
+      get: (d) => formatDateTime(d.actual_departure_time, d.departure_timezone),
     },
-    { label: t("flights.actualArrivalTime"), get: (d) => formatDateTime(d.actual_arrival_time) },
+    { label: t("flights.actualArrivalTime"), get: (d) => formatDateTime(d.actual_arrival_time, d.arrival_timezone) },
     { label: t("flights.departureTerminal"), get: (d) => d.departure_terminal ?? "" },
     { label: t("flights.departureGate"), get: (d) => d.departure_gate ?? "" },
     { label: t("flights.arrivalTerminal"), get: (d) => d.arrival_terminal ?? "" },

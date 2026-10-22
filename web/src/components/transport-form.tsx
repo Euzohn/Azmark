@@ -12,33 +12,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { TimezoneSelect } from "@/components/ui/timezone-select";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-store";
+import { fromZonedInput, toZonedInput } from "@/lib/datetime";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
 import { defaultTimezone } from "@/lib/timezones";
 import { useFormDiff } from "@/lib/use-form-diff";
 import { cn } from "@/lib/utils";
 import type { OtherTransport, OtherTransportInput } from "@/lib/types";
 
-function toLocalInput(value: string | null | undefined): string {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
-    date.getHours(),
-  )}:${pad(date.getMinutes())}`;
-}
-
-function fromLocalInput(value: string): string | null {
-  if (!value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
-}
-
-function autoStatus(departure: string): string | null {
+function autoStatus(departure: string, tz: string): string | null {
   if (!departure) return null;
-  const date = new Date(departure);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.getTime() < Date.now() ? "completed" : "scheduled";
+  const iso = fromZonedInput(departure, tz);
+  if (!iso) return null;
+  return new Date(iso).getTime() < Date.now() ? "completed" : "scheduled";
 }
 
 type TransportFormState = {
@@ -76,10 +61,16 @@ function snapshot(initial?: OtherTransport): TransportFormState {
     carrier: initial?.carrier ?? "",
     origin: initial?.origin ?? "",
     destination: initial?.destination ?? "",
-    departure_time: toLocalInput(initial?.departure_time),
-    arrival_time: toLocalInput(initial?.arrival_time),
-    actual_departure_time: toLocalInput(initial?.actual_departure_time),
-    actual_arrival_time: toLocalInput(initial?.actual_arrival_time),
+    departure_time: toZonedInput(initial?.departure_time, initial?.departure_timezone),
+    arrival_time: toZonedInput(initial?.arrival_time, initial?.arrival_timezone),
+    actual_departure_time: toZonedInput(
+      initial?.actual_departure_time,
+      initial?.departure_timezone,
+    ),
+    actual_arrival_time: toZonedInput(
+      initial?.actual_arrival_time,
+      initial?.arrival_timezone,
+    ),
     departure_gate: initial?.departure_gate ?? "",
     arrival_gate: initial?.arrival_gate ?? "",
     departure_timezone: initial?.departure_timezone ?? "",
@@ -168,7 +159,7 @@ export function TransportForm({ initial, submitting, onSubmit }: TransportFormPr
     setForm((prev) => {
       const next = { ...prev, departure_time: value };
       if (!statusTouched) {
-        const status = autoStatus(value);
+        const status = autoStatus(value, prev.departure_timezone);
         if (status) next.status = status;
       }
       return next;
@@ -188,10 +179,16 @@ export function TransportForm({ initial, submitting, onSubmit }: TransportFormPr
       carrier: form.carrier || null,
       origin: form.origin || null,
       destination: form.destination || null,
-      departure_time: fromLocalInput(form.departure_time),
-      arrival_time: fromLocalInput(form.arrival_time),
-      actual_departure_time: fromLocalInput(form.actual_departure_time),
-      actual_arrival_time: fromLocalInput(form.actual_arrival_time),
+      departure_time: fromZonedInput(form.departure_time, form.departure_timezone),
+      arrival_time: fromZonedInput(form.arrival_time, form.arrival_timezone),
+      actual_departure_time: fromZonedInput(
+        form.actual_departure_time,
+        form.departure_timezone,
+      ),
+      actual_arrival_time: fromZonedInput(
+        form.actual_arrival_time,
+        form.arrival_timezone,
+      ),
       departure_gate: form.departure_gate || null,
       arrival_gate: form.arrival_gate || null,
       departure_timezone: form.departure_timezone || null,
