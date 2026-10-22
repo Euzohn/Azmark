@@ -77,6 +77,34 @@ def test_search_airports_include_zh_names(client):
     assert body["city_zh"] == "香港"
 
 
+def test_search_airports_by_chinese_name(client):
+    """Chinese names merged from Wikidata must be searchable (spec #7)."""
+    token = register_and_login(client, "ref_airport_zh_search")["access_token"]
+    headers = auth_headers(token)
+
+    # Full Chinese airport name
+    response = client.get("/api/v1/reference/airports", params={"q": "遥墙"}, headers=headers)
+    assert response.status_code == 200, response.text
+    codes = [airport["iata"] for airport in response.json()]
+    assert "TNA" in codes
+
+    # Chinese city name
+    response = client.get("/api/v1/reference/airports", params={"q": "济南"}, headers=headers)
+    assert response.status_code == 200
+    codes = [airport["iata"] for airport in response.json()]
+    assert "TNA" in codes
+
+
+def test_get_airport_by_iata_has_chinese_name(client):
+    """A Chinese airport without a curated name_zh gets one from Wikidata."""
+    token = register_and_login(client, "ref_airport_tna")["access_token"]
+    response = client.get("/api/v1/reference/airports/TNA", headers=auth_headers(token))
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["iata"] == "TNA"
+    assert body["name_zh"] == "济南遥墙国际机场"
+
+
 def test_flight_number_lookup(client):
     token = register_and_login(client, "ref_flight")["access_token"]
     response = client.get(

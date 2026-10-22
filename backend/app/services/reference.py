@@ -2,6 +2,12 @@
 
 Loaded once into memory from the vendored JSON in `app/data/`. See
 `app/data/ATTRIBUTION.md` and `scripts/build_reference.py`.
+
+Chinese airport names (`name_zh` / `city_zh`) come from three layers, each
+only filling fields the previous left empty: the curated ``AIRPORT_ZH`` map in
+``build_reference.py`` (baked into ``airports.json``), then the Wikidata-derived
+``airport_names_zh.json`` (see ``scripts/build_airport_names_zh.py``), merged at
+load time so ``airports.json`` stays the upstream builder's verbatim output.
 """
 
 import json
@@ -17,9 +23,28 @@ _ICAO_FLIGHT_RE = re.compile(r"^([A-Z]{3})(\d{1,4})$")
 
 
 @lru_cache(maxsize=1)
+def _airport_names_zh() -> dict[str, dict[str, str]]:
+    """Wikidata-derived Chinese names (see build_airport_names_zh.py)."""
+    path = DATA_DIR / "airport_names_zh.json"
+    if not path.exists():
+        return {}
+    with path.open(encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+@lru_cache(maxsize=1)
 def _airports() -> tuple[dict[str, Any], ...]:
     with (DATA_DIR / "airports.json").open(encoding="utf-8") as fh:
-        return tuple(json.load(fh))
+        airports = json.load(fh)
+    extra = _airport_names_zh()
+    for airport in airports:
+        fill = extra.get(airport["iata"])
+        if not fill:
+            continue
+        for field in ("name_zh", "city_zh"):
+            if not airport.get(field) and fill.get(field):
+                airport[field] = fill[field]
+    return tuple(airports)
 
 
 @lru_cache(maxsize=1)
@@ -47,16 +72,18 @@ def _airport_score(query: str, airport: dict[str, Any]) -> int | None:
     iata = airport["iata"].lower()
     city = (airport.get("city") or "").lower()
     name = airport["name"].lower()
+    city_zh = (airport.get("city_zh") or "").lower()
+    name_zh = (airport.get("name_zh") or "").lower()
     country = (airport.get("country") or "").lower()
     if iata == query:
         return 0
     if iata.startswith(query):
         return 1
-    if city.startswith(query):
+    if city.startswith(query) or city_zh.startswith(query):
         return 2
-    if name.startswith(query):
+    if name.startswith(query) or name_zh.startswith(query):
         return 3
-    if query in city or query in name:
+    if query in city or query in name or query in city_zh or query in name_zh:
         return 4
     if country == query:
         return 5
