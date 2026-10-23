@@ -184,7 +184,11 @@ class TransportRepository:
             TransportRecord.type == parts[0],
         ]
         if dep_date:
-            filters.append(func.date(TransportRecord.departure_time) == dep_date)
+            # Bind a real date object: `func.date()` is NullType, so comparing it
+            # to a plain string makes PostgreSQL reject `date = varchar`.
+            filters.append(
+                func.date(TransportRecord.departure_time) == date.fromisoformat(dep_date)
+            )
         else:
             filters.append(TransportRecord.departure_time.is_(None))
 
