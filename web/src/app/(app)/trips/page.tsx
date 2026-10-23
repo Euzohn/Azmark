@@ -14,14 +14,21 @@ import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import type { Trip } from "@/lib/types";
 
-function formatDate(value: string | null): string {
+function formatDate(value: string | null, locale: string): string {
   if (!value) return "";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
+  return Number.isNaN(date.getTime())
+    ? ""
+    : date.toLocaleDateString(locale, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        timeZone: "UTC",
+      });
 }
 
 export default function TripsPage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
@@ -86,8 +93,8 @@ export default function TripsPage() {
 
       <div className="grid gap-3 md:grid-cols-2">
         {data?.items.map((trip, index) => {
-          const start = formatDate(trip.start_date);
-          const end = formatDate(trip.end_date);
+          const start = formatDate(trip.start_date, locale);
+          const end = formatDate(trip.end_date, locale);
           const dates = start && end ? t("trips.dates", { start, end }) : null;
           return (
             <Card

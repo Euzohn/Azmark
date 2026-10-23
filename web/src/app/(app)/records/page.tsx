@@ -3,12 +3,14 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
+  Backpack,
   Bus,
   History,
   List as ListIcon,
   Plane,
   Plus,
   Search,
+  SlidersHorizontal,
   TrainFront,
   X,
 } from "lucide-react";
@@ -21,6 +23,7 @@ import { AirportName } from "@/components/airport-name";
 import { FlightStatusBadge } from "@/components/status-badge";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
+import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -54,11 +57,11 @@ const TYPE_ICONS = {
 
 type ViewMode = "list" | "timeline";
 
-function formatDateTime(value: string | null): string {
+function formatDateTime(value: string | null, locale: string): string {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleString(undefined, {
+  return date.toLocaleString(locale, {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -98,11 +101,11 @@ function dayKey(value: string | null): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
-function dateLabel(key: string): string {
+function dateLabel(key: string, locale: string): string {
   if (key === "unknown") return "—";
   const date = new Date(key);
   if (Number.isNaN(date.getTime())) return key;
-  return date.toLocaleDateString(undefined, {
+  return date.toLocaleDateString(locale, {
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -124,8 +127,16 @@ function matchesSearch(record: TimelineRecord, search: string): boolean {
     .some((v) => v.toLowerCase().includes(needle));
 }
 
-function RecordCard({ record, index = 0 }: { record: TimelineRecord; index?: number }) {
-  const { t } = useI18n();
+function RecordCard({
+  record,
+  index = 0,
+  tripName,
+}: {
+  record: TimelineRecord;
+  index?: number;
+  tripName?: string;
+}) {
+  const { t, locale } = useI18n();
   const typeKey = TYPE_KEYS[record.type] ?? "records.type.other";
   const Icon = TYPE_ICONS[record.type as keyof typeof TYPE_ICONS] ?? Bus;
 
@@ -167,12 +178,20 @@ function RecordCard({ record, index = 0 }: { record: TimelineRecord; index?: num
               ) : null}
             </div>
             <div className="mt-0.5 truncate text-xs text-muted-foreground">
-              {formatDateTime(record.departure_time)}
-              {record.arrival_time ? ` → ${formatDateTime(record.arrival_time)}` : ""}
+              {formatDateTime(record.departure_time, locale)}
+              {record.arrival_time
+                ? ` → ${formatDateTime(record.arrival_time, locale)}`
+                : ""}
               {record.carrier ? ` · ${record.carrier}` : ""}
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
               <Badge>{t(typeKey)}</Badge>
+              {tripName ? (
+                <Badge variant="primary" className="max-w-[14rem]">
+                  <Backpack className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{tripName}</span>
+                </Badge>
+              ) : null}
             </div>
           </div>
         </Link>
@@ -198,6 +217,8 @@ function RecordsContent() {
   const [dateTo, setDateTo] = useState("");
   const [sort, setSort] = useState<RecordSort>("newest");
   const [page, setPage] = useState(1);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
 
   const filters: RecordFilters = {
     search: search || undefined,
@@ -235,6 +256,7 @@ function RecordsContent() {
   const hasFilters = Boolean(
     search || typeFilter || statusFilter || tripFilter || dateFrom || dateTo,
   );
+  const advancedCount = [statusFilter, tripFilter, dateFrom, dateTo].filter(Boolean).length;
 
   const change = <T,>(setter: (value: T) => void, value: T) => {
     setter(value);
@@ -252,9 +274,15 @@ function RecordsContent() {
   };
 
   const timelineGroups = useMemo(() => {
-    const items = (timeline ?? []).filter(
-      (record) => (!typeFilter || record.type === typeFilter) && matchesSearch(record, search),
-    );
+    const items = (timeline ?? []).filter((record) => {
+      if (typeFilter && record.type !== typeFilter) return false;
+      if (statusFilter && record.status !== statusFilter) return false;
+      if (tripFilter && record.trip_id !== tripFilter) return false;
+      const key = dayKey(record.departure_time);
+      if (dateFrom && (key === "unknown" || key < dateFrom)) return false;
+      if (dateTo && (key === "unknown" || key > dateTo)) return false;
+      return matchesSearch(record, search);
+    });
     items.sort((a, b) => {
       const ta = a.departure_time ? new Date(a.departure_time).getTime() : 0;
       const tb = b.departure_time ? new Date(b.departure_time).getTime() : 0;
@@ -268,33 +296,53 @@ function RecordsContent() {
       else map.set(key, [record]);
     }
     return Array.from(map.entries());
-  }, [timeline, typeFilter, search]);
+  }, [timeline, typeFilter, statusFilter, tripFilter, dateFrom, dateTo, search]);
 
-  const totalLabel = data
-    ? `${t("records.subtitle")} · ${t("records.total", { count: data.total })}`
-    : t("records.subtitle");
+  const timelineCount = timelineGroups.reduce((sum, [, records]) => sum + records.length, 0);
+  const shownTotal = view === "timeline" ? timelineCount : data?.total;
+  const totalLabel =
+    shownTotal !== undefined
+      ? `${t("records.subtitle")} · ${t("records.total", { count: shownTotal })}`
+      : t("records.subtitle");
+
+  const addOptions = [
+    { href: "/flights/new", label: t("records.addFlight"), icon: Plane },
+    { href: "/trains/new", label: t("records.addTrain"), icon: TrainFront },
+    { href: "/transports/new", label: t("records.addTransport"), icon: Bus },
+  ];
 
   const addActions = (
-    <div className="flex flex-wrap items-center gap-2">
-      <Link href="/flights/new">
-        <Button variant="outline" size="sm">
-          <Plane className="h-4 w-4" />
-          {t("records.addFlight")}
-        </Button>
-      </Link>
-      <Link href="/trains/new">
-        <Button variant="outline" size="sm">
-          <TrainFront className="h-4 w-4" />
-          {t("records.addTrain")}
-        </Button>
-      </Link>
-      <Link href="/transports/new">
-        <Button size="sm">
-          <Plus className="h-4 w-4" />
-          {t("records.addTransport")}
-        </Button>
-      </Link>
-    </div>
+    <>
+      <div className="hidden flex-wrap items-center gap-2 sm:flex">
+        <Link href="/flights/new">
+          <Button variant="outline" size="sm">
+            <Plane className="h-4 w-4" />
+            {t("records.addFlight")}
+          </Button>
+        </Link>
+        <Link href="/trains/new">
+          <Button variant="outline" size="sm">
+            <TrainFront className="h-4 w-4" />
+            {t("records.addTrain")}
+          </Button>
+        </Link>
+        <Link href="/transports/new">
+          <Button size="sm">
+            <Plus className="h-4 w-4" />
+            {t("records.addTransport")}
+          </Button>
+        </Link>
+      </div>
+      <Button
+        size="sm"
+        className="sm:hidden"
+        aria-haspopup="dialog"
+        onClick={() => setAddOpen(true)}
+      >
+        <Plus className="h-4 w-4" />
+        {t("records.add")}
+      </Button>
+    </>
   );
 
   return (
@@ -302,13 +350,26 @@ function RecordsContent() {
       <PageHeader title={t("records.title")} subtitle={totalLabel} actions={addActions} />
 
       <div className="flex flex-col gap-3">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="pl-10"
-            placeholder={t("records.searchPlaceholder")}
-            value={search}
-            onChange={(event) => change(setSearch, event.target.value)}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="pl-10"
+              placeholder={t("records.searchPlaceholder")}
+              value={search}
+              onChange={(event) => change(setSearch, event.target.value)}
+            />
+          </div>
+          <Segmented
+            value={view}
+            onChange={(value) => {
+              setView(value);
+              setPage(1);
+            }}
+            options={[
+              { value: "list", label: t("records.view.list"), icon: ListIcon },
+              { value: "timeline", label: t("records.view.timeline"), icon: History },
+            ]}
           />
         </div>
 
@@ -328,66 +389,36 @@ function RecordsContent() {
           </Select>
 
           {view === "list" ? (
-            <>
-              <Select
-                value={statusFilter}
-                onChange={(event) => change(setStatusFilter, event.target.value)}
-                className="w-auto text-sm"
-                aria-label={t("records.filter.status")}
-              >
-                <option value="">
-                  {t("records.filter.status")}: {t("records.filter.all")}
-                </option>
-                <option value="scheduled">{t("flights.status.scheduled")}</option>
-                <option value="completed">{t("flights.status.completed")}</option>
-                <option value="cancelled">{t("flights.status.cancelled")}</option>
-              </Select>
-
-              <Select
-                value={tripFilter}
-                onChange={(event) => change(setTripFilter, event.target.value)}
-                className="w-auto text-sm"
-                aria-label={t("records.filter.trip")}
-              >
-                <option value="">
-                  {t("records.filter.trip")}: {t("records.filter.all")}
-                </option>
-                {trips?.items.map((trip) => (
-                  <option key={trip.id} value={trip.id}>
-                    {trip.name}
-                  </option>
-                ))}
-              </Select>
-
-              <Select
-                value={sort}
-                onChange={(event) => change(setSort, event.target.value as RecordSort)}
-                className="w-auto text-sm"
-                aria-label={t("records.filter.sort")}
-              >
-                <option value="newest">{t("records.sort.newest")}</option>
-                <option value="oldest">{t("records.sort.oldest")}</option>
-                <option value="departure">{t("records.sort.departure")}</option>
-                <option value="arrival">{t("records.sort.arrival")}</option>
-                <option value="created">{t("records.sort.created")}</option>
-              </Select>
-
-              <Input
-                type="date"
-                value={dateFrom}
-                onChange={(event) => change(setDateFrom, event.target.value)}
-                className="w-auto text-sm"
-                aria-label={t("records.filter.dateFrom")}
-              />
-              <Input
-                type="date"
-                value={dateTo}
-                onChange={(event) => change(setDateTo, event.target.value)}
-                className="w-auto text-sm"
-                aria-label={t("records.filter.dateTo")}
-              />
-            </>
+            <Select
+              value={sort}
+              onChange={(event) => change(setSort, event.target.value as RecordSort)}
+              className="w-auto text-sm"
+              aria-label={t("records.filter.sort")}
+            >
+              <option value="newest">{t("records.sort.newest")}</option>
+              <option value="oldest">{t("records.sort.oldest")}</option>
+              <option value="departure">{t("records.sort.departure")}</option>
+              <option value="arrival">{t("records.sort.arrival")}</option>
+              <option value="created">{t("records.sort.created")}</option>
+            </Select>
           ) : null}
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            aria-expanded={advancedOpen || advancedCount > 0}
+            aria-controls="records-advanced-filters"
+            onClick={() => setAdvancedOpen((open) => !open)}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            {t("records.filter.more")}
+            {advancedCount > 0 ? (
+              <span className="rounded-full bg-accent px-1.5 text-[10px] leading-4 text-accent-foreground">
+                {advancedCount}
+              </span>
+            ) : null}
+          </Button>
 
           {hasFilters ? (
             <Button variant="ghost" size="sm" onClick={resetFilters}>
@@ -395,21 +426,72 @@ function RecordsContent() {
               {t("records.filter.reset")}
             </Button>
           ) : null}
-
-          <div className="ml-auto">
-            <Segmented
-              value={view}
-              onChange={(value) => {
-                setView(value);
-                setPage(1);
-              }}
-              options={[
-                { value: "list", label: t("records.view.list"), icon: ListIcon },
-                { value: "timeline", label: t("records.view.timeline"), icon: History },
-              ]}
-            />
-          </div>
         </div>
+
+        {advancedOpen || advancedCount > 0 ? (
+          <div
+            id="records-advanced-filters"
+            className="grid gap-3 rounded-xl border border-border bg-card/60 p-3 sm:grid-cols-2 lg:grid-cols-4"
+          >
+            <label className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">
+                {t("records.filter.status")}
+              </span>
+              <Select
+                value={statusFilter}
+                onChange={(event) => change(setStatusFilter, event.target.value)}
+                className="w-full text-sm"
+              >
+                <option value="">{t("records.filter.all")}</option>
+                <option value="scheduled">{t("flights.status.scheduled")}</option>
+                <option value="completed">{t("flights.status.completed")}</option>
+                <option value="cancelled">{t("flights.status.cancelled")}</option>
+              </Select>
+            </label>
+
+            <label className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">
+                {t("records.filter.trip")}
+              </span>
+              <Select
+                value={tripFilter}
+                onChange={(event) => change(setTripFilter, event.target.value)}
+                className="w-full text-sm"
+              >
+                <option value="">{t("records.filter.all")}</option>
+                {trips?.items.map((trip) => (
+                  <option key={trip.id} value={trip.id}>
+                    {trip.name}
+                  </option>
+                ))}
+              </Select>
+            </label>
+
+            <label className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">
+                {t("records.filter.dateFrom")}
+              </span>
+              <Input
+                type="date"
+                value={dateFrom}
+                onChange={(event) => change(setDateFrom, event.target.value)}
+                className="w-full text-sm"
+              />
+            </label>
+
+            <label className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">
+                {t("records.filter.dateTo")}
+              </span>
+              <Input
+                type="date"
+                value={dateTo}
+                onChange={(event) => change(setDateTo, event.target.value)}
+                className="w-full text-sm"
+              />
+            </label>
+          </div>
+        ) : null}
       </div>
 
       {view === "list" ? (
@@ -427,8 +509,27 @@ function RecordsContent() {
           isLoading={timelineLoading}
           groups={timelineGroups}
           isEmpty={timelineGroups.length === 0}
+          tripNames={tripNames}
         />
       )}
+
+      <BottomSheet open={addOpen} onClose={() => setAddOpen(false)} title={t("records.add")}>
+        <div className="flex flex-col gap-1">
+          {addOptions.map(({ href, label, icon: Icon }) => (
+            <Link
+              key={href}
+              href={href}
+              onClick={() => setAddOpen(false)}
+              className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+            >
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-accent-foreground">
+                <Icon className="h-4 w-4" />
+              </span>
+              {label}
+            </Link>
+          ))}
+        </div>
+      </BottomSheet>
     </div>
   );
 }
@@ -443,7 +544,7 @@ interface ListViewProps {
   onPage: (page: number) => void;
 }
 
-function ListView({ isLoading, isEmpty, items, page, pages, onPage }: ListViewProps) {
+function ListView({ isLoading, isEmpty, items, tripNames, page, pages, onPage }: ListViewProps) {
   const { t } = useI18n();
 
   if (isLoading) {
@@ -472,12 +573,26 @@ function ListView({ isLoading, isEmpty, items, page, pages, onPage }: ListViewPr
         title={t("records.empty")}
         hint={t("records.emptyHint")}
         action={
-          <Link href="/flights/new">
-            <Button variant="outline">
-              <Plus className="h-4 w-4" />
-              {t("records.addFlight")}
-            </Button>
-          </Link>
+          <div className="flex flex-wrap justify-center gap-2">
+            <Link href="/flights/new">
+              <Button variant="outline">
+                <Plane className="h-4 w-4" />
+                {t("records.addFlight")}
+              </Button>
+            </Link>
+            <Link href="/trains/new">
+              <Button variant="outline">
+                <TrainFront className="h-4 w-4" />
+                {t("records.addTrain")}
+              </Button>
+            </Link>
+            <Link href="/transports/new">
+              <Button variant="outline">
+                <Bus className="h-4 w-4" />
+                {t("records.addTransport")}
+              </Button>
+            </Link>
+          </div>
         }
       />
     );
@@ -487,7 +602,12 @@ function ListView({ isLoading, isEmpty, items, page, pages, onPage }: ListViewPr
     <>
       <div className="flex flex-col gap-3">
         {items.map((record, index) => (
-          <RecordCard key={record.id} record={record} index={index} />
+          <RecordCard
+            key={record.id}
+            record={record}
+            index={index}
+            tripName={record.trip_id ? tripNames.get(record.trip_id) : undefined}
+          />
         ))}
       </div>
 
@@ -522,10 +642,11 @@ interface TimelineViewProps {
   isLoading: boolean;
   isEmpty: boolean;
   groups: Array<[string, TimelineRecord[]]>;
+  tripNames: Map<string, string>;
 }
 
-function TimelineView({ isLoading, isEmpty, groups }: TimelineViewProps) {
-  const { t } = useI18n();
+function TimelineView({ isLoading, isEmpty, groups, tripNames }: TimelineViewProps) {
+  const { t, locale } = useI18n();
 
   if (isLoading) {
     return (
@@ -558,14 +679,19 @@ function TimelineView({ isLoading, isEmpty, groups }: TimelineViewProps) {
           <div className="flex items-center gap-3">
             <span className="h-2 w-2 rounded-full bg-primary/70" />
             <h2 className="font-display text-sm font-semibold tracking-tight text-muted-foreground">
-              {dateLabel(key)}
+              {dateLabel(key, locale)}
             </h2>
             <span className="text-xs text-muted-foreground/60">· {records.length}</span>
             <div className="h-px flex-1 bg-border" />
           </div>
           <div className="flex flex-col gap-3 sm:border-l sm:border-border sm:pl-5">
             {records.map((record, index) => (
-              <RecordCard key={record.id} record={record} index={index} />
+              <RecordCard
+                key={record.id}
+                record={record}
+                index={index}
+                tripName={record.trip_id ? tripNames.get(record.trip_id) : undefined}
+              />
             ))}
           </div>
         </section>

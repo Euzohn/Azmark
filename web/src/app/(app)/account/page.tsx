@@ -47,7 +47,7 @@ function AccountContent() {
     <div className="flex flex-col gap-5">
       <PageHeader title={t("account.title")} subtitle={t("account.subtitle")} />
 
-      <div>
+      <div className="-mx-1 overflow-x-auto px-1 pb-1">
         <Segmented
           value={tab}
           onChange={(value) => router.replace(`/account?tab=${value}`)}

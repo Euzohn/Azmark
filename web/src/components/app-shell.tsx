@@ -206,7 +206,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main className="flex-1 px-4 pb-28 pt-5 md:px-8 md:pb-10 md:pt-8">{children}</main>
+      <main className="min-w-0 flex-1 px-4 pb-28 pt-5 md:px-8 md:pb-10 md:pt-8">{children}</main>
 
       <nav
         className="fixed inset-x-0 bottom-0 z-20 flex border-t border-border bg-card/90 backdrop-blur-md md:hidden"

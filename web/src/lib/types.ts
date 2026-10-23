@@ -519,6 +519,7 @@ export interface DashboardRead {
   stats: DashboardStats;
   recent: DashboardRecord[];
   upcoming: DashboardRecord | null;
+  by_month: BreakdownItem[];
 }
 
 export interface BreakdownItem {

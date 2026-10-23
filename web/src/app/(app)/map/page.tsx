@@ -4,14 +4,17 @@ import "maplibre-gl/dist/maplibre-gl.css";
 
 import { useQuery } from "@tanstack/react-query";
 import { MapIcon } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GeoJSONSource, Map as MLMap, Marker, Popup, StyleSpecification } from "maplibre-gl";
 
 import { useTheme } from "@/components/theme-provider";
+import { AirportName } from "@/components/airport-name";
 import { PageHeader } from "@/components/page-header";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Stat } from "@/components/ui/stat";
 import { api } from "@/lib/api";
 import { greatCircle, type LonLat } from "@/lib/geo";
 import { useI18n } from "@/lib/i18n";
@@ -63,7 +66,7 @@ function pointOf(code: string | null, lat: number | null, lon: number | null): L
 }
 
 export default function MapPage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { theme } = useTheme();
 
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -90,6 +93,34 @@ export default function MapPage() {
     [data],
   );
   const showMap = !isLoading && routes.length > 0;
+
+  const summary = useMemo(() => {
+    const airports = new Set<string>();
+    const countries = new Set<string>();
+    let distance = 0;
+    for (const route of routes) {
+      if (route.origin.code) airports.add(route.origin.code);
+      if (route.destination.code) airports.add(route.destination.code);
+      if (route.origin.country) countries.add(route.origin.country);
+      if (route.destination.country) countries.add(route.destination.country);
+      if (route.distance_km) distance += route.distance_km;
+    }
+    return { airports: airports.size, countries: countries.size, distance };
+  }, [routes]);
+
+  const longestRoutes = useMemo(
+    () =>
+      routes
+        .filter((route) => route.distance_km !== null)
+        .sort((a, b) => (b.distance_km ?? 0) - (a.distance_km ?? 0))
+        .slice(0, 5),
+    [routes],
+  );
+
+  const numberFormat = useMemo(
+    () => new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }),
+    [locale],
+  );
 
   // Keep the latest theme available to the (mount-only) map effects.
   useEffect(() => {
@@ -345,13 +376,68 @@ export default function MapPage() {
       ) : null}
 
       {showMap ? (
-        <Card className="overflow-hidden p-0">
-          <div ref={containerRef} className="h-[60vh] w-full" />
-        </Card>
-      ) : null}
+        <>
+          <div className="grid grid-cols-2 gap-4 border-y border-border py-4 sm:grid-cols-4">
+            <Stat label={t("map.stats.routes")} value={routes.length} />
+            <Stat label={t("map.stats.airports")} value={summary.airports} />
+            <Stat label={t("map.stats.countries")} value={summary.countries} />
+            <Stat
+              label={t("map.stats.distance")}
+              value={t("map.km", { value: numberFormat.format(summary.distance) })}
+            />
+          </div>
 
-      {showMap ? (
-        <p className="text-xs text-muted-foreground">{t("map.greatCircleNote")}</p>
+          <Card className="overflow-hidden p-0">
+            <div ref={containerRef} className="h-[60vh] w-full" />
+          </Card>
+
+          <p className="text-xs text-muted-foreground">{t("map.greatCircleNote")}</p>
+
+          {longestRoutes.length > 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>{t("map.longest")}</CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {longestRoutes.map((route) => {
+                  const href =
+                    route.type === "train"
+                      ? `/trains/${route.id}`
+                      : route.type === "other"
+                        ? `/transports/${route.id}`
+                        : `/flights/${route.id}`;
+                  return (
+                    <Link
+                      key={route.id}
+                      href={href}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-border/70 px-3 py-2.5 transition-colors hover:bg-accent/40"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 truncate text-sm font-medium">
+                          <AirportName value={route.origin.code ?? route.origin.name} />
+                          <span className="text-muted-foreground">→</span>
+                          <AirportName
+                            value={route.destination.code ?? route.destination.name}
+                          />
+                        </div>
+                        <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                          {[route.service_number, route.carrier]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </div>
+                      </div>
+                      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                        {t("map.km", {
+                          value: numberFormat.format(route.distance_km ?? 0),
+                        })}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          ) : null}
+        </>
       ) : null}
     </div>
   );

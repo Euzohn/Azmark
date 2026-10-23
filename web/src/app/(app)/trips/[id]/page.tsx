@@ -35,11 +35,11 @@ import type {
   TripItem,
 } from "@/lib/types";
 
-function formatDateTime(value: string | null): string {
+function formatDateTime(value: string | null, locale: string): string {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleString(undefined, {
+  return date.toLocaleString(locale, {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -48,10 +48,17 @@ function formatDateTime(value: string | null): string {
   });
 }
 
-function formatDate(value: string | null): string {
+function formatDate(value: string | null, locale: string): string {
   if (!value) return "";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
+  return Number.isNaN(date.getTime())
+    ? ""
+    : date.toLocaleDateString(locale, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        timeZone: "UTC",
+      });
 }
 
 function isTrainRecord(record: TimelineRecord): record is Train {
@@ -67,7 +74,7 @@ export default function TripDetailPage() {
   const id = params.id;
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
 
   const { data, isLoading } = useQuery({
     queryKey: ["trip", id],
@@ -112,8 +119,8 @@ export default function TripDetailPage() {
     return <p className="text-sm text-muted-foreground">{t("common.empty")}</p>;
   }
 
-  const start = formatDate(data.start_date);
-  const end = formatDate(data.end_date);
+  const start = formatDate(data.start_date, locale);
+  const end = formatDate(data.end_date, locale);
   const dates = start && end ? t("trips.dates", { start, end }) : null;
 
   // Older API responses may not include items yet; fall back to records.
@@ -263,7 +270,7 @@ export default function TripDetailPage() {
                           ) : null}
                         </div>
                         <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                          {formatDateTime(record.departure_time)}
+                          {formatDateTime(record.departure_time, locale)}
                           {" · "}
                           {isTrain || isOther ? (
                             record.carrier

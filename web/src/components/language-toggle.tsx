@@ -6,14 +6,14 @@ import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 
 export function LanguageToggle() {
-  const { locale, setLocale } = useI18n();
+  const { locale, setLocale, t } = useI18n();
 
   return (
     <Button
       variant="ghost"
       size="sm"
       onClick={() => setLocale(locale === "zh-CN" ? "en-US" : "zh-CN")}
-      aria-label="Switch language"
+      aria-label={t("common.switchLanguage")}
     >
       <Languages className="h-4 w-4" />
       {locale === "zh-CN" ? "EN" : "中"}

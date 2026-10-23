@@ -493,7 +493,7 @@ export default function AiChatPage() {
             className="flex flex-1 flex-col gap-4 overflow-y-auto rounded-2xl border border-border bg-card/50 p-4"
           >
             {messages.length === 0 ? (
-              <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
+              <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center gap-4 text-center">
                 <Bot className="h-10 w-10 text-muted-foreground" strokeWidth={1.5} />
                 <div>
                   <p className="font-display text-lg font-medium">{t("ai.empty")}</p>
@@ -521,7 +521,7 @@ export default function AiChatPage() {
               <div
                 key={msg.id}
                 className={cn(
-                  "flex animate-fade-in-up",
+                  "mx-auto flex w-full max-w-3xl animate-fade-in-up",
                   msg.role === "user" ? "justify-end" : "justify-start",
                 )}
               >
@@ -571,7 +571,7 @@ export default function AiChatPage() {
             ))}
           </div>
 
-          <div className="flex flex-col gap-2">
+          <div className="mx-auto flex w-full max-w-3xl flex-col gap-2">
             {imagePreview && (
               <div className="relative inline-flex items-center gap-2 self-start">
                 <ChatImage src={imagePreview} className="h-16 w-16 rounded-lg border border-border object-cover" />

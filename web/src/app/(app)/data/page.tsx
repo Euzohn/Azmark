@@ -30,12 +30,12 @@ function saveBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-function formatCell(value: unknown): string {
+function formatCell(value: unknown, locale: string): string {
   if (value === null || value === undefined || value === "") return "—";
   if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value)) {
     const date = new Date(value);
     if (!Number.isNaN(date.getTime())) {
-      return date.toLocaleString(undefined, {
+      return date.toLocaleString(locale, {
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
@@ -48,7 +48,7 @@ function formatCell(value: unknown): string {
 }
 
 export default function DataPage({ embedded = false }: { embedded?: boolean } = {}) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const queryClient = useQueryClient();
   const [includeSensitive, setIncludeSensitive] = useState(false);
   const [exporting, setExporting] = useState<"json" | "csv" | null>(null);
@@ -317,7 +317,7 @@ export default function DataPage({ embedded = false }: { embedded?: boolean } = 
                             <td className="px-3 py-2 text-muted-foreground">{index + 2}</td>
                             {visibleColumns.map((column) => (
                               <td key={column} className="px-3 py-2">
-                                {formatCell(row[column])}
+                                {formatCell(row[column], locale)}
                               </td>
                             ))}
                           </tr>

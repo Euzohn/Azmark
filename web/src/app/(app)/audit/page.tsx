@@ -9,10 +9,10 @@ import { api } from "@/lib/api";
 import { AUDIT_ACTION_LABELS } from "@/lib/audit-actions";
 import { useI18n } from "@/lib/i18n";
 
-function formatDateTime(value: string): string {
+function formatDateTime(value: string, locale: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString(undefined, {
+  return date.toLocaleString(locale, {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -23,7 +23,7 @@ function formatDateTime(value: string): string {
 }
 
 export default function AuditPage({ embedded = false }: { embedded?: boolean } = {}) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { data, isLoading } = useQuery({
     queryKey: ["audit"],
     queryFn: () => api.listAuditLogs(),
@@ -57,7 +57,7 @@ export default function AuditPage({ embedded = false }: { embedded?: boolean } =
 
       {data && data.items.length > 0 ? (
         <div className="overflow-x-auto rounded-2xl border border-border bg-card animate-fade-in-up">
-          <table className="w-full text-left text-sm">
+          <table className="w-full min-w-[480px] text-left text-sm">
             <thead className="bg-muted/70 text-xs uppercase tracking-wider text-muted-foreground">
               <tr>
                 <th className="px-5 py-3 font-semibold">{t("audit.action")}</th>
@@ -75,7 +75,7 @@ export default function AuditPage({ embedded = false }: { embedded?: boolean } =
                       {log.resource_type ? `${log.resource_type}` : "-"}
                     </td>
                     <td className="px-5 py-3 text-muted-foreground">
-                      {formatDateTime(log.created_at)}
+                      {formatDateTime(log.created_at, locale)}
                     </td>
                   </tr>
                 );
