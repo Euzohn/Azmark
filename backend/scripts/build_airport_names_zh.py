@@ -36,6 +36,7 @@ import urllib.request
 from pathlib import Path
 
 import zhconv
+from build_reference import write_json_records
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "app" / "data"
 AIRPORTS = DATA_DIR / "airports.json"
@@ -210,10 +211,7 @@ def main() -> int:
     filled_airports, filled_fields = apply(airports, fetched)
 
     tmp = AIRPORTS.with_suffix(".json.tmp")
-    tmp.write_text(
-        json.dumps(airports, ensure_ascii=False, separators=(",", ":")) + "\n",
-        encoding="utf-8",
-    )
+    write_json_records(tmp, airports)
     os.replace(tmp, AIRPORTS)
     print(
         f"wrote {AIRPORTS} ({AIRPORTS.stat().st_size} bytes) — "

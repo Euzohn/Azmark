@@ -592,6 +592,19 @@ def build_airlines() -> list[dict]:
     return airlines
 
 
+def write_json_records(path: Path, data: list[dict]) -> None:
+    """Write a JSON array with one record per line.
+
+    Minified single-line output makes a 1.3 MB file impossible to review and
+    turns any change into a whole-file diff. One record per line keeps every
+    airport/airline independently diffable while staying compact.
+    """
+    body = ",\n".join(
+        "  " + json.dumps(item, ensure_ascii=False, separators=(",", ":")) for item in data
+    )
+    path.write_text("[\n" + body + "\n]\n", encoding="utf-8")
+
+
 def main() -> int:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     outputs = {
@@ -601,10 +614,7 @@ def main() -> int:
     for filename, builder in outputs.items():
         data = builder()
         path = DATA_DIR / filename
-        path.write_text(
-            json.dumps(data, ensure_ascii=False, separators=(",", ":")) + "\n",
-            encoding="utf-8",
-        )
+        write_json_records(path, data)
         print(
             f"wrote {path.relative_to(DATA_DIR.parent.parent)} ({path.stat().st_size} bytes, "
             f"{len(data)} entries)"
