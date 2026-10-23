@@ -1,3 +1,8 @@
+import json
+from pathlib import Path
+
+import zhconv
+
 from tests.conftest import auth_headers, register_and_login
 
 
@@ -103,6 +108,33 @@ def test_get_airport_by_iata_has_chinese_name(client):
     body = response.json()
     assert body["iata"] == "TNA"
     assert body["name_zh"] == "济南遥墙国际机场"
+
+
+def test_airport_name_override_wins(client):
+    """LGK's curated name is mainland 兰卡威, not the local official 浮罗交怡."""
+    token = register_and_login(client, "ref_airport_lgk")["access_token"]
+    response = client.get("/api/v1/reference/airports/LGK", headers=auth_headers(token))
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["name_zh"] == "兰卡威国际机场"
+    assert body["city_zh"] == "兰卡威"
+
+
+def test_shipped_chinese_names_are_simplified():
+    """Wikidata's `zh` labels are often Traditional; zh-CN must never show 繁体字.
+
+    Whole-file guard so a regeneration cannot silently reintroduce Traditional
+    characters for some airports.
+    """
+    path = Path(__file__).resolve().parent.parent / "app" / "data" / "airports.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    offenders = [
+        (entry["iata"], field, value)
+        for entry in data
+        for field in ("name_zh", "city_zh")
+        if (value := entry.get(field)) and zhconv.convert(value, "zh-hans") != value
+    ]
+    assert offenders == []
 
 
 def test_flight_number_lookup(client):

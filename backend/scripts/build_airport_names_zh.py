@@ -1,20 +1,24 @@
-"""Fetch Chinese airport names from Wikidata into app/data/airport_names_zh.json.
+"""Fill Chinese airport names in app/data/airports.json from Wikidata.
 
-OurAirports only ships English names, and `build_reference.py`'s curated
-``AIRPORT_ZH`` covers a few dozen major airports. This script fills the rest
-from Wikidata labels (CC0), preferring simplified Chinese (``zh-hans``) and
-falling back to ``zh``.
+`build_reference.py` builds `airports.json` from OurAirports (English only) plus
+a small curated `AIRPORT_ZH` map. This script is the second stage of that build:
+it fetches Chinese labels (CC0) from Wikidata and writes them back into
+`airports.json`, filling only the `name_zh` / `city_zh` fields the curated map
+left empty. There is no separate supplement file — `airports.json` is the single
+source of truth the app loads at runtime.
 
-An IATA code is not unique in Wikidata: a civil airport and a co-located
-military base can share the same code, with conflicting labels (e.g. ``ABQ``
-maps to both "Albuquerque International Sunport" and "Kirtland Air Force
-Base"). To pick the right entity we compare Wikidata's English label against
-the airport name in `airports.json` and keep the best-matching entity's labels
-and place-served (P931) city. The runtime merges this file over `airports.json`
-in `app.services.reference`, so `airports.json` stays exactly what the upstream
-builder produced.
+- Wikidata's ``zh`` label is often Traditional (LGK only has
+  "浮羅交怡國際機場", with no ``zh-hans``). Every label is run through
+  ``zhconv`` so the zh-CN UI never shows 繁体字 — a global conversion, not a
+  per-airport fix.
+- An IATA code is not unique in Wikidata: a civil airport and a co-located
+  military base can share a code (e.g. ``ABQ``). The best entity is chosen by
+  matching Wikidata's English label against the `airports.json` name.
+- Mainland-preferred names that differ from the local official name (e.g. LGK
+  兰卡威 vs 浮罗交怡) belong in `build_reference.py`'s curated ``AIRPORT_ZH``
+  map, not here.
 
-Run from backend/:
+Run from backend/ (after `build_reference.py`):
     ./.venv/bin/python scripts/build_airport_names_zh.py
     ./.venv/bin/python scripts/build_airport_names_zh.py --countries CN,HK,MO,TW
 """
@@ -23,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import time
@@ -30,8 +35,10 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+import zhconv
+
 DATA_DIR = Path(__file__).resolve().parent.parent / "app" / "data"
-OUTPUT = DATA_DIR / "airport_names_zh.json"
+AIRPORTS = DATA_DIR / "airports.json"
 ENDPOINT = "https://query.wikidata.org/sparql"
 USER_AGENT = "Azmark-reference-builder (+https://github.com/)"
 CHUNK_SIZE = 250
@@ -97,7 +104,12 @@ def _similarity(our_name: str, en_label: str | None) -> int:
 
 
 def _first_cjk(values: set[str]) -> str | None:
-    usable = sorted({value.strip() for value in values if value and CJK_RE.search(value)})
+    simplified = {
+        zhconv.convert(value.strip(), "zh-hans")
+        for value in values
+        if value and CJK_RE.search(value)
+    }
+    usable = sorted(value for value in simplified if value and CJK_RE.search(value))
     if not usable:
         return None
     return min(usable, key=len)
@@ -155,6 +167,25 @@ def fetch_names(codes_by_name: dict[str, str]) -> dict[str, dict[str, str]]:
     return result
 
 
+def apply(airports: list[dict], fetched: dict[str, dict[str, str]]) -> tuple[int, int]:
+    """Fill empty name_zh/city_zh; return (airports filled, fields filled)."""
+    filled_airports = 0
+    filled_fields = 0
+    for airport in airports:
+        fill = fetched.get(airport["iata"])
+        if not fill:
+            continue
+        changed = False
+        for field in ("name_zh", "city_zh"):
+            if not airport.get(field) and fill.get(field):
+                airport[field] = fill[field]
+                filled_fields += 1
+                changed = True
+        if changed:
+            filled_airports += 1
+    return filled_airports, filled_fields
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -162,14 +193,9 @@ def main() -> int:
         default="",
         help="Comma-separated ISO country codes to limit the fetch (default: all).",
     )
-    parser.add_argument(
-        "--keep-existing",
-        action="store_true",
-        help="Merge into the current airport_names_zh.json instead of replacing it.",
-    )
     args = parser.parse_args()
 
-    with (DATA_DIR / "airports.json").open(encoding="utf-8") as fh:
+    with AIRPORTS.open(encoding="utf-8") as fh:
         airports = json.load(fh)
 
     allowed = {code.strip().upper() for code in args.countries.split(",") if code.strip()}
@@ -181,19 +207,17 @@ def main() -> int:
     print(f"Querying Wikidata for {len(codes_by_name)} airports", file=sys.stderr)
     fetched = fetch_names(codes_by_name)
 
-    if args.keep_existing and OUTPUT.exists():
-        with OUTPUT.open(encoding="utf-8") as fh:
-            existing = json.load(fh)
-        existing.update(fetched)
-        fetched = existing
+    filled_airports, filled_fields = apply(airports, fetched)
 
-    with OUTPUT.open("w", encoding="utf-8") as fh:
-        json.dump(fetched, fh, ensure_ascii=False, indent=1, sort_keys=True)
-        fh.write("\n")
-
+    tmp = AIRPORTS.with_suffix(".json.tmp")
+    tmp.write_text(
+        json.dumps(airports, ensure_ascii=False, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+    os.replace(tmp, AIRPORTS)
     print(
-        f"Wrote {len(fetched)} Chinese airport names to {OUTPUT} "
-        f"({OUTPUT.stat().st_size // 1024} KB)",
+        f"wrote {AIRPORTS} ({AIRPORTS.stat().st_size} bytes) — "
+        f"filled {filled_fields} fields across {filled_airports} airports",
         file=sys.stderr,
     )
     return 0
