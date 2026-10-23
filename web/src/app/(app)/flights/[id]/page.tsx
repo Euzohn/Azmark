@@ -75,18 +75,14 @@ export default function FlightDetailPage() {
           </Button>
         }
       />
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="min-w-0 animate-fade-in-up" style={{ animationDelay: "50ms" }}>
-          <FlightForm
-            initial={data}
-            submitting={update.isPending}
-            onSubmit={(input) => update.mutate(input)}
-          />
-        </div>
-        <div className="animate-fade-in-up xl:sticky xl:top-8" style={{ animationDelay: "100ms" }}>
-          <AttachmentPanel resourceType="flight" resourceId={id} />
-        </div>
+      <div className="animate-fade-in-up" style={{ animationDelay: "50ms" }}>
+        <FlightForm
+          initial={data}
+          submitting={update.isPending}
+          onSubmit={(input) => update.mutate(input)}
+        />
       </div>
+      <AttachmentPanel resourceType="flight" resourceId={id} />
     </div>
   );
 }

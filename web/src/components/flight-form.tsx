@@ -237,6 +237,9 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
   const [lookupDate, setLookupDate] = useState(
     initial?.departure_time?.slice(0, 10) || new Date().toISOString().slice(0, 10),
   );
+  // Only verify against flight APIs once the traveller has actually set a date;
+  // blurring the flight-number field on its own must not fire a lookup.
+  const [dateTouched, setDateTouched] = useState(Boolean(initial?.departure_time));
   const [statusTouched, setStatusTouched] = useState(Boolean(initial));
   // Whether the user typed/picked the airline themselves. Provider lookups may
   // correct an auto-inferred (prefix-based) carrier but never a manual edit.
@@ -267,6 +270,7 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
   const changeLookupDate = (date: string) => {
     setLookupDate(date);
     if (!date) return;
+    setDateTouched(true);
     setForm((prev) => {
       const next = { ...prev };
       for (const key of SCHEDULE_KEYS) {
@@ -371,10 +375,10 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
         if (result.airline_code && (force || !carrierTouched || !next.airline_code)) {
           next.airline_code = result.airline_code;
         }
-        if (result.origin_iata && !next.origin.trim()) next.origin = result.origin_iata;
-        if (result.destination_iata && !next.destination.trim())
+        if (result.origin_iata && (force || !next.origin.trim())) next.origin = result.origin_iata;
+        if (result.destination_iata && (force || !next.destination.trim()))
           next.destination = result.destination_iata;
-        if (result.departure_time && !next.departure_time) {
+        if (result.departure_time && (force || !next.departure_time)) {
           next.departure_time = toZonedInput(
             result.departure_time,
             result.departure_timezone || next.departure_timezone,
@@ -387,46 +391,48 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
             if (status) next.status = status;
           }
         }
-        if (result.arrival_time && !next.arrival_time)
+        if (result.arrival_time && (force || !next.arrival_time))
           next.arrival_time = toZonedInput(
             result.arrival_time,
             result.arrival_timezone || next.arrival_timezone,
           );
-        if (result.actual_departure_time && !next.actual_departure_time)
+        if (result.actual_departure_time && (force || !next.actual_departure_time))
           next.actual_departure_time = toZonedInput(
             result.actual_departure_time,
             result.departure_timezone || next.departure_timezone,
           );
-        if (result.actual_arrival_time && !next.actual_arrival_time)
+        if (result.actual_arrival_time && (force || !next.actual_arrival_time))
           next.actual_arrival_time = toZonedInput(
             result.actual_arrival_time,
             result.arrival_timezone || next.arrival_timezone,
           );
-        if (result.status && !statusTouched) next.status = result.status;
-        if (result.departure_terminal && !next.departure_terminal)
+        if (result.status && (force || !statusTouched)) next.status = result.status;
+        if (result.departure_terminal && (force || !next.departure_terminal))
           next.departure_terminal = result.departure_terminal;
-        if (result.departure_gate && !next.departure_gate)
+        if (result.departure_gate && (force || !next.departure_gate))
           next.departure_gate = result.departure_gate;
-        if (result.arrival_terminal && !next.arrival_terminal)
+        if (result.arrival_terminal && (force || !next.arrival_terminal))
           next.arrival_terminal = result.arrival_terminal;
-        if (result.arrival_gate && !next.arrival_gate)
+        if (result.arrival_gate && (force || !next.arrival_gate))
           next.arrival_gate = result.arrival_gate;
-        if (result.check_in_desk && !next.check_in_desk)
+        if (result.check_in_desk && (force || !next.check_in_desk))
           next.check_in_desk = result.check_in_desk;
-        if (result.baggage_belt && !next.baggage_belt)
+        if (result.baggage_belt && (force || !next.baggage_belt))
           next.baggage_belt = result.baggage_belt;
-        if (result.aircraft_model && !next.aircraft_model)
+        if (result.aircraft_model && (force || !next.aircraft_model))
           next.aircraft_model = result.aircraft_model;
-        if (result.aircraft_reg && !next.aircraft_reg) next.aircraft_reg = result.aircraft_reg;
+        if (result.aircraft_reg && (force || !next.aircraft_reg))
+          next.aircraft_reg = result.aircraft_reg;
         if (result.departure_timezone && (force || !tzTouched || !next.departure_timezone))
           next.departure_timezone = result.departure_timezone;
         if (result.arrival_timezone && (force || !tzTouched || !next.arrival_timezone))
           next.arrival_timezone = result.arrival_timezone;
-        if (result.distance && !next.distance) next.distance = String(result.distance);
+        if (result.distance && (force || !next.distance)) next.distance = String(result.distance);
         return next;
       });
       if (result.departure_time) {
         setLookupDate(result.departure_time.slice(0, 10));
+        setDateTouched(true);
       }
       if (result.source && result.source !== "local") {
         setLookupSource(result.source);
@@ -459,6 +465,7 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
   // once the user leaves the field (one request per distinct number). The
   // local prefix guess is instant; this confirms/corrects it.
   const verifyOnBlur = () => {
+    if (!dateTouched) return;
     const number = form.service_number.trim();
     if (!/^[A-Za-z0-9]{2,3}\d{1,4}$/.test(number)) return;
     if (!configuredProviders.length) return;
@@ -976,18 +983,16 @@ function ScheduleInput({
   const date = datePart(value) || fallbackDate;
   const time = timePart(value);
   return (
-    <div className="flex gap-2">
+    <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(9.5rem, 1fr))" }}>
       <Input
         type="date"
         value={date}
         onChange={(e) => onChange(joinDateTime(e.target.value, time))}
-        className="flex-1"
       />
       <Input
         type="time"
         value={time}
         onChange={(e) => onChange(joinDateTime(date, e.target.value))}
-        className="w-32"
       />
     </div>
   );
