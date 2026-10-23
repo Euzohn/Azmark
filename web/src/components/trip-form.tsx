@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DateInput } from "@/components/ui/date-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -118,15 +119,13 @@ export function TripForm({ initial, submitting, onSubmit }: TripFormProps) {
         <Input value={form.destination} onChange={(e) => set("destination", e.target.value)} />
       </Field>
       <Field label={t("trips.startDate")} marked={changed.has("start_date")}>
-        <Input
-          type="date"
+        <DateInput
           value={form.start_date}
           onChange={(e) => set("start_date", e.target.value)}
         />
       </Field>
       <Field label={t("trips.endDate")} marked={changed.has("end_date")}>
-        <Input
-          type="date"
+        <DateInput
           value={form.end_date}
           onChange={(e) => set("end_date", e.target.value)}
         />

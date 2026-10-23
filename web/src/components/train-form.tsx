@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DateTimeLocalInput } from "@/components/ui/date-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -298,29 +299,25 @@ export function TrainForm({ initial, submitting, onSubmit }: TrainFormProps) {
       <Section title={t("trains.section.schedule")}>
         <div className="grid gap-4 md:grid-cols-2">
           <Field label={t("trains.departureTime")} marked={isChanged("departure_time")}>
-            <Input
-              type="datetime-local"
+            <DateTimeLocalInput
               value={form.departure_time}
               onChange={(e) => setDepartureTime(e.target.value)}
             />
           </Field>
           <Field label={t("trains.arrivalTime")} marked={isChanged("arrival_time")}>
-            <Input
-              type="datetime-local"
+            <DateTimeLocalInput
               value={form.arrival_time}
               onChange={(e) => set("arrival_time", e.target.value)}
             />
           </Field>
           <Field label={t("trains.actualDepartureTime")} marked={isChanged("actual_departure_time")}>
-            <Input
-              type="datetime-local"
+            <DateTimeLocalInput
               value={form.actual_departure_time}
               onChange={(e) => set("actual_departure_time", e.target.value)}
             />
           </Field>
           <Field label={t("trains.actualArrivalTime")} marked={isChanged("actual_arrival_time")}>
-            <Input
-              type="datetime-local"
+            <DateTimeLocalInput
               value={form.actual_arrival_time}
               onChange={(e) => set("actual_arrival_time", e.target.value)}
             />

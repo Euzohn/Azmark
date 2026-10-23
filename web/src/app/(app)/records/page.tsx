@@ -27,6 +27,7 @@ import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { DateInput } from "@/components/ui/date-input";
 import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
@@ -471,8 +472,7 @@ function RecordsContent() {
               <span className="text-xs font-medium text-muted-foreground">
                 {t("records.filter.dateFrom")}
               </span>
-              <Input
-                type="date"
+              <DateInput
                 value={dateFrom}
                 onChange={(event) => change(setDateFrom, event.target.value)}
                 className="w-full text-sm"
@@ -483,8 +483,7 @@ function RecordsContent() {
               <span className="text-xs font-medium text-muted-foreground">
                 {t("records.filter.dateTo")}
               </span>
-              <Input
-                type="date"
+              <DateInput
                 value={dateTo}
                 onChange={(event) => change(setDateTo, event.target.value)}
                 className="w-full text-sm"

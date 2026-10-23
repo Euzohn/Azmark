@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
+import { DateInput } from "@/components/ui/date-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -612,8 +613,7 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
             ) : null}
           </Field>
           <Field label={t("flights.lookupDate")}>
-            <Input
-              type="date"
+            <DateInput
               value={lookupDate}
               onChange={(e) => changeLookupDate(e.target.value)}
             />
@@ -984,8 +984,7 @@ function ScheduleInput({
   const time = timePart(value);
   return (
     <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(9.5rem, 1fr))" }}>
-      <Input
-        type="date"
+      <DateInput
         value={date}
         onChange={(e) => onChange(joinDateTime(e.target.value, time))}
       />
