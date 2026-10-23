@@ -39,6 +39,7 @@ def test_dashboard_empty(client):
     assert body["stats"]["trips"] == 0
     assert body["recent"] == []
     assert body["upcoming"] is None
+    assert body["by_month"] == []
 
 
 def test_dashboard_with_flights(client):
@@ -62,6 +63,12 @@ def test_dashboard_with_flights(client):
     assert stats["countries"] == 3
     assert stats["cities"] >= 3
     assert len(body["recent"]) == 2
+
+    # Rolling trend source: chronological month buckets.
+    assert body["by_month"] == [
+        {"label": "2026-09", "name": None, "count": 1},
+        {"label": "2026-10", "name": None, "count": 1},
+    ]
 
     # Upcoming: both flights are in the future relative to test run if dates are
     # in the future; if past, upcoming should be None. Either way no error.

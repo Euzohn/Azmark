@@ -89,8 +89,11 @@ class DashboardService:
 
         countries: set[str] = set()
         cities: set[str] = set()
+        months: Counter[str] = Counter()
         distance = 0.0
         for record in all_records:
+            if record.departure_time:
+                months[_naive_utc(record.departure_time).strftime("%Y-%m")] += 1
             for code in (record.origin, record.destination):
                 airport = reference.get_airport_by_iata(code or "")
                 if not airport:
@@ -133,6 +136,10 @@ class DashboardService:
             ),
             recent=all_records[:5],
             upcoming=upcoming,
+            by_month=[
+                BreakdownItem(label=label, count=count)
+                for label, count in sorted(months.items())
+            ],
         )
 
     def statistics(self, *, user_id: uuid.UUID) -> StatisticsRead:

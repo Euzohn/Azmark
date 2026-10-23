@@ -37,16 +37,19 @@ class DashboardStats(BaseModel):
     trips: int
 
 
-class DashboardRead(BaseModel):
-    stats: DashboardStats
-    recent: list[DashboardRecord]
-    upcoming: DashboardRecord | None
-
-
 class BreakdownItem(BaseModel):
     label: str
     name: str | None = None
     count: int
+
+
+class DashboardRead(BaseModel):
+    stats: DashboardStats
+    recent: list[DashboardRecord]
+    upcoming: DashboardRecord | None
+    # Chronological record counts by month ("YYYY-MM"). The client slices the
+    # tail to render a rolling activity trend without a second request.
+    by_month: list[BreakdownItem] = []
 
 
 class StatisticsTotals(BaseModel):
