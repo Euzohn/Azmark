@@ -591,7 +591,8 @@ export interface AiProposal {
   record_type: string;
   summary: string;
   data: Record<string, unknown>;
-  status?: "pending" | "saved" | "cancelled";
+  status?: "pending" | "saved" | "cancelled" | "duplicate";
+  existingRecordId?: string;
 }
 
 export interface AiChatResponse {

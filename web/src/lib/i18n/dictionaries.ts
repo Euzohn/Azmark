@@ -424,6 +424,15 @@ export const dictionaries = {
     "records.addFlight": "新增航班",
     "records.addTrain": "新增火车",
     "records.addTransport": "新增其他交通",
+    "records.duplicateTitle": "记录已存在",
+    "records.duplicateDescription": "检测到一条相同的记录。要打开已有的记录，还是仍然创建一条新记录？",
+    "records.duplicateOpenExisting": "查看已有记录",
+    "records.duplicateKeepNew": "仍然创建新记录",
+    "records.duplicateHint": "已存在一条相同的记录，已为你跳转到该记录。",
+    "records.createFailed": "创建失败，请重试。",
+
+    "flights.date": "日期",
+    "flights.route": "航线",
 
     "attachments.title": "附件",
     "attachments.hint": "支持图片与 PDF（登机牌、票据等）。",
@@ -1048,6 +1057,15 @@ export const dictionaries = {
     "records.addFlight": "Add flight",
     "records.addTrain": "Add train",
     "records.addTransport": "Add transport",
+    "records.duplicateTitle": "Record already exists",
+    "records.duplicateDescription": "An identical record was found. Open the existing one, or create a new record anyway?",
+    "records.duplicateOpenExisting": "Open existing record",
+    "records.duplicateKeepNew": "Create new record anyway",
+    "records.duplicateHint": "An identical record already exists — redirected to it.",
+    "records.createFailed": "Failed to create — please try again.",
+
+    "flights.date": "Date",
+    "flights.route": "Route",
 
     "attachments.title": "Attachments",
     "attachments.hint": "Images and PDFs (boarding passes, tickets and more).",

@@ -259,3 +259,46 @@ def test_flight_advanced_filters(client):
     # Combined filters intersect.
     assert total(status="scheduled", cabin_class="business") == 1
     assert total(status="scheduled", date_from="2026-09-01") == 1
+
+
+def test_create_duplicate_returns_conflict(client):
+    """Same carrier+number+date+route → 409 with existing record (spec #41)."""
+    token = register_and_login(client, "dup_user")["access_token"]
+    headers = auth_headers(token)
+
+    first = client.post("/api/v1/flights", json=FLIGHT, headers=headers)
+    assert first.status_code == 201
+
+    # Identical flight again → 409.
+    dup = client.post("/api/v1/flights", json=FLIGHT, headers=headers)
+    assert dup.status_code == 409
+    detail = dup.json()["detail"]
+    assert detail["existing_record"]["id"] == first.json()["id"]
+    assert detail["existing_record"]["service_number"] == "CX659"
+
+    # Force-create bypasses the check (spec #41 "Keep New").
+    forced = client.post(
+        "/api/v1/flights", json=FLIGHT, params={"force": "true"}, headers=headers
+    )
+    assert forced.status_code == 201
+    assert forced.json()["id"] != first.json()["id"]
+
+    # Different case / extra spaces still count as duplicate.
+    mixed = client.post(
+        "/api/v1/flights",
+        json={**FLIGHT, "service_number": " cx659 ", "carrier": "cathay pacific"},
+        headers=headers,
+    )
+    assert mixed.status_code == 409
+
+
+def test_duplicate_only_within_same_user(client):
+    """User A's flight is not a duplicate for User B (spec #57)."""
+    token_a = register_and_login(client, "dup_a")["access_token"]
+    token_b = register_and_login(client, "dup_b")["access_token"]
+
+    first = client.post("/api/v1/flights", json=FLIGHT, headers=auth_headers(token_a))
+    assert first.status_code == 201
+
+    same = client.post("/api/v1/flights", json=FLIGHT, headers=auth_headers(token_b))
+    assert same.status_code == 201  # not a duplicate across users

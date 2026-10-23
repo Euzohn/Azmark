@@ -139,3 +139,22 @@ def test_flight_and_train_are_isolated_by_type(client):
 
 def test_train_requires_auth(client):
     assert client.get("/api/v1/trains").status_code == 401
+
+
+def test_train_duplicate_returns_conflict(client):
+    """Same operator+train number+date+route → 409 (spec #41)."""
+    token = register_and_login(client, "train_dup")["access_token"]
+    headers = auth_headers(token)
+
+    first = client.post("/api/v1/trains", json=TRAIN, headers=headers)
+    assert first.status_code == 201
+
+    dup = client.post("/api/v1/trains", json=TRAIN, headers=headers)
+    assert dup.status_code == 409
+    assert dup.json()["detail"]["existing_record"]["service_number"] == "G1"
+
+    forced = client.post(
+        "/api/v1/trains", json=TRAIN, params={"force": "true"}, headers=headers
+    )
+    assert forced.status_code == 201
+    assert forced.json()["id"] != first.json()["id"]

@@ -50,11 +50,13 @@ export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
 export class ApiError extends Error {
   status: number;
+  detail: unknown;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, detail?: unknown) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.detail = detail;
   }
 }
 
@@ -76,13 +78,23 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (!response.ok) {
     let detail = response.statusText;
+    let payload: unknown;
     try {
-      const body = (await response.json()) as { detail?: string };
-      detail = body.detail ?? detail;
+      const body = (await response.json()) as { detail?: unknown };
+      payload = body.detail;
+      if (typeof body.detail === "string") {
+        detail = body.detail;
+      } else if (
+        body.detail &&
+        typeof body.detail === "object" &&
+        typeof (body.detail as { message?: unknown }).message === "string"
+      ) {
+        detail = (body.detail as { message: string }).message;
+      }
     } catch {
       // ignore non-JSON error bodies
     }
-    throw new ApiError(response.status, detail);
+    throw new ApiError(response.status, detail, payload);
   }
 
   if (response.status === 204) {
@@ -185,8 +197,11 @@ export const api = {
     const suffix = query.toString() ? `?${query.toString()}` : "";
     return request<FlightList>(`/flights${suffix}`);
   },
-  createFlight: (data: FlightInput) =>
-    request<Flight>("/flights", { method: "POST", body: JSON.stringify(data) }),
+  createFlight: (data: FlightInput, force = false) =>
+    request<Flight>(`/flights${force ? "?force=true" : ""}`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
   getFlight: (id: string) => request<Flight>(`/flights/${id}`),
   updateFlight: (id: string, data: FlightInput) =>
     request<Flight>(`/flights/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
@@ -205,8 +220,11 @@ export const api = {
     const suffix = query.toString() ? `?${query.toString()}` : "";
     return request<TrainList>(`/trains${suffix}`);
   },
-  createTrain: (data: TrainInput) =>
-    request<Train>("/trains", { method: "POST", body: JSON.stringify(data) }),
+  createTrain: (data: TrainInput, force = false) =>
+    request<Train>(`/trains${force ? "?force=true" : ""}`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
   getTrain: (id: string) => request<Train>(`/trains/${id}`),
   updateTrain: (id: string, data: TrainInput) =>
     request<Train>(`/trains/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
@@ -224,8 +242,11 @@ export const api = {
     const suffix = query.toString() ? `?${query.toString()}` : "";
     return request<OtherTransportList>(`/other-transports${suffix}`);
   },
-  createOtherTransport: (data: OtherTransportInput) =>
-    request<OtherTransport>("/other-transports", { method: "POST", body: JSON.stringify(data) }),
+  createOtherTransport: (data: OtherTransportInput, force = false) =>
+    request<OtherTransport>(`/other-transports${force ? "?force=true" : ""}`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
   getOtherTransport: (id: string) => request<OtherTransport>(`/other-transports/${id}`),
   updateOtherTransport: (id: string, data: OtherTransportInput) =>
     request<OtherTransport>(`/other-transports/${id}`, {

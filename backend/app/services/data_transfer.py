@@ -25,6 +25,7 @@ from app.schemas.data_transfer import (
     ImportRowError,
 )
 from app.schemas.transport import FlightCreate, OtherTransportCreate, TrainCreate
+from app.services.dedup import iso_full, record_signature, record_signature_from_model
 from app.services.transport import FlightService, OtherTransportService, TrainService
 
 EXPORT_VERSION = 1
@@ -224,32 +225,6 @@ def normalize_type(raw: Any) -> str:
     return "flight"  # default when missing/unknown
 
 
-def signature_of(data: dict[str, Any]) -> str:
-    """Duplicate fingerprint: type + number + departure + origin/destination (case normalised)."""
-    dep = _iso(data.get("departure_time"))
-    return "|".join(
-        [
-            str(data.get("type") or ""),
-            str(data.get("service_number") or "").strip().upper(),
-            dep,
-            str(data.get("origin") or "").strip().lower(),
-            str(data.get("destination") or "").strip().lower(),
-        ]
-    )
-
-
-def _iso(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, datetime):
-        if value.tzinfo is None:
-            value = value.replace(tzinfo=UTC)
-        return value.astimezone(UTC).isoformat()
-    if isinstance(value, date):
-        return value.isoformat()
-    return str(value)
-
-
 class DataTransferService:
     """Export all / import preview & commit, fully user-scoped (spec #42/#43/#57)."""
 
@@ -268,7 +243,7 @@ class DataTransferService:
                 else trip_names.get(record.trip_id)
             )
             if field in DATETIME_FIELDS:
-                data[field] = _iso(value)
+                data[field] = iso_full(value)
             elif isinstance(value, Decimal):
                 data[field] = float(value)
             else:
@@ -352,7 +327,7 @@ class DataTransferService:
     ) -> ImportPreview:
         columns, raw_rows, trips = self._parse(format, content)
         field_mapping = self._resolve_mapping(columns, mapping)
-        existing = {signature_of(self._record_signature_row(r)) for r in self._all_records(user_id)}
+        existing = {record_signature_from_model(r) for r in self._all_records(user_id)}
         errors: list[ImportRowError] = []
         duplicates: list[ImportDuplicate] = []
         rows: list[dict[str, Any]] = []
@@ -364,7 +339,7 @@ class DataTransferService:
                 errors.append(ImportRowError(row=row_number, field=field, message=message))
             if row_errors:
                 continue
-            sig = signature_of(normalized)
+            sig = record_signature(record_type=normalized.get("type", "flight"), payload=normalized)
             if sig in existing:
                 duplicates.append(ImportDuplicate(row=row_number, signature=sig))
                 continue
@@ -413,7 +388,7 @@ class DataTransferService:
             known_names.add(name)
         trip_ids, trips_created = self._ensure_trips(user_id, trip_specs)
 
-        existing = {signature_of(self._record_signature_row(r)) for r in self._all_records(user_id)}
+        existing = {record_signature_from_model(r) for r in self._all_records(user_id)}
         imported = skipped = failed = 0
         errors: list[ImportRowError] = []
         for index, normalized, row_errors in normalized_rows:
@@ -422,7 +397,7 @@ class DataTransferService:
                     errors.append(ImportRowError(row=index, field=field, message=message))
                 failed += 1
                 continue
-            sig = signature_of(normalized)
+            sig = record_signature(record_type=normalized.get("type", "flight"), payload=normalized)
             if sig in existing:
                 skipped += 1
                 continue
@@ -626,7 +601,9 @@ class DataTransferService:
             trip_id = trip_ids.get(trip_name)
             payload = payload.model_copy(update={"trip_id": trip_id if trip_id else None})
         service = service_cls(self.db)
-        service.create_record(user_id=user_id, payload=payload)
+        # The import loop already skipped duplicates via `existing`; bypass the
+        # service-level check to avoid a second (and uncaught) conflict.
+        service.create_record(user_id=user_id, payload=payload, force=True)
 
     def _ensure_trips(
         self, user_id: uuid.UUID, trips: list[dict[str, Any]]
@@ -658,7 +635,7 @@ class DataTransferService:
         safe: dict[str, Any] = {}
         for key, value in data.items():
             if isinstance(value, datetime):
-                safe[key] = _iso(value)
+                safe[key] = iso_full(value)
             elif isinstance(value, Decimal):
                 safe[key] = float(value)
             elif value is None:

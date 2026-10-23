@@ -166,6 +166,39 @@ class TransportRepository:
         self.db.refresh(record)
         return record
 
+    def find_by_signature(
+        self,
+        *,
+        user_id: uuid.UUID,
+        signature: str,
+    ) -> TransportRecord | None:
+        """Find a record by its deduplication signature (spec #41)."""
+        # The signature format: type|date|carrier|number|origin|destination
+        parts = signature.split("|", 5)
+        if len(parts) != 6:
+            return None
+        _, dep_date, carrier, number, origin, destination = parts
+
+        filters = [
+            TransportRecord.user_id == user_id,
+            TransportRecord.type == parts[0],
+        ]
+        if dep_date:
+            filters.append(func.date(TransportRecord.departure_time) == dep_date)
+        else:
+            filters.append(TransportRecord.departure_time.is_(None))
+
+        def _match(column, value: str):
+            return column.ilike(value) if value else column.is_(None)
+
+        filters.append(_match(TransportRecord.carrier, carrier))
+        filters.append(_match(TransportRecord.service_number, number))
+        filters.append(_match(TransportRecord.origin, origin))
+        filters.append(_match(TransportRecord.destination, destination))
+
+        stmt = select(TransportRecord).where(*filters)
+        return self.db.scalar(stmt)
+
     def delete(self, record: TransportRecord) -> None:
         self.db.delete(record)
         self.db.commit()

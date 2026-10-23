@@ -6,6 +6,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import {
+  AlertTriangle,
   Bot,
   ImagePlus,
   Send,
@@ -383,15 +384,21 @@ export default function AiChatPage() {
   };
 
   const confirmCreate = useMutation({
-    mutationFn: async (proposal: AiProposal) => {
+    mutationFn: async ({
+      proposal,
+      force,
+    }: {
+      proposal: AiProposal;
+      force: boolean;
+    }) => {
       const data = proposal.data as Record<string, unknown>;
       if (proposal.record_type === "flight") {
-        return api.createFlight(data);
+        return api.createFlight(data, force);
       }
       if (proposal.record_type === "train") {
-        return api.createTrain(data);
+        return api.createTrain(data, force);
       }
-      return api.createOtherTransport(data);
+      return api.createOtherTransport(data, force);
     },
     onSuccess: () => invalidateAll(),
   });
@@ -414,16 +421,43 @@ export default function AiChatPage() {
         onSuccess: () => markProposal(messageId, proposal.id, "saved"),
       });
     } else {
-      confirmCreate.mutate(proposal, {
-        onSuccess: () => markProposal(messageId, proposal.id, "saved"),
-      });
+      confirmCreate.mutate(
+        { proposal, force: false },
+        {
+          onSuccess: () => markProposal(messageId, proposal.id, "saved"),
+          onError: (err) => {
+            if (err instanceof ApiError && err.status === 409) {
+              const detail = err.detail as
+                | { existing_record?: { id?: string } }
+                | undefined;
+              markProposal(
+                messageId,
+                proposal.id,
+                "duplicate",
+                detail?.existing_record?.id,
+              );
+              return;
+            }
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: nextId(),
+                role: "assistant",
+                content: "",
+                error: t("records.createFailed"),
+              },
+            ]);
+          },
+        },
+      );
     }
   };
 
   const markProposal = (
     messageId: string,
     proposalId: string,
-    status: "saved" | "cancelled",
+    status: "saved" | "cancelled" | "duplicate",
+    existingRecordId?: string,
   ) => {
     setMessages((prev) =>
       prev.map((msg) =>
@@ -431,7 +465,9 @@ export default function AiChatPage() {
           ? {
               ...msg,
               proposals: msg.proposals?.map((p) =>
-                p.id === proposalId ? { ...p, status } : p,
+                p.id === proposalId
+                  ? { ...p, status, existingRecordId }
+                  : p,
               ),
             }
           : msg,
@@ -558,6 +594,15 @@ export default function AiChatPage() {
                           key={proposal.id}
                           proposal={proposal}
                           onSave={() => handleConfirm(msg.id, proposal)}
+                          onForce={() =>
+                            confirmCreate.mutate(
+                              { proposal, force: true },
+                              {
+                                onSuccess: () =>
+                                  markProposal(msg.id, proposal.id, "saved"),
+                              },
+                            )
+                          }
                           onCancel={() => markProposal(msg.id, proposal.id, "cancelled")}
                           saving={
                             confirmCreate.isPending || confirmDelete.isPending
@@ -657,11 +702,15 @@ function ChatImage({
 function ProposalCard({
   proposal,
   onSave,
+  onForce,
   onCancel,
   saving,
 }: {
-  proposal: AiProposal & { status?: "pending" | "saved" | "cancelled" };
+  proposal: AiProposal & {
+    status?: "pending" | "saved" | "cancelled" | "duplicate";
+  };
   onSave: () => void;
+  onForce: () => void;
   onCancel: () => void;
   saving: boolean;
 }) {
@@ -669,7 +718,43 @@ function ProposalCard({
   const isDelete = proposal.action === "delete_transport";
   const saved = proposal.status === "saved";
   const cancelled = proposal.status === "cancelled";
+  const duplicate = proposal.status === "duplicate";
   const dataLines = isDelete ? [] : formatProposalData(proposal.data, t);
+
+  if (duplicate) {
+    const base =
+      proposal.record_type === "flight"
+        ? "flights"
+        : proposal.record_type === "train"
+          ? "trains"
+          : "transports";
+    return (
+      <div className="rounded-lg border border-warning/40 bg-warning/5 px-3 py-2.5">
+        <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-warning">
+          <AlertTriangle className="h-3.5 w-3.5" />
+          <span>{t("records.duplicateTitle")}</span>
+        </div>
+        <p className="mb-2 text-xs text-muted-foreground">
+          {t("records.duplicateDescription")}
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          {proposal.existingRecordId ? (
+            <Link href={`/${base}/${proposal.existingRecordId}`}>
+              <Button size="sm" variant="outline">
+                {t("records.duplicateOpenExisting")}
+              </Button>
+            </Link>
+          ) : null}
+          <Button size="sm" onClick={onForce} disabled={saving}>
+            {t("records.duplicateKeepNew")}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={onCancel} disabled={saving}>
+            {t("ai.cancel")}
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (saved || cancelled) {
     return (

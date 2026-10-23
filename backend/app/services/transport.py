@@ -8,6 +8,7 @@ from app.models.transport_record import TransportRecord
 from app.repositories.transport import TransportRepository
 from app.repositories.trip import TripRepository
 from app.repositories.trip_item import TripItemRepository
+from app.services.dedup import record_signature
 from app.services.seating import infer_train_seat_type
 
 
@@ -17,6 +18,14 @@ class RecordNotFoundError(Exception):
 
 class TripAssignmentError(RecordNotFoundError):
     """The target trip does not exist or belongs to another user (spec #3.3/#57)."""
+
+
+class DuplicateRecordError(Exception):
+    """A record with the same deduplication key already exists (spec #41)."""
+
+    def __init__(self, existing_record: TransportRecord) -> None:
+        self.existing_record = existing_record
+        super().__init__("Duplicate record")
 
 
 # PNR、票号、购票证件号属敏感字段（spec #45/#96），一律加密存储。
@@ -37,6 +46,11 @@ class TransportService:
     def _check_trip(self, *, user_id: uuid.UUID, trip_id: uuid.UUID | None) -> None:
         if trip_id is not None and self.trips.get(user_id=user_id, trip_id=trip_id) is None:
             raise TripAssignmentError
+
+    def _check_duplicate(self, *, user_id: uuid.UUID, payload: dict) -> TransportRecord | None:
+        """Check if a record with the same deduplication key already exists (spec #41)."""
+        sig = record_signature(record_type=self.record_type, payload=payload)
+        return self.records.find_by_signature(user_id=user_id, signature=sig)
 
     def list_records(
         self,
@@ -95,9 +109,21 @@ class TransportService:
         if inferred:
             data["seat_type"] = inferred
 
-    def create_record(self, *, user_id: uuid.UUID, payload) -> TransportRecord:
+    def create_record(
+        self,
+        *,
+        user_id: uuid.UUID,
+        payload,
+        force: bool = False,
+    ) -> TransportRecord:
         data = payload.model_dump()
         self._check_trip(user_id=user_id, trip_id=data.get("trip_id"))
+
+        if not force:
+            existing = self._check_duplicate(user_id=user_id, payload=data)
+            if existing is not None:
+                raise DuplicateRecordError(existing)
+
         self._infer_seat_type(data)
         enc = self._encrypt_sensitive(data)
         record = TransportRecord(user_id=user_id, type=self.record_type, **data)

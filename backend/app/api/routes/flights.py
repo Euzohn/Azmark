@@ -21,7 +21,7 @@ from app.schemas.transport import FlightCreate, FlightList, FlightRead, FlightUp
 from app.services.attachment import AttachmentService
 from app.services.audit import AuditService
 from app.services.flight_enrichment import FlightEnrichmentService, ProviderNotFoundError
-from app.services.transport import FlightService, RecordNotFoundError
+from app.services.transport import DuplicateRecordError, FlightService, RecordNotFoundError
 
 router = APIRouter(prefix="/flights", tags=["flights"])
 
@@ -93,14 +93,38 @@ async def lookup_flight_all(
 def create_flight(
     payload: FlightCreate,
     request: Request,
+    force: bool = Query(False, description="Bypass duplicate check (spec #41)"),
     current_user: User = Depends(get_current_user),
     service: FlightService = Depends(get_flight_service),
     audit: AuditService = Depends(get_audit_service),
 ):
     try:
-        record = service.create_record(user_id=current_user.id, payload=payload)
+        record = service.create_record(
+            user_id=current_user.id, payload=payload, force=force
+        )
     except RecordNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
+    except DuplicateRecordError as exc:
+        existing = exc.existing_record
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": "Duplicate record",
+                "existing_record": {
+                    "id": str(existing.id),
+                    "service_number": existing.service_number,
+                    "carrier": existing.carrier,
+                    "departure_time": (
+                        existing.departure_time.isoformat()
+                        if existing.departure_time
+                        else None
+                    ),
+                    "departure_timezone": existing.departure_timezone,
+                    "origin": existing.origin,
+                    "destination": existing.destination,
+                },
+            },
+        ) from None
     audit.log(
         action=AuditAction.CREATE_RECORD,
         user_id=current_user.id,

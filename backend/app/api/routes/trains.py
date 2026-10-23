@@ -14,7 +14,7 @@ from app.models.user import User
 from app.schemas.transport import TrainCreate, TrainList, TrainRead, TrainUpdate
 from app.services.attachment import AttachmentService
 from app.services.audit import AuditService
-from app.services.transport import RecordNotFoundError, TrainService
+from app.services.transport import DuplicateRecordError, RecordNotFoundError, TrainService
 
 router = APIRouter(prefix="/trains", tags=["trains"])
 
@@ -50,14 +50,38 @@ def list_trains(
 def create_train(
     payload: TrainCreate,
     request: Request,
+    force: bool = Query(False, description="Bypass duplicate check (spec #41)"),
     current_user: User = Depends(get_current_user),
     service: TrainService = Depends(get_train_service),
     audit: AuditService = Depends(get_audit_service),
 ):
     try:
-        record = service.create_record(user_id=current_user.id, payload=payload)
+        record = service.create_record(
+            user_id=current_user.id, payload=payload, force=force
+        )
     except RecordNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
+    except DuplicateRecordError as exc:
+        existing = exc.existing_record
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": "Duplicate record",
+                "existing_record": {
+                    "id": str(existing.id),
+                    "service_number": existing.service_number,
+                    "carrier": existing.carrier,
+                    "departure_time": (
+                        existing.departure_time.isoformat()
+                        if existing.departure_time
+                        else None
+                    ),
+                    "departure_timezone": existing.departure_timezone,
+                    "origin": existing.origin,
+                    "destination": existing.destination,
+                },
+            },
+        ) from None
     audit.log(
         action=AuditAction.CREATE_RECORD,
         user_id=current_user.id,
