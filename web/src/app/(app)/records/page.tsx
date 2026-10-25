@@ -30,6 +30,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { DateInput } from "@/components/ui/date-input";
 import { Fab } from "@/components/ui/fab";
 import { Input } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
 import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -336,6 +337,24 @@ function RecordsContent() {
     </div>
   );
 
+  const addMenu = (
+    <div className="flex flex-col gap-1">
+      {addOptions.map(({ href, label, icon: Icon }) => (
+        <Link
+          key={href}
+          href={href}
+          onClick={() => setAddOpen(false)}
+          className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+        >
+          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-accent-foreground">
+            <Icon className="h-4 w-4" />
+          </span>
+          {label}
+        </Link>
+      ))}
+    </div>
+  );
+
   return (
     <div className="flex flex-col gap-5">
       <PageHeader title={t("records.title")} subtitle={totalLabel} actions={addActions} />
@@ -502,23 +521,17 @@ function RecordsContent() {
         />
       )}
 
+      {/* Mobile: bottom sheet (the component is md:hidden). */}
       <BottomSheet open={addOpen} onClose={() => setAddOpen(false)} title={t("records.add")}>
-        <div className="flex flex-col gap-1">
-          {addOptions.map(({ href, label, icon: Icon }) => (
-            <Link
-              key={href}
-              href={href}
-              onClick={() => setAddOpen(false)}
-              className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-foreground transition-colors hover:bg-accent"
-            >
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-accent-foreground">
-                <Icon className="h-4 w-4" />
-              </span>
-              {label}
-            </Link>
-          ))}
-        </div>
+        {addMenu}
       </BottomSheet>
+      {/* Desktop: centered modal — BottomSheet is hidden on md+, so the FAB
+          would do nothing there without this. Same menu, same open state. */}
+      <div className="hidden md:block">
+        <Modal open={addOpen} onClose={() => setAddOpen(false)} title={t("records.add")}>
+          {addMenu}
+        </Modal>
+      </div>
 
       <Fab label={t("records.add")} onClick={() => setAddOpen(true)}>
         <Plus className="h-6 w-6" />
