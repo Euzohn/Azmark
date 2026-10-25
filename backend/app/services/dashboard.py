@@ -77,6 +77,35 @@ class DashboardService:
             lon=airport.get("lon"),
         )
 
+    @staticmethod
+    def _collect_places(records: list[TransportRecord]) -> tuple[set[str], set[str]]:
+        """Return ``(countries, cities)`` seen across *records*.
+
+        Single source of truth shared by :meth:`overview` and
+        :meth:`statistics` so the dashboard and the statistics page can never
+        disagree on the city/country totals (spec #10, #28).
+
+        Airports contribute their city/country from the reference data. Train
+        and other-transport endpoints are free-text stations with no reference
+        lookup, so they are counted as places directly — otherwise a journal
+        with only train trips would report zero cities.
+        """
+        countries: set[str] = set()
+        cities: set[str] = set()
+        for record in records:
+            for place in (record.origin, record.destination):
+                if not place:
+                    continue
+                airport = reference.get_airport_by_iata(place)
+                if airport:
+                    if airport.get("country"):
+                        countries.add(airport["country"])
+                    if airport.get("city"):
+                        cities.add(airport["city"])
+                elif record.type in {"train", "other"}:
+                    cities.add(place.strip())
+        return countries, cities
+
     # ------------------------------------------------------------------
     # public API
     # ------------------------------------------------------------------
@@ -87,24 +116,16 @@ class DashboardService:
         trains = [r for r in all_records if r.type == "train"]
         other = [r for r in all_records if r.type == "other"]
 
-        countries: set[str] = set()
-        cities: set[str] = set()
         months: Counter[str] = Counter()
         distance = 0.0
         for record in all_records:
             if record.departure_time:
                 months[_naive_utc(record.departure_time).strftime("%Y-%m")] += 1
-            for code in (record.origin, record.destination):
-                airport = reference.get_airport_by_iata(code or "")
-                if not airport:
-                    continue
-                if airport.get("country"):
-                    countries.add(airport["country"])
-                if airport.get("city"):
-                    cities.add(airport["city"])
             km = self._distance_km(record)
             if km:
                 distance += km
+
+        countries, cities = self._collect_places(all_records)
 
         trips_total = (
             self.db.scalar(select(func.count()).select_from(Trip).where(Trip.user_id == user_id))
@@ -137,8 +158,7 @@ class DashboardService:
             recent=all_records[:5],
             upcoming=upcoming,
             by_month=[
-                BreakdownItem(label=label, count=count)
-                for label, count in sorted(months.items())
+                BreakdownItem(label=label, count=count) for label, count in sorted(months.items())
             ],
         )
 
@@ -163,8 +183,6 @@ class DashboardService:
         train_classes: Counter[str] = Counter()
         train_seat_types: Counter[str] = Counter()
 
-        countries: set[str] = set()
-        cities: set[str] = set()
         distance = 0.0
 
         for record in all_records:
@@ -173,20 +191,6 @@ class DashboardService:
                 years[departure.strftime("%Y")] += 1
                 months[departure.strftime("%Y-%m")] += 1
                 days[departure.strftime("%Y-%m-%d")] += 1
-
-            for place in (record.origin, record.destination):
-                if not place:
-                    continue
-                airport = reference.get_airport_by_iata(place)
-                if airport:
-                    if airport.get("country"):
-                        countries.add(airport["country"])
-                    if airport.get("city"):
-                        cities.add(airport["city"])
-                elif record.type in {"train", "other"}:
-                    # Stations/docks are free text; count distinct endpoints as
-                    # places so train-only journals still get a city total.
-                    cities.add(place.strip())
 
             km = self._distance_km(record)
             if km:
@@ -222,6 +226,8 @@ class DashboardService:
                     train_classes[record.cabin_class] += 1
                 if record.seat_type:
                     train_seat_types[record.seat_type] += 1
+
+        countries, cities = self._collect_places(all_records)
 
         by_airline = []
         for code, count in airlines.most_common():

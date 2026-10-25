@@ -199,6 +199,37 @@ def test_statistics_overall_and_train_breakdowns(client):
     assert any(item["label"] == "2026-09-26" and item["count"] == 2 for item in body["by_day"])
 
 
+def test_dashboard_and_statistics_cities_match_with_trains(client):
+    """Overview and statistics must report the same city count (spec #10/#28).
+
+    Train/other endpoints are free-text stations; both pages must include them.
+    Regression: overview used to drop non-airport endpoints while statistics
+    counted them, so the two numbers diverged.
+    """
+    token = register_and_login(client, "city_match")["access_token"]
+    headers = auth_headers(token)
+
+    client.post("/api/v1/flights", json=FLIGHT_HKG_SIN, headers=headers)  # HKG, SIN
+    train = {
+        "origin": "北京南",
+        "destination": "上海虹桥",
+        "departure_time": "2026-09-26T08:00:00Z",
+        "arrival_time": "2026-09-26T12:28:00Z",
+        "carrier": "中国铁路",
+        "service_number": "G1",
+    }
+    assert client.post("/api/v1/trains", json=train, headers=headers).status_code == 201
+
+    dash = client.get("/api/v1/dashboard", headers=headers).json()
+    stats = client.get("/api/v1/statistics", headers=headers).json()
+
+    dash_cities = dash["stats"]["cities"]
+    stats_cities = stats["totals"]["cities"]
+    assert dash_cities == stats_cities
+    # Both include the two free-text train stations on top of airport cities.
+    assert dash_cities >= 4
+
+
 def test_timeline(client):
     token = register_and_login(client, "tl_user")["access_token"]
     headers = auth_headers(token)
