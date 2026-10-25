@@ -26,6 +26,9 @@ yarn-error.log*
 *.sqlite3
 .DS_Store
 
+# Backups (contain user data — never commit)
+backups/
+
 # Design doc (not committed per project rules)
 Azmark_行迹_Personal_Travel_OS_方案_v1.1.md
 
