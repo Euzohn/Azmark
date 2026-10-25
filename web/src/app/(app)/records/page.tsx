@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DateInput } from "@/components/ui/date-input";
+import { Fab } from "@/components/ui/fab";
 import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
@@ -313,37 +314,26 @@ function RecordsContent() {
   ];
 
   const addActions = (
-    <>
-      <div className="hidden flex-wrap items-center gap-2 sm:flex">
-        <Link href="/flights/new">
-          <Button variant="outline" size="sm">
-            <Plane className="h-4 w-4" />
-            {t("records.addFlight")}
-          </Button>
-        </Link>
-        <Link href="/trains/new">
-          <Button variant="outline" size="sm">
-            <TrainFront className="h-4 w-4" />
-            {t("records.addTrain")}
-          </Button>
-        </Link>
-        <Link href="/transports/new">
-          <Button size="sm">
-            <Plus className="h-4 w-4" />
-            {t("records.addTransport")}
-          </Button>
-        </Link>
-      </div>
-      <Button
-        size="sm"
-        className="sm:hidden"
-        aria-haspopup="dialog"
-        onClick={() => setAddOpen(true)}
-      >
-        <Plus className="h-4 w-4" />
-        {t("records.add")}
-      </Button>
-    </>
+    <div className="hidden flex-wrap items-center gap-2 md:flex">
+      <Link href="/flights/new">
+        <Button variant="outline" size="sm">
+          <Plane className="h-4 w-4" />
+          {t("records.addFlight")}
+        </Button>
+      </Link>
+      <Link href="/trains/new">
+        <Button variant="outline" size="sm">
+          <TrainFront className="h-4 w-4" />
+          {t("records.addTrain")}
+        </Button>
+      </Link>
+      <Link href="/transports/new">
+        <Button size="sm">
+          <Plus className="h-4 w-4" />
+          {t("records.addTransport")}
+        </Button>
+      </Link>
+    </div>
   );
 
   return (
@@ -529,6 +519,10 @@ function RecordsContent() {
           ))}
         </div>
       </BottomSheet>
+
+      <Fab label={t("records.add")} onClick={() => setAddOpen(true)}>
+        <Plus className="h-6 w-6" />
+      </Fab>
     </div>
   );
 }

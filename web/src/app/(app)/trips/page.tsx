@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Fab } from "@/components/ui/fab";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -54,7 +55,7 @@ export default function TripsPage() {
         subtitle={data ? t("trips.total", { count: data.total }) : undefined}
         actions={
           <Link href="/trips/new">
-            <Button>
+            <Button className="hidden md:inline-flex">
               <Plus className="h-4 w-4" />
               {t("trips.add")}
             </Button>
@@ -154,6 +155,10 @@ export default function TripsPage() {
           );
         })}
       </div>
+
+      <Fab label={t("trips.add")} href="/trips/new">
+        <Plus className="h-6 w-6" />
+      </Fab>
     </div>
   );
 }
