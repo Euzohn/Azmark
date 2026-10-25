@@ -52,6 +52,10 @@ services:
       S3_USE_SSL: ${S3_USE_SSL:-false}
       S3_ADDRESSING_STYLE: ${S3_ADDRESSING_STYLE:-path}
       MAX_ATTACHMENT_BYTES: ${MAX_ATTACHMENT_BYTES:-20971520}
+      # 管理员引导（spec #78）：从 .env 透传，启动时若无活跃管理员则自动建。
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
     depends_on:
       postgres:
         condition: service_healthy
