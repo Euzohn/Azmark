@@ -28,18 +28,20 @@ type FabProps = {
  */
 export function Fab({ label, href, onClick, className, children }: FabProps) {
   const classes = cn(
-    "fixed right-4 z-30 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg transition-colors hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden",
+    // `< md`: clear the fixed bottom nav plus the home-indicator inset.
+    // `md+`: no bottom nav, so sit at the usual 1.5rem corner.
+    "fixed bottom-[calc(6rem_+_env(safe-area-inset-bottom))] right-4 z-30 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg transition-colors hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:bottom-6",
     className,
   );
   if (href) {
     return (
-      <Link href={href} aria-label={label} className={classes} style={{ bottom: "calc(6rem + env(safe-area-inset-bottom))" }}>
+      <Link href={href} aria-label={label} className={classes}>
         {children}
       </Link>
     );
   }
   return (
-    <button type="button" aria-label={label} onClick={onClick} className={classes} style={{ bottom: "calc(6rem + env(safe-area-inset-bottom))" }}>
+    <button type="button" aria-label={label} onClick={onClick} className={classes}>
       {children}
     </button>
   );
