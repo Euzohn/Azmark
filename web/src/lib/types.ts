@@ -346,6 +346,22 @@ export interface AuditLogList {
   page_size: number;
 }
 
+export interface DataSource {
+  id: string;
+  source_type: string;
+  source_name: string;
+  source_url: string | null;
+  retrieved_at: string;
+  confidence: number | null;
+  provider: string | null;
+  metadata: Record<string, unknown> | null;
+}
+
+export interface DataSourceList {
+  items: DataSource[];
+  total: number;
+}
+
 export interface TokenResponse {
   access_token: string;
   token_type: string;

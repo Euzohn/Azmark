@@ -7,6 +7,7 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DataSourcePanel } from "@/components/data-source-panel";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -352,6 +353,8 @@ export default function DataPage({ embedded = false }: { embedded?: boolean } = 
           ) : null}
         </CardContent>
       </Card>
+
+      <DataSourcePanel />
     </div>
   );
 }

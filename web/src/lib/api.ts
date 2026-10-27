@@ -14,6 +14,7 @@ import type {
   Airport,
   AuditLogList,
   DashboardRead,
+  DataSourceList,
   Flight,
   FlightFilters,
   FlightInput,
@@ -320,6 +321,16 @@ export const api = {
     const suffix = query.toString() ? `?${query.toString()}` : "";
     return request<AuditLogList>(`/audit-logs${suffix}`);
   },
+
+  listDataSources: (params: { source_type?: string; limit?: number } = {}) => {
+    const query = new URLSearchParams();
+    if (params.source_type) query.set("source_type", params.source_type);
+    if (params.limit) query.set("limit", String(params.limit));
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return request<DataSourceList>(`/data-sources${suffix}`);
+  },
+  deleteDataSource: (id: string) =>
+    request<void>(`/data-sources/${id}`, { method: "DELETE" }),
 
   listAdminUsers: (params: { search?: string; page?: number; page_size?: number } = {}) => {
     const query = new URLSearchParams();
