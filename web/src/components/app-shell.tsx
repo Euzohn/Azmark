@@ -126,10 +126,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const moreActive = MOBILE_MORE.some((item) => isNavActive(item.href, pathname));
 
   return (
-    <div className="bg-glow mx-auto flex min-h-dvh w-full max-w-6xl flex-col md:flex-row">
-      <aside className="hidden md:sticky md:top-0 md:flex md:h-dvh md:w-60 md:shrink-0 md:flex-col md:gap-1 md:overflow-y-auto md:border-r md:border-border md:px-5 md:py-8">
+    <div className="flex min-h-dvh w-full flex-col md:flex-row">
+      <aside className="hidden bg-card md:sticky md:top-0 md:flex md:h-dvh md:w-56 md:shrink-0 md:flex-col md:gap-1 md:overflow-y-auto md:border-r md:border-border md:px-4 md:py-7 lg:w-60">
         <div className="mb-8 flex items-center gap-3 px-2">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#1a1816] text-[#f7f5f0] shadow-md shadow-black/20 dark:bg-[#f7f5f0] dark:text-[#1a1816]">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-foreground text-background">
             <AzmarkMark className="h-5 w-auto" />
           </div>
           <div>
@@ -161,9 +161,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </svg>
             {t("app.github")}
           </a>
-          <div className="rounded-2xl border border-border bg-gradient-to-br from-accent/50 to-transparent p-3">
+          <div className="border-t border-border pt-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#e0a737] to-[#b45309] text-xs font-semibold text-primary-foreground shadow-sm shadow-primary/25">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-foreground">
                 {identity.slice(0, 2).toUpperCase() || "AZ"}
               </div>
               <div className="min-w-0 flex-1">
@@ -192,7 +192,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <header className="sticky top-0 z-20 flex items-center justify-between border-b border-border bg-background/90 px-4 py-3 backdrop-blur-md md:hidden">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1a1816] text-[#f7f5f0] dark:bg-[#f7f5f0] dark:text-[#1a1816]">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-background">
             <AzmarkMark className="h-4 w-auto" />
           </div>
           <span className="font-display text-lg font-semibold tracking-tight">{t("app.name")}</span>
@@ -206,7 +206,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main className="min-w-0 flex-1 px-4 pb-28 pt-5 md:px-8 md:pb-10 md:pt-8">{children}</main>
+      <main className="min-w-0 flex-1 px-4 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-6 md:px-8 md:pb-12 md:pt-9 lg:px-10">
+        <div className={cn("mx-auto w-full", pathname.startsWith("/map") ? "max-w-none" : "max-w-[1440px]")}>{children}</div>
+      </main>
 
       <nav
         className="fixed inset-x-0 bottom-0 z-20 flex border-t border-border bg-card/90 backdrop-blur-md md:hidden"
@@ -219,6 +221,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Link
               key={item.href}
               href={item.href}
+              aria-current={active ? "page" : undefined}
               className={cn(
                 "flex min-h-14 flex-1 cursor-pointer flex-col items-center justify-center gap-1 py-2 text-xs transition-colors duration-150",
                 active ? "text-primary" : "text-muted-foreground hover:text-foreground",
@@ -295,11 +298,12 @@ function NavLink({
   return (
     <Link
       href={item.href}
+      aria-current={active ? "page" : undefined}
       className={cn(
-        "flex cursor-pointer items-center gap-3 rounded-full px-4 py-2.5 text-sm font-medium transition-all duration-200",
+        "flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         active
-          ? "bg-gradient-to-r from-primary/90 to-primary text-primary-foreground shadow-sm shadow-primary/25"
-          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground hover:translate-x-0.5",
+          ? "bg-accent text-accent-foreground"
+          : "text-muted-foreground hover:bg-muted hover:text-foreground",
       )}
     >
       <Icon className="h-4 w-4" strokeWidth={active ? 2.25 : 1.75} />

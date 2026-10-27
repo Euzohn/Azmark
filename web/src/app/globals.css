@@ -3,31 +3,27 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * Azmark brand palette — "Ink & Saffron"
- *   ink       #1a1816   warm near-black, primary text
- *   paper     #f7f5f0   warm neutral canvas
- *   saffron   #b45309   single accent (deep amber; golden on dark)
- *   moss      #4f7a3e   reserved for success semantics only
- * One accent, warm-tinted neutrals throughout; no second decorative color.
+ * Azmark travel archive — neutral reading surfaces with a restrained amber
+ * accent. Semantic status colors are reserved for success, warning and danger.
  */
 :root {
   color-scheme: light;
 
-  --background: #f7f5f0;
-  --foreground: #1a1816;
+  --background: #f6f7f8;
+  --foreground: #20252b;
 
   --card: #ffffff;
-  --card-foreground: #1a1816;
+  --card-foreground: #20252b;
 
-  --muted: #efece4;
-  --muted-foreground: #6b6557;
+  --muted: #eef0f2;
+  --muted-foreground: #626b76;
 
-  --border: #e3ddd1;
+  --border: #dde2e7;
 
   --primary: #b45309;
   --primary-foreground: #fbf6ef;
 
-  --accent: #f3ead9;
+  --accent: #f7efe3;
   --accent-foreground: #7a4a0e;
 
   --danger: #a8342b;
@@ -45,21 +41,21 @@
 .dark {
   color-scheme: dark;
 
-  --background: #141310;
-  --foreground: #ece7db;
+  --background: #12161b;
+  --foreground: #e8edf2;
 
-  --card: #1c1a16;
-  --card-foreground: #ece7db;
+  --card: #1a2027;
+  --card-foreground: #e8edf2;
 
-  --muted: #25221c;
-  --muted-foreground: #a39c89;
+  --muted: #232b34;
+  --muted-foreground: #a2adba;
 
-  --border: #322d24;
+  --border: #303a46;
 
   --primary: #e0a737;
   --primary-foreground: #1a140a;
 
-  --accent: #2a261d;
+  --accent: #30291e;
   --accent-foreground: #d4b076;
 
   --danger: #e0836f;
@@ -96,8 +92,8 @@
 
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
     Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-  --font-display: var(--font-playfair), "Playfair Display", Georgia, "Times New Roman", ui-serif,
-    "Songti SC", "Noto Serif SC", serif;
+  --font-display: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
+    "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
 ::selection {
@@ -121,11 +117,7 @@ body {
 
 /* Subtle ambient glow — evokes a night-sky / aurora feel */
 .bg-glow {
-  background-image: radial-gradient(
-    1000px 520px at 50% -140px,
-    color-mix(in srgb, var(--primary) 7%, transparent),
-    transparent 68%
-  );
+  background-image: none;
 }
 
 @keyframes sheet-up {
@@ -166,7 +158,7 @@ body {
 }
 
 .animate-fade-in-up {
-  animation: fade-in-up 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: fade-in 0.15s ease-out both;
 }
 
 @keyframes scale-in {
@@ -186,6 +178,7 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-in-up,
+  .animate-sheet-up,
   .animate-scale-in,
   .animate-fade-in {
     animation: none;

@@ -1,7 +1,10 @@
+"use client";
+
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
 interface PageHeaderProps {
   title: string;
@@ -27,6 +30,7 @@ export function PageHeader({
   backLabel,
   className,
 }: PageHeaderProps) {
+  const { t } = useI18n();
   return (
     <div className={cn("flex animate-fade-in-up flex-col gap-3", className)}>
       {backHref ? (
@@ -35,7 +39,7 @@ export function PageHeader({
           className="inline-flex w-fit items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
-          {backLabel ?? "Back"}
+            {backLabel ?? t("common.back")}
         </Link>
       ) : null}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -45,7 +49,7 @@ export function PageHeader({
               {eyebrow}
             </div>
           ) : null}
-          <h1 className="font-display text-3xl font-semibold tracking-tight text-foreground">
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
             {title}
           </h1>
           {subtitle ? (

@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
-import { Columns2, Loader2, Wand2 } from "lucide-react";
+import { ChevronDown, Columns2, Loader2, Wand2 } from "lucide-react";
 import Link from "next/link";
 
 import { AllianceBadge } from "@/components/alliance-badge";
@@ -194,10 +194,12 @@ const FIELD_LABELS: Record<keyof FlightFormState, TranslationKey> = {
 interface FlightFormProps {
   initial?: Flight;
   submitting?: boolean;
+  onCancel?: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
   onSubmit: (data: FlightInput) => void | Promise<void>;
 }
 
-export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
+export function FlightForm({ initial, submitting, onSubmit, onCancel, onDirtyChange }: FlightFormProps) {
   const { user } = useAuth();
   const { t, locale } = useI18n();
   const [form, setForm] = useState<FlightFormState>(() => {
@@ -212,6 +214,24 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
       arrival_timezone: base.arrival_timezone || tz,
     };
   });
+
+  const [openingForm] = useState(form);
+  const dirty = JSON.stringify(form) !== JSON.stringify(openingForm);
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
+  useEffect(() => {
+    if (!dirty || submitting) return;
+    const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    const beforeLink = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const link = event.target instanceof Element ? event.target.closest("a[href]") : null;
+      if (!(link instanceof HTMLAnchorElement) || link.target === "_blank" || link.hasAttribute("download")) return;
+      if (link.origin !== window.location.origin || link.href === window.location.href || link.getAttribute("href")?.startsWith("#")) return;
+      if (!window.confirm(t("common.unsaved"))) { event.preventDefault(); event.stopPropagation(); }
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    document.addEventListener("click", beforeLink, true);
+    return () => { window.removeEventListener("beforeunload", beforeUnload); document.removeEventListener("click", beforeLink, true); };
+  }, [dirty, submitting, t]);
 
   const { data: trips } = useQuery({
     queryKey: ["trips"],
@@ -543,7 +563,8 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-8">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+      <p className="text-sm text-muted-foreground">{t("flights.form.hint")}</p>
       <Section title={t("flights.section.flight")}>
         <div className="grid gap-4 md:grid-cols-2">
           <Field label={t("flights.serviceNumber")} marked={isChanged("service_number")}>
@@ -766,7 +787,7 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
         </div>
       </Section>
 
-      <Section title={t("flights.section.airport")}>
+      <Section title={t("flights.section.airport")} optional defaultOpen={Boolean(initial && [initial.departure_terminal, initial.departure_gate, initial.arrival_terminal, initial.arrival_gate, initial.check_in_desk, initial.baggage_belt].some(Boolean))}>
         <div className="grid gap-4 md:grid-cols-2">
           <Field label={t("flights.departureTerminal")} marked={isChanged("departure_terminal")}>
             <Input
@@ -813,7 +834,7 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
         </div>
       </Section>
 
-      <Section title={t("flights.section.aircraft")}>
+      <Section title={t("flights.section.aircraft")} optional defaultOpen={Boolean(initial && [initial.aircraft_model, initial.aircraft_reg, initial.cabin_class, initial.seat_type, initial.seat].some(Boolean))}>
         <div className="grid gap-4 md:grid-cols-2">
           <Field label={t("flights.aircraftModel")} marked={isChanged("aircraft_model")}>
             <Input
@@ -858,7 +879,7 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
         </div>
       </Section>
 
-      <Section title={t("flights.section.ticket")}>
+      <Section title={t("flights.section.ticket")} optional defaultOpen={Boolean(initial && [initial.price, initial.distance, initial.ticket_number, initial.booking_reference, initial.purchase_credential].some(Boolean))}>
         <div className="grid gap-4 md:grid-cols-2">
           <Field label={t("flights.price")} marked={isChanged("price")}>
             <Input
@@ -959,14 +980,15 @@ export function FlightForm({ initial, submitting, onSubmit }: FlightFormProps) {
               )}
             </div>
           ) : null}
-          <div className="flex items-center gap-3 md:col-span-2">
-            <Button type="submit" disabled={submitting}>
-              {t("common.save")}
-            </Button>
-            {formError ? <span className="text-sm text-danger">{formError}</span> : null}
-          </div>
         </div>
       </Section>
+      <div className="sticky bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-10 flex flex-wrap items-center justify-end gap-3 rounded-xl border border-border bg-card p-3 shadow-sm md:bottom-4">
+        {formError ? <span role="alert" className="mr-auto text-sm text-danger">{formError}</span> : null}
+        {onCancel ? <Button type="button" variant="outline" disabled={submitting} onClick={onCancel}>{t("common.cancel")}</Button> : null}
+        <Button type="submit" disabled={submitting} className="min-w-28">
+          {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{t(submitting ? "common.loading" : "common.save")}
+        </Button>
+      </div>
     </form>
   );
 }
@@ -1000,13 +1022,28 @@ function ScheduleInput({
 function Section({
   title,
   children,
+  optional = false,
+  defaultOpen = false,
 }: {
   title: string;
   children: React.ReactNode;
+  optional?: boolean;
+  defaultOpen?: boolean;
 }) {
+  const { t } = useI18n();
+  const [expanded, setExpanded] = useState(defaultOpen);
+  if (optional) return (
+    <details className="group rounded-xl border border-border bg-card" open={expanded} onToggle={(event) => setExpanded(event.currentTarget.open)}>
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-5 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+        <span>{title}<span className="ml-3 text-xs font-normal text-muted-foreground">{t("flights.form.optional")}</span></span>
+        <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="border-t border-border p-5">{children}</div>
+    </details>
+  );
   return (
-    <section className="flex flex-col gap-4">
-      <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+    <section className="flex flex-col gap-5 rounded-xl border border-border bg-card p-5">
+      <h2 className="text-sm font-semibold">
         {title}
       </h2>
       {children}

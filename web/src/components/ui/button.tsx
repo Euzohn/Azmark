@@ -3,17 +3,17 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 export const buttonVariants = cva(
-  "inline-flex cursor-pointer items-center justify-center gap-2 rounded-full text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 active:translate-y-px active:scale-[0.98]",
+  "inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
         default:
-          "bg-primary text-primary-foreground shadow-sm shadow-primary/20 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/25 hover:brightness-105",
+           "bg-primary text-primary-foreground hover:brightness-110",
         outline:
-          "border border-border bg-card text-foreground shadow-sm hover:-translate-y-0.5 hover:border-primary/40 hover:bg-accent hover:shadow-md",
+           "border border-border bg-card text-foreground hover:border-primary/40 hover:bg-muted",
         ghost: "text-muted-foreground hover:bg-accent hover:text-foreground",
         danger:
-          "bg-danger text-danger-foreground shadow-sm shadow-danger/20 hover:-translate-y-0.5 hover:brightness-105 hover:shadow-lg hover:shadow-danger/25",
+           "bg-danger text-danger-foreground hover:brightness-110",
       },
       size: {
         default: "h-10 px-5",

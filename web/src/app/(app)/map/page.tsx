@@ -11,6 +11,8 @@ import type { GeoJSONSource, Map as MLMap, Marker, Popup, StyleSpecification } f
 import { useTheme } from "@/components/theme-provider";
 import { AirportName } from "@/components/airport-name";
 import { PageHeader } from "@/components/page-header";
+import { BottomSheet } from "@/components/ui/bottom-sheet";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -77,8 +79,9 @@ export default function MapPage() {
   const interactionsBoundRef = useRef(false);
   const themeRef = useRef(theme);
   const [ready, setReady] = useState(false);
+  const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["map-routes"],
     queryFn: api.getMapRoutes,
   });
@@ -92,7 +95,7 @@ export default function MapPage() {
       ),
     [data],
   );
-  const showMap = !isLoading && routes.length > 0;
+  const showMap = !isLoading && !isError && routes.length > 0;
 
   const summary = useMemo(() => {
     const airports = new Set<string>();
@@ -275,7 +278,7 @@ export default function MapPage() {
           paint: {
             "circle-radius": 3.5,
             "circle-color": accent,
-            "circle-stroke-color": dark ? "#141310" : "#f7f5f0",
+             "circle-stroke-color": dark ? "#12161b" : "#f6f7f8",
             "circle-stroke-width": 1.5,
           },
         });
@@ -285,7 +288,11 @@ export default function MapPage() {
           map.on("click", "routes-line", (event) => {
             const feature = event.features?.[0];
             if (!feature) return;
-            const props = feature.properties as Record<string, string>;
+             const props = feature.properties as Record<string, string>;
+             if (window.matchMedia("(max-width: 767px)").matches) {
+               setSelectedRouteId(props.id);
+               return;
+             }
             const node = document.createElement("div");
             node.className = "text-xs leading-relaxed";
             const title = document.createElement("div");
@@ -362,6 +369,9 @@ export default function MapPage() {
     };
   }, [routes, ready]);
 
+  const routeHref = (route: (typeof routes)[number]) => route.type === "train" ? `/trains/${route.id}` : route.type === "other" ? `/transports/${route.id}` : `/flights/${route.id}`;
+  const selectedRoute = routes.find((route) => route.id === selectedRouteId);
+
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
@@ -371,11 +381,13 @@ export default function MapPage() {
 
       {isLoading ? <Skeleton className="h-[60vh] w-full" /> : null}
 
-      {!isLoading && routes.length === 0 ? (
+      {isError ? <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-danger/30 bg-card p-5"><span className="text-sm text-danger">{t("common.error")}</span><Button variant="outline" onClick={() => void refetch()}>{t("common.retry")}</Button></div> : null}
+
+      {!isLoading && !isError && routes.length === 0 ? (
         <EmptyState icon={MapIcon} title={t("map.empty")} hint={t("map.emptyHint")} />
       ) : null}
 
-      {showMap ? (
+      {showMap && !isError ? (
         <>
           <div className="grid grid-cols-2 gap-4 border-y border-border py-4 sm:grid-cols-4">
             <Stat label={t("map.stats.routes")} value={routes.length} />
@@ -387,29 +399,18 @@ export default function MapPage() {
             />
           </div>
 
-          <Card className="overflow-hidden p-0">
-            <div ref={containerRef} className="h-[60vh] w-full" />
-          </Card>
-
-          <p className="text-xs text-muted-foreground">{t("map.greatCircleNote")}</p>
-
-          {longestRoutes.length > 0 ? (
-            <Card>
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
+            <Card className="overflow-hidden p-0"><div ref={containerRef} className="h-[55dvh] min-h-[24rem] w-full xl:h-[70dvh]" /></Card>
+            {longestRoutes.length > 0 ? <Card className="xl:max-h-[70dvh] xl:overflow-y-auto">
               <CardHeader>
                 <CardTitle>{t("map.longest")}</CardTitle>
               </CardHeader>
-              <CardContent className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <CardContent className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
                 {longestRoutes.map((route) => {
-                  const href =
-                    route.type === "train"
-                      ? `/trains/${route.id}`
-                      : route.type === "other"
-                        ? `/transports/${route.id}`
-                        : `/flights/${route.id}`;
                   return (
                     <Link
                       key={route.id}
-                      href={href}
+                      href={routeHref(route)}
                       className="flex items-center justify-between gap-3 rounded-xl border border-border/70 px-3 py-2.5 transition-colors hover:bg-accent/40"
                     >
                       <div className="min-w-0">
@@ -435,8 +436,15 @@ export default function MapPage() {
                   );
                 })}
               </CardContent>
-            </Card>
-          ) : null}
+            </Card> : null}
+          </div>
+          <p className="text-xs text-muted-foreground">{t("map.coverageHint")} {t("map.greatCircleNote")}</p>
+          <BottomSheet open={selectedRoute !== undefined} onClose={() => setSelectedRouteId(null)} title={t("map.title")}>
+            {selectedRoute ? <Link href={routeHref(selectedRoute)} onClick={() => setSelectedRouteId(null)} className="flex items-center justify-between gap-4 rounded-lg border border-border p-4 text-sm font-medium">
+              <span>{selectedRoute.origin.code ?? selectedRoute.origin.name} → {selectedRoute.destination.code ?? selectedRoute.destination.name}</span>
+              <span className="text-xs text-muted-foreground">{selectedRoute.service_number}</span>
+            </Link> : null}
+          </BottomSheet>
         </>
       ) : null}
     </div>

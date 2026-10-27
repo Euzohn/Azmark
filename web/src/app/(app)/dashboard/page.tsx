@@ -3,10 +3,9 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
-  BarChart3,
+  Backpack,
   Bus,
   CalendarDays,
-  MapPin,
   Plane,
   PlaneTakeoff,
   TrainFront,
@@ -16,7 +15,6 @@ import Link from "next/link";
 import { AirlineLogo } from "@/components/airline-logo";
 import { AirlineName } from "@/components/airline-name";
 import { AirportName } from "@/components/airport-name";
-import { ColumnChart, ShareBar, type ChartDatum } from "@/components/charts";
 import { PageHeader } from "@/components/page-header";
 import { FlightStatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
@@ -29,7 +27,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-store";
 import { daysUntilDeparture, formatZonedDateTime } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
-import type { BreakdownItem, DashboardRecord } from "@/lib/types";
+import type { DashboardRecord } from "@/lib/types";
 
 function recordHref(record: DashboardRecord): string {
   if (record.type === "train") return `/trains/${record.id}`;
@@ -41,26 +39,6 @@ function RecordTypeIcon({ type, className = "h-4 w-4" }: { type: string; classNa
   if (type === "train") return <TrainFront className={className} />;
   if (type === "other") return <Bus className={className} />;
   return <Plane className={className} />;
-}
-
-/** Fill missing months so the trend reads as a continuous time axis. */
-function rollingMonths(items: BreakdownItem[], count = 12): { key: string; count: number; date: Date }[] {
-  const counts = new Map(items.map((item) => [item.label, item.count]));
-  const now = new Date();
-  let end = new Date(now.getFullYear(), now.getMonth(), 1);
-
-  const latest = items.at(-1)?.label;
-  if (latest) {
-    const [year, month] = latest.split("-").map(Number);
-    const latestDate = new Date(year, month - 1, 1);
-    if (latestDate > end) end = latestDate;
-  }
-
-  return Array.from({ length: count }, (_, index) => {
-    const date = new Date(end.getFullYear(), end.getMonth() - (count - 1 - index), 1);
-    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-    return { key, count: counts.get(key) ?? 0, date };
-  });
 }
 
 function RecordRow({ record, delay = 0 }: { record: DashboardRecord; delay?: number }) {
@@ -134,11 +112,7 @@ function UpcomingTicket({ record }: { record: DashboardRecord }) {
 
   return (
     <Card className="relative animate-fade-in-up overflow-hidden">
-      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[#e0a737] via-primary to-[#96670c]" />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-primary/5 blur-2xl"
-      />
+      <div className="absolute inset-x-0 top-0 h-0.5 bg-primary" />
 
       <CardContent className="relative flex flex-col gap-6 p-6 sm:flex-row sm:items-stretch sm:justify-between">
         <div className="flex min-w-0 flex-1 flex-col gap-4">
@@ -226,7 +200,7 @@ export default function DashboardPage() {
   const { t, locale } = useI18n();
   const { user } = useAuth();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["dashboard"],
     queryFn: api.getDashboard,
   });
@@ -245,29 +219,12 @@ export default function DashboardPage() {
     },
   ];
 
-  const composition: ChartDatum[] = [
-    { label: t("dashboard.stats.flights"), value: stats?.flights ?? 0 },
-    { label: t("dashboard.stats.trains"), value: stats?.trains ?? 0 },
-    { label: t("dashboard.stats.transports"), value: stats?.transports ?? 0 },
-  ];
-
-  const monthFmt = new Intl.DateTimeFormat(locale, { month: "short" });
-  const trend = rollingMonths(data?.by_month ?? []);
-  const trendTotal = trend.reduce((sum, item) => sum + item.count, 0);
-
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         title={name ? t("dashboard.greeting", { name }) : t("dashboard.title")}
         subtitle={t("app.tagline")}
-        actions={
-          <Link href="/statistics">
-            <Button variant="ghost" size="sm">
-              <BarChart3 className="h-4 w-4" />
-              {t("dashboard.viewStats")}
-            </Button>
-          </Link>
-        }
+        actions={<Link href="/records"><Button variant="outline" size="sm"><ArrowRight className="h-4 w-4" />{t("nav.records")}</Button></Link>}
       />
 
       {isLoading ? (
@@ -278,7 +235,9 @@ export default function DashboardPage() {
         </div>
       ) : null}
 
-      {!isLoading && !hasRecords ? (
+      {isError ? <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-danger/30 bg-card p-5"><span className="text-sm text-danger">{t("common.error")}</span><Button variant="outline" onClick={() => void refetch()}>{t("common.retry")}</Button></div> : null}
+
+      {!isLoading && !isError && !hasRecords ? (
         <EmptyState
           icon={PlaneTakeoff}
           title={t("dashboard.empty")}
@@ -294,7 +253,7 @@ export default function DashboardPage() {
         />
       ) : null}
 
-      {!isLoading && hasRecords ? (
+      {!isLoading && !isError && hasRecords ? (
         <>
           {data?.upcoming ? (
             <UpcomingTicket record={data.upcoming} />
@@ -319,9 +278,14 @@ export default function DashboardPage() {
             </Card>
           )}
 
-          {/* Footprint — the only totals on this page */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Link href="/records" className="flex items-center justify-between rounded-xl border border-border bg-card p-5 text-sm font-medium hover:border-primary/40"><span className="flex items-center gap-3"><Plane className="h-5 w-5 text-primary" />{t("nav.records")}</span><ArrowRight className="h-4 w-4 text-muted-foreground" /></Link>
+            <Link href="/trips" className="flex items-center justify-between rounded-xl border border-border bg-card p-5 text-sm font-medium hover:border-primary/40"><span className="flex items-center gap-3"><Backpack className="h-5 w-5 text-primary" />{t("nav.trips")}</span><ArrowRight className="h-4 w-4 text-muted-foreground" /></Link>
+          </div>
+
+          {/* Footprint — analysis and trends live on the statistics page. */}
           <Card className="animate-fade-in-up" style={{ animationDelay: "120ms" }}>
-            <CardContent className="flex flex-col gap-5 p-0">
+            <CardContent className="p-0">
               <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
                 {metrics.map((metric) => (
                   <div key={metric.label} className="bg-card p-4">
@@ -329,55 +293,11 @@ export default function DashboardPage() {
                   </div>
                 ))}
               </div>
-              <div className="flex flex-col gap-4 px-5 pb-5 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0 flex-1 sm:max-w-md">
-                  <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                    {t("dashboard.composition")}
-                  </div>
-                  <ShareBar data={composition} ariaLabel={t("dashboard.composition")} />
-                </div>
-                {stats?.trips ? (
-                  <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/40 px-4 py-2.5">
-                    <MapPin className="h-4 w-4 text-primary" />
-                    <span className="font-display text-xl font-semibold tabular-nums">
-                      {stats.trips}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {t("dashboard.stats.trips")}
-                    </span>
-                  </div>
-                ) : null}
-              </div>
             </CardContent>
           </Card>
 
-          <div className="grid gap-4 lg:grid-cols-5">
-            <Card
-              className="animate-fade-in-up lg:col-span-3"
-              style={{ animationDelay: "240ms" }}
-            >
-              <CardHeader className="flex-row items-start justify-between gap-3">
-                <div>
-                  <CardTitle>{t("dashboard.trend")}</CardTitle>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {t("dashboard.trendHint", { count: trendTotal })}
-                  </p>
-                </div>
-                <CalendarDays className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <ColumnChart
-                  data={trend.map((item) => ({ label: item.key, value: item.count }))}
-                  ariaLabel={t("dashboard.trend")}
-                  formatLabel={(label) => {
-                    const [year, month] = label.split("-").map(Number);
-                    return monthFmt.format(new Date(year, month - 1, 1));
-                  }}
-                />
-              </CardContent>
-            </Card>
-
-            <Card className="animate-fade-in-up lg:col-span-2" style={{ animationDelay: "300ms" }}>
+          <div>
+            <Card className="animate-fade-in-up">
               <CardHeader className="flex-row items-center justify-between">
                 <CardTitle>{t("dashboard.recent")}</CardTitle>
                 <Link href="/records">

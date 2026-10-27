@@ -23,7 +23,7 @@ export default function NewFlightPage() {
     mutationFn: ({ data, force }: { data: FlightInput; force: boolean }) =>
       api.createFlight(data, force),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["flights"] });
+      for (const key of ["flights", "records", "timeline", "dashboard", "statistics", "stats", "map-routes", "trips", "trip"]) void queryClient.invalidateQueries({ queryKey: [key] });
       router.push("/records?type=flight");
     },
     onError: (err) => {
@@ -45,7 +45,7 @@ export default function NewFlightPage() {
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="mx-auto flex max-w-5xl flex-col gap-6">
       <PageHeader title={t("flights.add")} backHref="/records?type=flight" backLabel={t("common.back")} />
       <div className="animate-fade-in-up" style={{ animationDelay: "50ms" }}>
         <FlightForm submitting={create.isPending} onSubmit={(data) => submit(data)} />

@@ -32,10 +32,10 @@ export function Segmented<T extends string>({
   return (
     <div
       className={cn(
-        "inline-flex items-center gap-1 rounded-full border border-border bg-muted/60 p-1",
+        "inline-flex items-center gap-1 rounded-lg border border-border bg-muted/60 p-1",
         className,
       )}
-      role="tablist"
+      role="group"
     >
       {options.map((opt) => {
         const active = opt.value === value;
@@ -44,11 +44,10 @@ export function Segmented<T extends string>({
           <button
             key={opt.value}
             type="button"
-            role="tab"
-            aria-selected={active}
+            aria-pressed={active}
             onClick={() => onChange(opt.value)}
             className={cn(
-              "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full font-medium transition-all duration-200",
+              "inline-flex items-center gap-1.5 whitespace-nowrap rounded-md font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               size === "sm" ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm",
               active
                 ? "bg-card text-foreground shadow-sm shadow-black/5"

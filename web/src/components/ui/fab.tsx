@@ -28,18 +28,18 @@ type FabProps = {
  */
 export function Fab({ label, href, onClick, className, children }: FabProps) {
   const classes = cn(
-    "fixed bottom-28 right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform duration-150 hover:scale-105 active:scale-95 md:bottom-6",
+    "fixed right-4 z-30 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg transition-colors hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden",
     className,
   );
   if (href) {
     return (
-      <Link href={href} aria-label={label} className={classes}>
+      <Link href={href} aria-label={label} className={classes} style={{ bottom: "calc(6rem + env(safe-area-inset-bottom))" }}>
         {children}
       </Link>
     );
   }
   return (
-    <button type="button" aria-label={label} onClick={onClick} className={classes}>
+    <button type="button" aria-label={label} onClick={onClick} className={classes} style={{ bottom: "calc(6rem + env(safe-area-inset-bottom))" }}>
       {children}
     </button>
   );

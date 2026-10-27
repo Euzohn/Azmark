@@ -1,88 +1,100 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Trash2 } from "lucide-react";
-import { useParams, useRouter } from "next/navigation";
+import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { useParams, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 
 import { AttachmentPanel } from "@/components/attachment-panel";
-import { AzmarkLoader } from "@/components/azmark-loader";
+import { FlightSummary } from "@/components/flight-summary";
 import { FlightForm } from "@/components/flight-form";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { recordsReturnHref } from "@/lib/record-navigation";
 import type { FlightInput } from "@/lib/types";
 
-export default function FlightDetailPage() {
-  const params = useParams<{ id: string }>();
-  const id = params.id;
-  const router = useRouter();
+function FlightDetail() {
+  const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
+  const backHref = recordsReturnHref(searchParams.get("from"));
   const queryClient = useQueryClient();
   const { t } = useI18n();
+  const [editing, setEditing] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [saved, setSaved] = useState(false);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["flight", id],
-    queryFn: () => api.getFlight(id),
-    enabled: Boolean(id),
-  });
-
+  const { data, isLoading, isError, refetch } = useQuery({ queryKey: ["flight", id], queryFn: () => api.getFlight(id), enabled: Boolean(id) });
+  const refresh = async () => {
+    await Promise.all(["flights", "records", "timeline", "dashboard", "statistics", "stats", "map-routes", "trips", "trip"].map((key) => queryClient.invalidateQueries({ queryKey: [key] })));
+  };
   const update = useMutation({
     mutationFn: (input: FlightInput) => api.updateFlight(id, input),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["flights"] });
-      queryClient.invalidateQueries({ queryKey: ["flight", id] });
-      router.push("/records?type=flight");
+    onSuccess: async (flight) => {
+      queryClient.setQueryData(["flight", id], flight);
+      setDirty(false);
+      setEditing(false);
+      setSaved(true);
+      await refresh();
     },
   });
-
   const remove = useMutation({
     mutationFn: () => api.deleteFlight(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["flights"] });
-      router.push("/records?type=flight");
+    onSuccess: async () => {
+      await refresh();
+      // A hard navigation also clears the deleted detail from the router cache.
+      window.location.assign(backHref);
     },
   });
+  const cancel = () => {
+    if (dirty && !window.confirm(t("common.unsaved"))) return;
+    setDirty(false);
+    setEditing(false);
+    update.reset();
+  };
 
-  if (isLoading) {
-    return (
-      <div className="flex min-h-[40vh] items-center justify-center">
-        <AzmarkLoader className="h-16 w-auto text-foreground" label={t("common.loading")} />
-      </div>
-    );
-  }
-  if (!data) {
-    return <p className="text-sm text-muted-foreground">{t("common.empty")}</p>;
-  }
+  if (isLoading) return <DetailSkeleton />;
+  if (isError) return <div role="alert" className="flex items-center gap-4"><p className="text-sm text-danger">{t("common.error")}</p><Button variant="outline" onClick={() => void refetch()}>{t("common.retry")}</Button></div>;
+  if (!data) return <p>{t("common.empty")}</p>;
 
   return (
-    <div className="flex flex-col gap-4">
-      <PageHeader
-        title={t("flights.edit")}
-        backHref="/records?type=flight"
-        backLabel={t("common.back")}
-        actions={
-          <Button
-            variant="danger"
-            size="sm"
-            onClick={() => {
-              if (window.confirm(t("flights.deleteConfirm"))) {
-                remove.mutate();
-              }
-            }}
-          >
-            <Trash2 className="h-4 w-4" />
-            {t("common.delete")}
-          </Button>
-        }
-      />
-      <div className="animate-fade-in-up" style={{ animationDelay: "50ms" }}>
-        <FlightForm
-          initial={data}
-          submitting={update.isPending}
-          onSubmit={(input) => update.mutate(input)}
-        />
-      </div>
-      <AttachmentPanel resourceType="flight" resourceId={id} />
+    <div className="mx-auto flex max-w-5xl flex-col gap-6">
+      <PageHeader title={t(editing ? "flights.edit" : "flights.detail")} backHref={backHref} actions={editing ? undefined : <>
+        <Button variant="outline" onClick={() => { setSaved(false); setEditing(true); }}><Pencil className="h-4 w-4" />{t("common.edit")}</Button>
+        <Button variant="ghost" size="icon" aria-label={t("common.actions")} onClick={() => setMoreOpen(true)}><MoreHorizontal className="h-5 w-5" /></Button>
+      </>} />
+      {saved && !editing ? <p role="status" className="text-sm text-success">{t("common.saved")}</p> : null}
+      {editing ? <>
+        {update.isError ? <p role="alert" className="text-sm text-danger">{t("common.error")}</p> : null}
+        <FlightForm initial={data} submitting={update.isPending} onDirtyChange={setDirty} onCancel={cancel} onSubmit={(input) => update.mutate(input)} />
+      </> : <>
+        <FlightSummary flight={data} />
+        <AttachmentPanel resourceType="flight" resourceId={id} />
+      </>}
+      <Dialog open={moreOpen} onClose={() => setMoreOpen(false)} title={t("common.actions")} variant="responsive">
+        <Button variant="ghost" className="w-full justify-start text-danger" onClick={() => { setMoreOpen(false); setDeleteOpen(true); }}><Trash2 className="h-4 w-4" />{t("common.delete")}</Button>
+      </Dialog>
+      <Dialog open={deleteOpen} onClose={() => { if (!remove.isPending) setDeleteOpen(false); }} title={t("common.confirmDelete")} variant="responsive">
+        <p className="text-sm text-muted-foreground">{t("flights.deleteConfirm")}</p>
+        {remove.isError ? <p role="alert" className="mt-3 text-sm text-danger">{t("common.error")}</p> : null}
+        <div className="mt-6 flex justify-end gap-3">
+          <Button variant="outline" disabled={remove.isPending} onClick={() => setDeleteOpen(false)}>{t("common.cancel")}</Button>
+          <Button variant="danger" disabled={remove.isPending} onClick={() => remove.mutate()}>{t(remove.isPending ? "common.loading" : "common.delete")}</Button>
+        </div>
+      </Dialog>
     </div>
   );
+}
+
+function DetailSkeleton() {
+  return <div className="mx-auto flex max-w-5xl flex-col gap-6"><Skeleton className="h-12 w-64" /><Skeleton className="h-64 w-full rounded-xl" /><Skeleton className="h-48 w-full rounded-xl" /></div>;
+}
+
+export default function FlightDetailPage() {
+  return <Suspense fallback={<DetailSkeleton />}><FlightDetail /></Suspense>;
 }
