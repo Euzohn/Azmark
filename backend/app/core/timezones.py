@@ -16,9 +16,24 @@ values are returned unchanged so we never silently drop data.
 from __future__ import annotations
 
 import re
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-__all__ = ["normalize_timezone"]
+__all__ = ["normalize_timezone", "in_timezone"]
+
+
+def in_timezone(value: datetime, timezone: str | None) -> datetime:
+    """Render an instant in its location's zone; legacy/invalid zones use UTC.
+
+    SQLite returns naive datetimes for our UTC columns, unlike PostgreSQL.
+    Never let the host timezone determine the calendar date of those values.
+    """
+    instant = value.replace(tzinfo=UTC) if value.tzinfo is None else value
+    try:
+        zone = ZoneInfo(timezone or "UTC")
+    except (ZoneInfoNotFoundError, ValueError):
+        zone = ZoneInfo("UTC")
+    return instant.astimezone(zone)
 
 
 # Readable, DST-free representatives for the offsets a flight provider emits.

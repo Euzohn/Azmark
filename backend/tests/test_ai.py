@@ -488,11 +488,11 @@ def test_lookup_flight_no_provider_key_returns_local(client, monkeypatch):
 
 
 def test_system_prompt_includes_timezone_for_zh_cn(client, monkeypatch):
-    """LLM should receive the user's timezone in the system prompt so it can
-    append the correct offset to datetime strings extracted from screenshots."""
+    """Account timezone, not language, determines relative dates."""
     token = register_and_login(client, "ai_tz_zh")["access_token"]
     headers = auth_headers(token)
     _configure_ai(client, headers)
+    client.patch("/api/v1/auth/me", json={"timezone": "Asia/Shanghai"}, headers=headers)
 
     from app.services import ai_agent as agent_mod
 
@@ -507,12 +507,14 @@ def test_system_prompt_includes_timezone_for_zh_cn(client, monkeypatch):
 
     system_msg = fake.last_messages[0]
     assert system_msg["role"] == "system"
-    assert "+08:00" in system_msg["content"]
+    assert "Asia/Shanghai" in system_msg["content"]
     assert "TIMEZONE HANDLING" in system_msg["content"]
+    assert "arrival airport/station" in system_msg["content"]
+    assert "daylight saving time" in system_msg["content"]
 
 
 def test_system_prompt_includes_timezone_for_en_us(client, monkeypatch):
-    """en-US users should receive -05:00 in the system prompt."""
+    """en-US language does not imply a fixed US winter UTC offset."""
     token = register_and_login(client, "ai_tz_en")["access_token"]
     headers = auth_headers(token)
     _configure_ai(client, headers)
@@ -526,13 +528,17 @@ def test_system_prompt_includes_timezone_for_en_us(client, monkeypatch):
         lambda self, user_id: fake,
     )
 
-    # Set locale to en-US
-    client.patch("/api/v1/auth/me", json={"locale": "en-US"}, headers=headers)
+    client.patch(
+        "/api/v1/auth/me",
+        json={"locale": "en-US", "timezone": "America/New_York"},
+        headers=headers,
+    )
 
     client.post("/api/v1/ai/chat", json={"message": "hi"}, headers=headers)
 
     system_msg = fake.last_messages[0]
-    assert "-05:00" in system_msg["content"]
+    assert "America/New_York" in system_msg["content"]
+    assert "locale: en-US" in system_msg["content"]
 
 
 def test_system_prompt_includes_field_inference_rules(client, monkeypatch):
@@ -574,18 +580,16 @@ def test_system_prompt_includes_field_inference_rules(client, monkeypatch):
     assert re.search(r"\d{4}-\d{2}-\d{2}", system)
 
 
-def test_local_today_uses_offset():
-    from datetime import timedelta
+def test_ai_prompt_uses_profile_zone_for_both_paths():
+    from app.services.ai_agent import build_system_prompt
 
-    from app.services.ai_agent import _offset_to_timedelta, local_today
-
-    assert _offset_to_timedelta("+08:00") == timedelta(hours=8)
-    assert _offset_to_timedelta("-05:00") == timedelta(hours=-5)
-    assert _offset_to_timedelta("garbage") == timedelta(0)
-
-    value = local_today("+08:00")
-    assert len(value) == 10
-    assert value[4] == "-" and value[7] == "-"
+    prompt = build_system_prompt(
+        user_display="Traveler", locale="zh-CN", timezone="America/New_York"
+    )
+    assert "America/New_York" in prompt
+    assert "locale: zh-CN" in prompt
+    assert "-05:00" in prompt or "-04:00" in prompt
+    assert "never equate boarding time with departure time" in prompt
 
 
 def test_create_transport_proposal_preserves_all_inferred_fields(client, monkeypatch):

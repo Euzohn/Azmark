@@ -25,6 +25,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
+import { formatZonedDateTime } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 import type {
   OtherTransport,
@@ -34,19 +35,6 @@ import type {
   TripInput,
   TripItem,
 } from "@/lib/types";
-
-function formatDateTime(value: string | null, locale: string): string {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleString(locale, {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function formatDate(value: string | null, locale: string): string {
   if (!value) return "";
@@ -270,7 +258,7 @@ export default function TripDetailPage() {
                           ) : null}
                         </div>
                         <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                          {formatDateTime(record.departure_time, locale)}
+                          {formatZonedDateTime(record.departure_time, locale, record.departure_timezone)}
                           {" · "}
                           {isTrain || isOther ? (
                             record.carrier

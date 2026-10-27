@@ -27,10 +27,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Stat } from "@/components/ui/stat";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-store";
+import { daysUntilDeparture, formatZonedDateTime } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 import type { BreakdownItem, DashboardRecord } from "@/lib/types";
-
-const DAY_MS = 86_400_000;
 
 function recordHref(record: DashboardRecord): string {
   if (record.type === "train") return `/trains/${record.id}`;
@@ -42,10 +41,6 @@ function RecordTypeIcon({ type, className = "h-4 w-4" }: { type: string; classNa
   if (type === "train") return <TrainFront className={className} />;
   if (type === "other") return <Bus className={className} />;
   return <Plane className={className} />;
-}
-
-function startOfDay(date: Date): number {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 }
 
 /** Fill missing months so the trend reads as a continuous time axis. */
@@ -70,16 +65,18 @@ function rollingMonths(items: BreakdownItem[], count = 12): { key: string; count
 
 function RecordRow({ record, delay = 0 }: { record: DashboardRecord; delay?: number }) {
   const { locale } = useI18n();
-  const parsed = record.departure_time ? new Date(record.departure_time) : null;
-  const departure = parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
-  const dateLabel = departure
-    ? new Intl.DateTimeFormat(locale, {
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      }).format(departure)
-    : "";
+  const dateLabel = formatZonedDateTime(
+    record.departure_time,
+    locale,
+    record.departure_timezone,
+    {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZoneName: "short",
+    },
+  );
 
   return (
     <Link
@@ -120,7 +117,9 @@ function UpcomingTicket({ record }: { record: DashboardRecord }) {
   const { t, locale } = useI18n();
   const departure = record.departure_time ? new Date(record.departure_time) : null;
   const valid = departure && !Number.isNaN(departure.getTime()) ? departure : null;
-  const days = valid ? Math.round((startOfDay(valid) - startOfDay(new Date())) / DAY_MS) : null;
+  const days = daysUntilDeparture(record.departure_time, record.departure_timezone);
+  const formatDeparture = (options: Intl.DateTimeFormatOptions) =>
+    formatZonedDateTime(record.departure_time, locale, record.departure_timezone, options);
 
   const countdown =
     days === null
@@ -176,13 +175,14 @@ function UpcomingTicket({ record }: { record: DashboardRecord }) {
             <span className="inline-flex items-center gap-1.5 text-muted-foreground">
               <CalendarDays className="h-4 w-4 text-primary/80" />
               {valid
-                ? new Intl.DateTimeFormat(locale, {
+                ? formatDeparture({
                     weekday: "short",
                     month: "short",
                     day: "numeric",
                     hour: "2-digit",
                     minute: "2-digit",
-                  }).format(valid)
+                    timeZoneName: "short",
+                  })
                 : "—"}
             </span>
             <span className="inline-flex items-center gap-1.5 text-muted-foreground">
@@ -200,21 +200,19 @@ function UpcomingTicket({ record }: { record: DashboardRecord }) {
           <div className="flex shrink-0 items-center gap-5 rounded-2xl border border-border bg-muted/40 px-5 py-4 sm:flex-col sm:items-center sm:justify-center sm:gap-1">
             <div className="text-center">
               <div className="font-display text-4xl font-semibold leading-none tabular-nums text-foreground">
-                {new Intl.DateTimeFormat(locale, { day: "2-digit" }).format(valid)}
+                {formatDeparture({ day: "2-digit" })}
               </div>
               <div className="mt-1 text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                {new Intl.DateTimeFormat(locale, { month: "short" }).format(valid)}
+                {formatDeparture({ month: "short" })}
               </div>
             </div>
             <div className="hidden h-px w-10 bg-border sm:block" />
             <div className="text-center">
               <div className="text-lg font-semibold tabular-nums text-foreground">
-                {new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" }).format(
-                  valid,
-                )}
+                {formatDeparture({ hour: "2-digit", minute: "2-digit" })}
               </div>
               <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                {new Intl.DateTimeFormat(locale, { weekday: "short" }).format(valid)}
+                {formatDeparture({ weekday: "short" })}
               </div>
             </div>
           </div>

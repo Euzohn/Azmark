@@ -23,6 +23,7 @@ import { PageHeader } from "@/components/page-header";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-store";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
+import { formatZonedDateTime } from "@/lib/datetime";
 import type { AiProposal } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -92,25 +93,10 @@ function validateImageFile(file: File): string | null {
   return null;
 }
 
-function formatDateTime(value: unknown): string {
-  try {
-    const date = new Date(value as string);
-    if (Number.isNaN(date.getTime())) return String(value);
-    return date.toLocaleString(undefined, {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return String(value);
-  }
-}
-
 function formatProposalData(
   data: Record<string, unknown>,
   t: (key: TranslationKey) => string,
+  locale: string,
 ): string[] {
   const lines: string[] = [];
   if (data.origin || data.destination) {
@@ -125,10 +111,10 @@ function formatProposalData(
     lines.push(`${t("ai.proposal.trainType")}: ${data.train_type}`);
   }
   if (data.departure_time) {
-    lines.push(`${t("ai.proposal.departure")}: ${formatDateTime(data.departure_time)}`);
+    lines.push(`${t("ai.proposal.departure")}: ${formatZonedDateTime(String(data.departure_time), locale, data.departure_timezone as string | null)}`);
   }
   if (data.arrival_time) {
-    lines.push(`${t("ai.proposal.arrival")}: ${formatDateTime(data.arrival_time)}`);
+    lines.push(`${t("ai.proposal.arrival")}: ${formatZonedDateTime(String(data.arrival_time), locale, data.arrival_timezone as string | null)}`);
   }
   if (data.carrier) lines.push(data.carrier as string);
   if (data.cabin_class) {
@@ -714,12 +700,12 @@ function ProposalCard({
   onCancel: () => void;
   saving: boolean;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const isDelete = proposal.action === "delete_transport";
   const saved = proposal.status === "saved";
   const cancelled = proposal.status === "cancelled";
   const duplicate = proposal.status === "duplicate";
-  const dataLines = isDelete ? [] : formatProposalData(proposal.data, t);
+  const dataLines = isDelete ? [] : formatProposalData(proposal.data, t, locale);
 
   if (duplicate) {
     const base =

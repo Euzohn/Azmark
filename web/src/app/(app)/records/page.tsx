@@ -35,6 +35,7 @@ import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
+import { formatZonedDateTime, zonedDateKey } from "@/lib/datetime";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
 import type {
   Flight,
@@ -60,19 +61,6 @@ const TYPE_ICONS = {
 
 type ViewMode = "list" | "timeline";
 
-function formatDateTime(value: string | null, locale: string): string {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleString(locale, {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 function recordHref(record: TimelineRecord): string {
   if (record.type === "train") return `/trains/${record.id}`;
   if (record.type === "other") return `/transports/${record.id}`;
@@ -96,14 +84,6 @@ function parseView(value: string | null): ViewMode {
   return value === "timeline" ? "timeline" : "list";
 }
 
-function dayKey(value: string | null): string {
-  if (!value) return "unknown";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "unknown";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
-
 function dateLabel(key: string, locale: string): string {
   if (key === "unknown") return "—";
   const date = new Date(key);
@@ -113,6 +93,7 @@ function dateLabel(key: string, locale: string): string {
     month: "long",
     day: "numeric",
     weekday: "short",
+    timeZone: "UTC",
   });
 }
 
@@ -181,9 +162,9 @@ function RecordCard({
               ) : null}
             </div>
             <div className="mt-0.5 truncate text-xs text-muted-foreground">
-              {formatDateTime(record.departure_time, locale)}
+              {formatZonedDateTime(record.departure_time, locale, record.departure_timezone)}
               {record.arrival_time
-                ? ` → ${formatDateTime(record.arrival_time, locale)}`
+                ? ` → ${formatZonedDateTime(record.arrival_time, locale, record.arrival_timezone)}`
                 : ""}
               {record.carrier ? ` · ${record.carrier}` : ""}
             </div>
@@ -281,7 +262,7 @@ function RecordsContent() {
       if (typeFilter && record.type !== typeFilter) return false;
       if (statusFilter && record.status !== statusFilter) return false;
       if (tripFilter && record.trip_id !== tripFilter) return false;
-      const key = dayKey(record.departure_time);
+      const key = zonedDateKey(record.departure_time, record.departure_timezone);
       if (dateFrom && (key === "unknown" || key < dateFrom)) return false;
       if (dateTo && (key === "unknown" || key > dateTo)) return false;
       return matchesSearch(record, search);
@@ -293,7 +274,7 @@ function RecordsContent() {
     });
     const map = new Map<string, TimelineRecord[]>();
     for (const record of items) {
-      const key = dayKey(record.departure_time);
+      const key = zonedDateKey(record.departure_time, record.departure_timezone);
       const bucket = map.get(key);
       if (bucket) bucket.push(record);
       else map.set(key, [record]);

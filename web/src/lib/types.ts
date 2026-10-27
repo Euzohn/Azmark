@@ -512,6 +512,8 @@ export interface DashboardRecord {
   airline_code: string | null;
   departure_time: string | null;
   arrival_time: string | null;
+  departure_timezone: string | null;
+  arrival_timezone: string | null;
   trip_id: string | null;
 }
 

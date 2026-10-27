@@ -13,6 +13,81 @@ from typing import Any
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
+# Explicit aliases only. Extend this list with verified station/city mappings;
+# do not infer municipalities from arbitrary station name prefixes/suffixes.
+_STATION_CITIES = {
+    "北京站": "北京",
+    "北京南": "北京",
+    "北京南站": "北京",
+    "北京西": "北京",
+    "北京西站": "北京",
+    "北京北": "北京",
+    "北京北站": "北京",
+    "上海站": "上海",
+    "上海南": "上海",
+    "上海南站": "上海",
+    "上海虹桥": "上海",
+    "上海虹桥站": "上海",
+    "广州站": "广州",
+    "广州南": "广州",
+    "广州南站": "广州",
+    "广州东": "广州",
+    "广州东站": "广州",
+    "深圳站": "深圳",
+    "深圳北": "深圳",
+    "深圳北站": "深圳",
+    "杭州站": "杭州",
+    "杭州东": "杭州",
+    "杭州东站": "杭州",
+    "南京站": "南京",
+    "南京南": "南京",
+    "南京南站": "南京",
+    "成都站": "成都",
+    "成都东": "成都",
+    "成都东站": "成都",
+    "重庆北": "重庆",
+    "重庆北站": "重庆",
+    "重庆西": "重庆",
+    "重庆西站": "重庆",
+    "天津站": "天津",
+    "天津南": "天津",
+    "天津南站": "天津",
+    "天津西": "天津",
+    "天津西站": "天津",
+}
+
+
+def airport_city_key(airport: dict[str, Any]) -> str:
+    """Country-scoped identity; Chinese city labels also merge airport districts."""
+    city = airport.get("city_zh") or airport.get("city") or ""
+    return f"{airport.get('country') or ''}:{city.strip().casefold()}"
+
+
+@lru_cache(maxsize=1)
+def _city_aliases() -> dict[str, str]:
+    candidates: dict[str, set[str]] = {}
+    for airport in _airports():
+        if not airport.get("city"):
+            continue
+        for label in (airport.get("city"), airport.get("city_zh")):
+            if label:
+                candidates.setdefault(label.strip().casefold(), set()).add(
+                    airport_city_key(airport)
+                )
+    # Ambiguous city names must not silently merge places in different countries.
+    return {label: next(iter(keys)) for label, keys in candidates.items() if len(keys) == 1}
+
+
+def place_city_key(place: str) -> str:
+    label = place.strip()
+    city = _STATION_CITIES.get(label, label)
+    # Curated station mappings refer to Chinese cities even if reference data
+    # changes or the same translated name occurs abroad.
+    if label in _STATION_CITIES:
+        return f"CN:{city}"
+    return _city_aliases().get(city.casefold(), f"place:{city.casefold()}")
+
+
 _IATA_FLIGHT_RE = re.compile(r"^([A-Z0-9]{2})(\d{1,4})$")
 _ICAO_FLIGHT_RE = re.compile(r"^([A-Z]{3})(\d{1,4})$")
 

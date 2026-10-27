@@ -102,6 +102,79 @@ def test_dashboard_recent_and_upcoming_are_cross_type(client):
     assert body["upcoming"]["service_number"] == "G1"
 
 
+def test_dashboard_upcoming_excludes_cancelled_and_completed(client):
+    token = register_and_login(client, "upcoming_status")["access_token"]
+    headers = auth_headers(token)
+    for status, number, day in (
+        ("cancelled", "CANCEL", "01"),
+        ("completed", "DONE", "02"),
+        ("scheduled", "ACTIVE", "03"),
+    ):
+        response = client.post(
+            "/api/v1/trains",
+            json={
+                "origin": "北京南",
+                "destination": "上海虹桥",
+                "service_number": number,
+                "status": status,
+                "departure_time": f"2099-01-{day}T08:00:00Z",
+            },
+            headers=headers,
+        )
+        assert response.status_code == 201, response.text
+    body = client.get("/api/v1/dashboard", headers=headers).json()
+    assert body["upcoming"]["service_number"] == "ACTIVE"
+    assert body["stats"]["trains"] == 3  # record counts are unchanged
+
+
+def test_activity_dates_use_departure_zone(client):
+    token = register_and_login(client, "local_activity")["access_token"]
+    headers = auth_headers(token)
+    response = client.post(
+        "/api/v1/flights",
+        json={
+            **FLIGHT_HKG_SIN,
+            "departure_time": "2026-01-31T23:30:00Z",
+            "departure_timezone": "Asia/Hong_Kong",
+            "arrival_timezone": "Asia/Singapore",
+        },
+        headers=headers,
+    )
+    assert response.status_code == 201, response.text
+    dashboard = client.get("/api/v1/dashboard", headers=headers).json()
+    statistics = client.get("/api/v1/statistics", headers=headers).json()
+    assert dashboard["by_month"][0]["label"] == "2026-02"
+    assert statistics["by_day"][0]["label"] == "2026-02-01"
+    assert dashboard["recent"][0]["departure_timezone"] == "Asia/Hong_Kong"
+    assert dashboard["recent"][0]["arrival_timezone"] == "Asia/Singapore"
+
+
+def test_activity_dates_cross_dst_and_default_utc(client):
+    token = register_and_login(client, "dst_activity")["access_token"]
+    headers = auth_headers(token)
+    for number, time, zone in (
+        ("WINTER", "2026-01-01T04:30:00Z", "America/New_York"),
+        ("SUMMER", "2026-07-01T03:30:00Z", "America/New_York"),
+        ("NOZONE", "2026-08-01T00:30:00Z", None),
+    ):
+        response = client.post(
+            "/api/v1/trains",
+            json={
+                "origin": "New York",
+                "destination": "Boston",
+                "service_number": number,
+                "departure_time": time,
+                "departure_timezone": zone,
+            },
+            headers=headers,
+        )
+        assert response.status_code == 201, response.text
+    labels = [
+        item["label"] for item in client.get("/api/v1/statistics", headers=headers).json()["by_day"]
+    ]
+    assert labels == ["2025-12-31", "2026-06-30", "2026-08-01"]
+
+
 def test_statistics_breakdowns(client):
     token = register_and_login(client, "stats_user")["access_token"]
     headers = auth_headers(token)
@@ -228,6 +301,22 @@ def test_dashboard_and_statistics_cities_match_with_trains(client):
     assert dash_cities == stats_cities
     # Both include the two free-text train stations on top of airport cities.
     assert dash_cities >= 4
+
+
+def test_city_totals_merge_verified_station_aliases_and_airports(client):
+    token = register_and_login(client, "city_alias")["access_token"]
+    headers = auth_headers(token)
+    for record in (
+        {"origin": "PEK", "destination": "SHA"},
+        {"origin": "北京南", "destination": "上海虹桥"},
+        {"origin": "北京西", "destination": "上海南"},
+    ):
+        endpoint = "/api/v1/flights" if record["origin"] == "PEK" else "/api/v1/trains"
+        response = client.post(endpoint, json=record, headers=headers)
+        assert response.status_code == 201, response.text
+    dash = client.get("/api/v1/dashboard", headers=headers).json()
+    stats = client.get("/api/v1/statistics", headers=headers).json()
+    assert dash["stats"]["cities"] == stats["totals"]["cities"] == 2
 
 
 def test_timeline(client):

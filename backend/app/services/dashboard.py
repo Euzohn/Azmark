@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.timezones import in_timezone
 from app.models.transport_record import TransportRecord
 from app.models.trip import Trip
 from app.repositories.transport import TransportRepository
@@ -85,10 +86,9 @@ class DashboardService:
         :meth:`statistics` so the dashboard and the statistics page can never
         disagree on the city/country totals (spec #10, #28).
 
-        Airports contribute their city/country from the reference data. Train
-        and other-transport endpoints are free-text stations with no reference
-        lookup, so they are counted as places directly — otherwise a journal
-        with only train trips would report zero cities.
+        Known stations and bilingual airport city names share a city identity.
+        Unknown free-text places remain distinct; never guess by stripping a
+        direction suffix (e.g. a station may belong to a different municipality).
         """
         countries: set[str] = set()
         cities: set[str] = set()
@@ -101,9 +101,9 @@ class DashboardService:
                     if airport.get("country"):
                         countries.add(airport["country"])
                     if airport.get("city"):
-                        cities.add(airport["city"])
+                        cities.add(reference.airport_city_key(airport))
                 elif record.type in {"train", "other"}:
-                    cities.add(place.strip())
+                    cities.add(reference.place_city_key(place))
         return countries, cities
 
     # ------------------------------------------------------------------
@@ -120,7 +120,8 @@ class DashboardService:
         distance = 0.0
         for record in all_records:
             if record.departure_time:
-                months[_naive_utc(record.departure_time).strftime("%Y-%m")] += 1
+                departure = in_timezone(record.departure_time, record.departure_timezone)
+                months[departure.strftime("%Y-%m")] += 1
             km = self._distance_km(record)
             if km:
                 distance += km
@@ -136,7 +137,9 @@ class DashboardService:
         upcoming_records = [
             record
             for record in all_records
-            if record.departure_time and _naive_utc(record.departure_time) > now_naive
+            if record.status == "scheduled"
+            and record.departure_time
+            and _naive_utc(record.departure_time) > now_naive
         ]
         upcoming: TransportRecord | None = (
             min(upcoming_records, key=lambda record: _naive_utc(record.departure_time))
@@ -187,7 +190,7 @@ class DashboardService:
 
         for record in all_records:
             if record.departure_time:
-                departure = _naive_utc(record.departure_time)
+                departure = in_timezone(record.departure_time, record.departure_timezone)
                 years[departure.strftime("%Y")] += 1
                 months[departure.strftime("%Y-%m")] += 1
                 days[departure.strftime("%Y-%m-%d")] += 1

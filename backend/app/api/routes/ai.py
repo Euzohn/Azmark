@@ -34,6 +34,7 @@ async def chat(
             image=payload.image,
             user_display=current_user.display_name or current_user.username,
             locale=current_user.locale,
+            timezone=current_user.timezone,
         )
     except AINotConfiguredError:
         raise HTTPException(
@@ -81,6 +82,7 @@ async def chat_stream(
                 image=payload.image,
                 user_display=current_user.display_name or current_user.username,
                 locale=current_user.locale,
+                timezone=current_user.timezone,
             ):
                 if event["type"] == "proposals":
                     proposal_count = len(event.get("proposals", []))

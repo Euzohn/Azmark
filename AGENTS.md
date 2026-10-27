@@ -37,8 +37,8 @@
   - Lint / 格式：`./.venv/bin/ruff check .`、`./.venv/bin/ruff format --check .`（修复用 `ruff check --fix .` / `ruff format .`）
   - 迁移：`./.venv/bin/alembic upgrade head`（需要 PostgreSQL，交给服务器环境）
   - 创建管理员：`./.venv/bin/python -m app create-admin --username admin --email you@example.com`（需要 PostgreSQL；密码交互输入或加 `--password`）
-- 前端（在 `web/`）：`npm install`；`npm run lint`；`npm run typecheck`；`npm run build`；`npm run dev`
+- 前端（在 `web/`）：`npm install`；`npm test`；`npm run lint`；`npm run typecheck`；`npm run build`；`npm run dev`
 - 备份 / 恢复（仅服务器，需 `docker compose`；本地不要运行）：`./scripts/backup.sh`、`./scripts/restore.sh backups/<ts>`（见 `docs/backup.md`）
 - 测试用 SQLite 内存库，Postgres 专有特性（如 PostGIS）不要把测试依赖在 SQLite 上。
-- 变更后端 schema 时必须新增 Alembic migration（按编号顺序递增，当前 head：`0017_attachments`）。
+- 变更后端 schema 时必须新增 Alembic migration（按编号顺序递增，当前 head：`0018_data_sources`）。
 - 附件二进制走 `StorageProvider`（S3/MinIO），数据库只存 `storage_key` 与元数据；测试用内存 provider，不依赖 MinIO。

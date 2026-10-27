@@ -23,6 +23,8 @@ class DashboardRecord(BaseModel):
     airline_code: str | None = None
     departure_time: datetime | None = None
     arrival_time: datetime | None = None
+    departure_timezone: str | None = None
+    arrival_timezone: str | None = None
     trip_id: uuid.UUID | None = None
 
 

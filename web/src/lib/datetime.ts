@@ -14,6 +14,55 @@
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
+/** Display legacy records in UTC, never in the viewer's unrelated browser zone. */
+export function displayTimezone(tz?: string | null): string {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz || "UTC" });
+    return tz || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
+/** Local calendar date of a stored instant; useful for timeline grouping. */
+export function zonedDateKey(value: string | null | undefined, tz?: string | null): string {
+  if (!value) return "unknown";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "unknown";
+  const p = zonedParts(date, displayTimezone(tz));
+  return `${p.year}-${pad(p.month)}-${pad(p.day)}`;
+}
+
+/** All record summaries use the same timezone-aware date/time formatting. */
+export function formatZonedDateTime(
+  value: string | null | undefined,
+  locale: string,
+  tz?: string | null,
+  options: Intl.DateTimeFormatOptions = {
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", timeZoneName: "short",
+  },
+): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat(locale, {
+    ...options, timeZone: displayTimezone(tz),
+  }).format(date);
+}
+
+/** Calendar-day countdown in the departure location, unaffected by DST length. */
+export function daysUntilDeparture(
+  value: string | null | undefined,
+  tz?: string | null,
+  now: Date = new Date(),
+): number | null {
+  const departure = zonedDateKey(value, tz);
+  if (departure === "unknown") return null;
+  const today = zonedDateKey(now.toISOString(), tz);
+  return Math.round((Date.parse(departure) - Date.parse(today)) / 86_400_000);
+}
+
 interface ZonedParts {
   year: number;
   month: number;
