@@ -1,16 +1,14 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Backpack, Plane } from "lucide-react";
-import Link from "next/link";
+import { ArrowRight, Plane } from "lucide-react";
 import { useState } from "react";
 
 import { AirlineLogo } from "@/components/airline-logo";
 import { AirlineName } from "@/components/airline-name";
 import { AirportName } from "@/components/airport-name";
 import { FlightStatusBadge } from "@/components/status-badge";
+import { TripLinkCard } from "@/components/trip-link-card";
 import { Button } from "@/components/ui/button";
-import { api } from "@/lib/api";
 import { formatZonedDateTime } from "@/lib/datetime";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
 import type { Flight } from "@/lib/types";
@@ -18,7 +16,6 @@ import type { Flight } from "@/lib/types";
 export function FlightSummary({ flight }: { flight: Flight }) {
   const { t, locale } = useI18n();
   const [showSensitive, setShowSensitive] = useState(false);
-  const { data: trip } = useQuery({ queryKey: ["trip", flight.trip_id], queryFn: () => api.getTrip(flight.trip_id!), enabled: Boolean(flight.trip_id) });
   const format = (value: string | null, timezone: string | null) => formatZonedDateTime(value, locale, timezone);
   const cabinKeys: Record<string, TranslationKey> = { economy: "flights.cabin.economy", premium_economy: "flights.cabin.premium_economy", business: "flights.cabin.business", first: "flights.cabin.first" };
   const sections: { title: TranslationKey; fields: [TranslationKey, string | null][] }[] = [
@@ -40,7 +37,7 @@ export function FlightSummary({ flight }: { flight: Flight }) {
       <div className="border-t border-border px-5 py-3 text-xs text-muted-foreground md:px-7">{t("flights.detail.localTime")}</div>
       {flight.actual_departure_time || flight.actual_arrival_time ? <dl className="grid gap-4 border-t border-border px-5 py-4 sm:grid-cols-2 md:px-7"><DetailField label={t("flights.actualDepartureTime")} value={format(flight.actual_departure_time, flight.departure_timezone)} /><DetailField label={t("flights.actualArrivalTime")} value={format(flight.actual_arrival_time, flight.arrival_timezone)} /></dl> : null}
     </section>
-    {flight.trip_id ? <Link href={`/trips/${flight.trip_id}`} className="flex items-center gap-3 rounded-xl border border-border bg-card px-5 py-4 hover:border-primary/40"><Backpack className="h-5 w-5 text-primary" /><div className="min-w-0 flex-1"><div className="text-xs text-muted-foreground">{t("flights.trip")}</div><div className="mt-1 truncate text-sm font-medium">{trip?.name ?? t("nav.trips")}</div></div><ArrowRight className="h-4 w-4 text-muted-foreground" /></Link> : null}
+    {flight.trip_id ? <TripLinkCard tripId={flight.trip_id} label={t("flights.trip")} /> : null}
     <div className="grid gap-5 md:grid-cols-2">
       {sections.map(({ title, fields }) => <section key={title} className="rounded-xl border border-border bg-card p-5"><h2 className="mb-5 text-sm font-semibold">{t(title)}</h2><dl className="grid grid-cols-2 gap-x-4 gap-y-5">{fields.map(([key, value]) => <DetailField key={key} label={t(key)} value={value} />)}</dl></section>)}
     </div>

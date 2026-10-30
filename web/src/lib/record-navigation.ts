@@ -10,11 +10,11 @@ export function parseRecordPage(value: string | null): number {
 }
 
 /** Return only to this app's records page, never a supplied external URL. */
-export function recordsReturnHref(value: string | null): string {
-  if (!value) return "/records?type=flight";
+export function recordsReturnHref(value: string | null, fallback = "/records?type=flight"): string {
+  if (!value) return fallback;
   try {
     const url = new URL(value, "https://azmark.invalid");
     if (url.origin === "https://azmark.invalid" && url.pathname === "/records") return `${url.pathname}${url.search}`;
   } catch { /* Invalid destinations fall back to the record list. */ }
-  return "/records?type=flight";
+  return fallback;
 }

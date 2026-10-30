@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -120,10 +120,18 @@ const FIELD_LABELS: Record<keyof TransportFormState, TranslationKey> = {
 interface TransportFormProps {
   initial?: OtherTransport;
   submitting?: boolean;
+  onCancel?: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
   onSubmit: (data: OtherTransportInput) => void | Promise<void>;
 }
 
-export function TransportForm({ initial, submitting, onSubmit }: TransportFormProps) {
+export function TransportForm({
+  initial,
+  submitting,
+  onSubmit,
+  onCancel,
+  onDirtyChange,
+}: TransportFormProps) {
   const { user } = useAuth();
   const { t, locale } = useI18n();
   const [form, setForm] = useState<TransportFormState>(() => {
@@ -137,6 +145,53 @@ export function TransportForm({ initial, submitting, onSubmit }: TransportFormPr
       arrival_timezone: base.arrival_timezone || tz,
     };
   });
+
+  const [openingForm] = useState(form);
+  const dirty = JSON.stringify(form) !== JSON.stringify(openingForm);
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
+  useEffect(() => {
+    if (!dirty || submitting) return;
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    const beforeLink = (event: MouseEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      )
+        return;
+      const link = event.target instanceof Element ? event.target.closest("a[href]") : null;
+      if (
+        !(link instanceof HTMLAnchorElement) ||
+        link.target === "_blank" ||
+        link.hasAttribute("download")
+      )
+        return;
+      if (
+        link.origin !== window.location.origin ||
+        link.href === window.location.href ||
+        link.getAttribute("href")?.startsWith("#")
+      )
+        return;
+      if (!window.confirm(t("common.unsaved"))) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    document.addEventListener("click", beforeLink, true);
+    return () => {
+      window.removeEventListener("beforeunload", beforeUnload);
+      document.removeEventListener("click", beforeLink, true);
+    };
+  }, [dirty, submitting, t]);
 
   const { data: trips } = useQuery({
     queryKey: ["trips"],
@@ -460,6 +515,11 @@ export function TransportForm({ initial, submitting, onSubmit }: TransportFormPr
             <Button type="submit" disabled={submitting}>
               {t("common.save")}
             </Button>
+            {onCancel ? (
+              <Button type="button" variant="outline" disabled={submitting} onClick={onCancel}>
+                {t("common.cancel")}
+              </Button>
+            ) : null}
             {formError ? <span className="text-sm text-danger">{formError}</span> : null}
           </div>
         </div>
