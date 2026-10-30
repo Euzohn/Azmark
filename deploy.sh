@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 #
 # Azmark 服务器部署脚本：拉取最新代码 -> 备份数据库 -> 重建/重启容器 -> 迁移 -> 健康检查 -> 清理。
+# 代码与远端一致时自动跳过重建（见下方“1/6”）。
 #
 # 在服务器上运行（不要在本地跑）：
 #   ./deploy.sh                    # 默认应用目录 /opt/Azmark
 #   ./deploy.sh /path/to/azmark    # 指定目录
 #   KEEP_BACKUPS=14 ./deploy.sh    # 备份保留份数（默认 7）
+#   FORCE_DEPLOY=1 ./deploy.sh     # 代码没变也强制重建（改了 .env 等未跟踪文件时用）
+#
+# 若 git pull 没有带来新提交、且 api/web 容器健康，则跳过备份/构建/迁移直接退出。
+# 注意：.env 不在 git 里，改过它需要用 FORCE_DEPLOY=1（或 docker compose up -d --build）。
 #
 # 前置：docker + compose 插件已安装，当前用户有 docker 权限，目录内已有 .env。
 set -euo pipefail
@@ -34,9 +39,24 @@ docker compose version >/dev/null 2>&1 || { err "docker compose 插件不可用"
 [ -f .env ] || { err "缺少 .env（首次部署请参照 README 配置后再运行）"; exit 1; }
 
 log "1/6 拉取最新代码 ($APP_DIR)"
+before_rev="$(git rev-parse HEAD 2>/dev/null || true)"
 if ! git pull --ff-only --no-rebase; then
   err "git pull 失败：服务器上可能有未提交的改动，请先处理再重试。"
   exit 1
+fi
+after_rev="$(git rev-parse HEAD)"
+
+# 没有新提交 + 服务已在跑 + 健康检查通过：不必再备份/构建/迁移，直接收工。
+# BuildKit 会复用层缓存，但“无变更重建”同样会重新生成镜像 ID 并重启容器（白白中断服务）。
+if [ -z "${FORCE_DEPLOY:-}" ] && [ "$before_rev" = "$after_rev" ] \
+  && [ -n "$(docker compose ps -q api 2>/dev/null)" ] \
+  && [ -n "$(docker compose ps -q web 2>/dev/null)" ]; then
+  if curl -fsS "$HEALTH_URL" >/dev/null 2>&1; then
+    log "  代码无更新（${after_rev:0:7}），服务健康：跳过备份 / 构建 / 迁移。"
+    log "  需要强制重建（例如改过 .env）：FORCE_DEPLOY=1 $0"
+    exit 0
+  fi
+  warn "  代码无更新，但健康检查失败：继续完整部署流程。"
 fi
 
 log "2/6 备份数据库"

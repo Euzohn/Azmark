@@ -23,6 +23,12 @@
 - **禁止在本地部署或启动服务**：不要执行 `docker compose up`、不要在本机拉起 PostgreSQL / Redis / MinIO / api / web 常驻服务。开发只在本机写代码，部署与联调测试由用户在服务器上进行。
 - 本地验证仅限不依赖常驻服务的步骤：单元/集成测试用 SQLite 内存库，以及 lint、typecheck、build。需要 Postgres/Redis/MinIO 的验证交给服务器环境。
 
+## 临时文件规则（重要）
+- **禁止在本项目目录之外创建任何文件**（包括系统 temp、`/tmp`、`/private/var/folders/...` 等）。外部临时目录容易留下残留且用户看不见。
+- 需要落盘的草稿 / 测试脚手架 / 抓取的中间产物，一律放在仓库内的 `tmp/`（已在 `.gitignore` 中，绝不要 `git add tmp/`），用完在同一轮里删掉。
+- 优先**不落盘**：能用 `shell` 里 heredoc 或管道一次性跑完的验证脚本，就不要写成文件。
+- 不要往 `assets/`、根目录随手丢文件；已有的未跟踪文件（`assets/*`、`logo思路.md`、`todo`、`.opencode/`）是用户自己的，不动也不提交。
+
 ## Git 规则（重要）
 - **不要主动 commit / push**：只有用户明确要求提交时才提交。
 - `Azmark_行迹_Personal_Travel_OS_方案_v1.1.md` 不提交（已加入 `.gitignore`）。
@@ -39,6 +45,7 @@
   - 创建管理员：`./.venv/bin/python -m app create-admin --username admin --email you@example.com`（需要 PostgreSQL；密码交互输入或加 `--password`）
 - 前端（在 `web/`）：`npm install`；`npm test`；`npm run lint`；`npm run typecheck`；`npm run build`；`npm run dev`
 - 备份 / 恢复（仅服务器，需 `docker compose`；本地不要运行）：`./scripts/backup.sh`、`./scripts/restore.sh backups/<ts>`（见 `docs/backup.md`）
+- 部署（仅服务器；本地不要运行）：`./deploy.sh [APP_DIR]` = git pull → 备份 → 重建 → 迁移 → 健康检查 → 清理。pull 后 HEAD 没变且 api/web 健康时**跳过备份/构建/迁移**直接退出；改过未跟踪的 `.env` 或想强制重建用 `FORCE_DEPLOY=1 ./deploy.sh`；备份份数用 `KEEP_BACKUPS=n`。
 - 测试用 SQLite 内存库，Postgres 专有特性（如 PostGIS）不要把测试依赖在 SQLite 上。
 - 变更后端 schema 时必须新增 Alembic migration（按编号顺序递增，当前 head：`0018_data_sources`）。
 - 附件二进制走 `StorageProvider`（S3/MinIO），数据库只存 `storage_key` 与元数据；测试用内存 provider，不依赖 MinIO。

@@ -70,7 +70,7 @@ openssl rand -hex 32    # SECRET_KEY
 ./deploy.sh
 ```
 
-`deploy.sh` 会拉取代码 → 备份数据库 → 重建容器 → 执行迁移 → 健康检查 → 清理。完成后浏览器打开 `http://<服务器IP>:3000` → 注册 → 添加航班 → 在「地图」看到大圆航线。
+`deploy.sh` 会拉取代码 → 备份数据库 → 重建容器 → 执行迁移 → 健康检查 → 清理；若 `git pull` 没有新提交且服务健康，则跳过备份/构建/迁移直接退出（强制重建用 `FORCE_DEPLOY=1 ./deploy.sh`）。完成后浏览器打开 `http://<服务器IP>:3000` → 注册 → 添加航班 → 在「地图」看到大圆航线。
 
 首个管理员（二选一）：
 
@@ -143,14 +143,14 @@ docker compose exec -T postgres pg_dump -U azmark azmark | gzip > azmark-$(date 
 gunzip -c azmark-YYYY-MM-DD.sql.gz | docker compose exec -T postgres psql -U azmark -d azmark
 ```
 
-数据在命名卷 `azmark_postgres_data`。`deploy.sh` 每次部署自动备份到 `backups/`，默认保留最近 7 份（`KEEP_BACKUPS=14` 可调）。
+数据在命名卷 `azmark_postgres_data`。`deploy.sh` 在有更新时先备份再迁移，自动存到 `backups/`，默认保留最近 7 份（`KEEP_BACKUPS=14` 可调）。
 </details>
 
 <details>
 <summary>升级</summary>
 
 ```bash
-./deploy.sh          # git pull + 备份 + 重建 + 迁移 + 健康检查，一步完成
+./deploy.sh          # git pull；有更新才 备份+重建+迁移+健康检查，无更新直接跳过
 ```
 </details>
 
