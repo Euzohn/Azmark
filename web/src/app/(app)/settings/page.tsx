@@ -11,10 +11,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { TimezoneSelect } from "@/components/ui/timezone-select";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-store";
 import { useI18n } from "@/lib/i18n";
-import { TIMEZONES } from "@/lib/timezones";
 
 const PROVIDER_LABELS: Record<string, string> = {
   aerodatabox: "AeroDataBox",
@@ -238,16 +238,11 @@ export default function SettingsPage({ embedded = false }: { embedded?: boolean 
             </div>
             <div>
               <Label className="mb-1.5 block">{t("settings.timezone")}</Label>
-              <Select
+              <TimezoneSelect
                 value={profile.timezone}
-                onChange={(e) => setProfile({ ...profile, timezone: e.target.value })}
-              >
-                {TIMEZONES.map((zone) => (
-                  <option key={zone} value={zone}>
-                    {zone}
-                  </option>
-                ))}
-              </Select>
+                onChange={(timezone) => setProfile({ ...profile, timezone })}
+                allowEmpty={false}
+              />
             </div>
             <div>
               <Label className="mb-1.5 block">{t("settings.currency")}</Label>
