@@ -7,12 +7,30 @@
   &nbsp;
   <img src="https://img.shields.io/badge/self--hosted-252822" alt="Self-hosted">
   &nbsp;
+  <img src="https://img.shields.io/badge/FastAPI%20%C2%B7%20Next.js%20%C2%B7%20TypeScript-b45309" alt="技术栈：FastAPI · Next.js · TypeScript">
+  &nbsp;
   <img src="https://img.shields.io/badge/PostgreSQL-PostGIS-78816A" alt="PostgreSQL + PostGIS">
 </p>
 
 **Azmark（行迹）** 是一个开源、自托管、AI 原生的个人旅行记录与数据管理系统。它把你每一段航班、火车与旅程，记录成一份只属于你自己的旅行手账——数据在你自己的服务器上，不依赖任何第三方云账号。
 
-> 完整产品方案见仓库内设计文档（不纳入版本控制，见 `.gitignore`）。产品与架构的唯一事实来源是该文档；实现遵循 `AGENTS.md`。
+> A self-hosted, AI-native personal travel OS — every flight, train and journey in a logbook that belongs only to you.
+
+仓库开发约定见 [`AGENTS.md`](./AGENTS.md)，备份 / 恢复运维见 [`docs/backup.md`](./docs/backup.md)。
+
+## 目录
+
+- [已实现](#已实现)
+- [为什么不同](#为什么不同)
+- [架构](#架构)
+- [Agent / API 访问](#agent--api-访问)
+- [快速部署（服务器）](#快速部署服务器)
+- [本地开发](#本地开发)
+- [运维](#运维)
+- [安全](#安全)
+- [路线图](#路线图)
+- [参与贡献](#参与贡献)
+- [许可](#许可)
 
 ## 已实现
 
@@ -32,8 +50,6 @@
 | 审计日志 | 登录/失败/注册/改密/改用户名/增改删航班火车；IP 仅存加盐哈希 |
 | Agent 接入 | 个人访问令牌（read/write 权限、可吊销、按令牌限流）；脚本与 AI agent 可直接调用 REST API |
 | 国际化 | zh-CN / en-US，浅色/深色/跟随系统，移动端底部导航 |
-
-安全：所有用户数据按 `user_id` 服务端隔离（跨用户访问返回 404/403）；PNR、票号等敏感字段加密存储；所有表结构变更经 Alembic migration。
 
 ## 为什么不同
 
@@ -189,6 +205,34 @@ docker compose exec api python -c "from app.core.db import SessionLocal; from ap
 - **后端不对外**：`api` 仅通过内部网络 `http://api:8000` 被 web 访问；外部健康检查走 `http://localhost:3000/api/v1/health`。
 </details>
 
+## 安全
+
+- 所有用户数据按 `user_id` 服务端隔离，跨用户访问一律 404/403。
+- PNR、票号、证件号等敏感字段加密存储；日志与审计永不输出明文，客户端 IP 仅存加盐哈希。
+- AI 只能通过绑定当前用户的 tool 层操作，禁止直接访问数据库；破坏性操作必须经用户显式确认；网页 / 邮件 / 文件内容一律视为不可信输入，防御 prompt injection。
+- 附件一律经 API 鉴权后流式下载，不暴露存储 bucket。
+- 个人访问令牌默认只读、可随时吊销、按令牌限流。
+- 部署面收敛：仅 `web` 对外发布端口，`api` / `postgres` / `redis` / `minio` 都在内部网络；请务必设置强 `SECRET_KEY`、`S3_SECRET_KEY` 与 `POSTGRES_PASSWORD`。
+- 所有表结构变更经 Alembic migration，禁止直接改库。
+
+## 路线图
+
+- **MVP（已完成）** — 账号、航班 / 火车 / 其他交通记录、行程、附件、地图 / 时间线 / 总览 / 统计、审计日志；AI 对话与自然语言录入（含确认流）；JSON 导入导出；zh-CN / en-US 与移动端适配；个人访问令牌。
+- **P1（下一步）** — 酒店 / 住宿、地点、活动、开销、照片、笔记、OCR、登机牌解析。
+- **P2** — 邮件导入、MCP Server、自动化规则、AI 旅行日志、Travel Wrapped、高级 OCR、AI 照片整理。
+- **P3** — 行程协作、家庭账户、多用户共享行程、公开行程页、移动原生 App、插件生态。
+
+## 参与贡献
+
+欢迎 issue 与 PR。开发约定详见 [`AGENTS.md`](./AGENTS.md)，要点：
+
+- 本地只写代码和跑测试 / 静态检查，**不要在本地启动服务**（数据库等联调在服务器进行）。
+- 后端 schema 变更必须附 Alembic migration 与测试（SQLite 内存库，不依赖常驻服务）。
+- 前端文案一律走 i18n key（zh-CN / en-US），禁止硬编码字符串。
+- 提交信息遵循 Conventional Commits（`feat` / `fix` / `perf` / `docs` / `chore` …）。
+
+提交前请确保通过：后端 `pytest -q`、`ruff check .`；前端 `npm run lint`、`npm run typecheck`、`npm test`、`npm run build`。部署由维护者通过 `./deploy.sh` 在服务器执行。
+
 ## 许可
 
-Apache-2.0，见 `LICENSE`。
+Apache-2.0 · Copyright 2026 Euzohn contributors，见 [`LICENSE`](./LICENSE)。
