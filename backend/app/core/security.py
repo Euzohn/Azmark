@@ -1,10 +1,35 @@
 import hashlib
+import secrets
 from datetime import UTC, datetime, timedelta
 
 import bcrypt
 import jwt
 
 from app.core.config import settings
+
+# Personal access tokens (spec #85) are prefixed so the auth layer can tell
+# them apart from JWT session tokens before doing any decoding work.
+PAT_PREFIX = "azm_"
+PAT_PREFIX_LENGTH = 12
+
+
+def generate_access_token() -> str:
+    """Create a high-entropy secret. 32 random bytes → 43 URL-safe characters."""
+    return f"{PAT_PREFIX}{secrets.token_urlsafe(32)}"
+
+
+def hash_access_token(token: str) -> str:
+    """SHA-256 is enough: the secret itself has 256 bits of entropy.
+
+    Unlike passwords there is no dictionary to attack, so a slow KDF would only
+    add latency to every agent request.
+    """
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def access_token_prefix(token: str) -> str:
+    """Short, non-secret fingerprint shown in the token list."""
+    return token[:PAT_PREFIX_LENGTH]
 
 
 def hash_password(password: str) -> str:

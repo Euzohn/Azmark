@@ -30,6 +30,7 @@
 | 总览 | 关键指标、即将出发、跨类型最近记录 |
 | 统计 | 航班/火车明细分组、年份/月份/日期分布（不重复总览指标） |
 | 审计日志 | 登录/失败/注册/改密/改用户名/增改删航班火车；IP 仅存加盐哈希 |
+| Agent 接入 | 个人访问令牌（read/write 权限、可吊销、按令牌限流）；脚本与 AI agent 可直接调用 REST API |
 | 国际化 | zh-CN / en-US，浅色/深色/跟随系统，移动端底部导航 |
 
 安全：所有用户数据按 `user_id` 服务端隔离（跨用户访问返回 404/403）；PNR、票号等敏感字段加密存储；所有表结构变更经 Alembic migration。
@@ -56,6 +57,20 @@ backend/   FastAPI + SQLAlchemy 2 + Alembic（PostgreSQL + PostGIS）
 web/       Next.js (App Router) + TypeScript + Tailwind + MapLibre GL
 docker-compose.yml   postgres / redis / minio / api / web
 ```
+
+## Agent / API 访问
+
+「设置 → 访问令牌」可创建个人访问令牌（`azm_…`），供脚本、CLI 或 AI agent 调用 REST API。令牌只在创建时显示一次，数据库里只保存它的哈希。
+
+```bash
+curl http://<服务器IP>:3000/api/v1/auth/me \
+  -H "Authorization: Bearer azm_xxx"
+```
+
+- `read` 令牌只能 `GET`；`write` 令牌才能增改删（破坏性操作仍走确认流程）。
+- 令牌可随时吊销或删除，吊销/过期后立即失效。
+- 每个令牌默认每分钟 120 次请求（`PAT_RATE_LIMIT_PER_MINUTE` 可调，0 关闭）。
+- OpenAPI 描述：`/api/v1/openapi.json`。
 
 ## 快速部署（服务器）
 

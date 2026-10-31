@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24 * 7
 
+    # Personal access token rate limit per token (spec #69, #85). 0 disables it.
+    pat_rate_limit_per_minute: int = 120
+
     cors_origins: str = "http://localhost:3000"
 
     aerodatabox_base_url: str = "https://aerodatabox.p.rapidapi.com"

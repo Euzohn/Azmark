@@ -56,6 +56,8 @@ services:
       ADMIN_USERNAME: ${ADMIN_USERNAME:-}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      # 个人访问令牌限流（spec #85），0 关闭。
+      PAT_RATE_LIMIT_PER_MINUTE: ${PAT_RATE_LIMIT_PER_MINUTE:-120}
     depends_on:
       postgres:
         condition: service_healthy

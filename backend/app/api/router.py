@@ -14,6 +14,7 @@ from app.api.routes import (
     records,
     reference,
     settings,
+    tokens,
     trains,
     transports,
     trips,
@@ -30,6 +31,7 @@ api_router.include_router(records.router)
 api_router.include_router(attachments.router)
 api_router.include_router(reference.router)
 api_router.include_router(settings.router)
+api_router.include_router(tokens.router)
 api_router.include_router(audit.router)
 api_router.include_router(trips.router)
 api_router.include_router(dashboard.router)

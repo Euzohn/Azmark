@@ -8,6 +8,7 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -15,6 +16,7 @@ import { TimezoneSelect } from "@/components/ui/timezone-select";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-store";
 import { useI18n } from "@/lib/i18n";
+import type { AccessToken, AccessTokenScope } from "@/lib/types";
 
 const PROVIDER_LABELS: Record<string, string> = {
   aerodatabox: "AeroDataBox",
@@ -26,7 +28,7 @@ const PROVIDER_LABELS: Record<string, string> = {
 };
 
 export default function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { user, setUser, clear } = useAuth();
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -199,6 +201,79 @@ export default function SettingsPage({ embedded = false }: { embedded?: boolean 
     { value: "ollama", label: "Ollama" },
     { value: "custom", label: "Custom" },
   ];
+
+  // --- Access tokens (spec #85) -------------------------------------------
+  const { data: accessTokens } = useQuery({
+    queryKey: ["access-tokens"],
+    queryFn: api.listAccessTokens,
+  });
+
+  const [tokenForm, setTokenForm] = useState<{
+    name: string;
+    scope: AccessTokenScope;
+    expiresIn: string;
+  }>({ name: "", scope: "read", expiresIn: "90" });
+  const [tokenError, setTokenError] = useState(false);
+  // Plaintext secret only ever lives in this state, never in a query cache.
+  const [createdToken, setCreatedToken] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [deletingToken, setDeletingToken] = useState<AccessToken | null>(null);
+
+  const refreshTokens = () => queryClient.invalidateQueries({ queryKey: ["access-tokens"] });
+
+  const createToken = useMutation({
+    mutationFn: () =>
+      api.createAccessToken({
+        name: tokenForm.name.trim(),
+        scope: tokenForm.scope,
+        expires_in_days: tokenForm.expiresIn === "never" ? null : Number(tokenForm.expiresIn),
+      }),
+    onSuccess: (created) => {
+      setCreatedToken(created.token);
+      setCopied(false);
+      setTokenError(false);
+      setTokenForm({ name: "", scope: "read", expiresIn: "90" });
+      void refreshTokens();
+    },
+    onError: () => setTokenError(true),
+  });
+
+  const revokeToken = useMutation({
+    mutationFn: (id: string) => api.revokeAccessToken(id),
+    onSuccess: () => void refreshTokens(),
+  });
+
+  const deleteToken = useMutation({
+    mutationFn: (id: string) => api.deleteAccessToken(id),
+    onSuccess: () => {
+      setDeletingToken(null);
+      void refreshTokens();
+    },
+  });
+
+  const formatTokenDate = (value: string | null) =>
+    value
+      ? new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(new Date(value))
+      : null;
+
+  const copyToken = async () => {
+    if (!createdToken) return;
+    try {
+      await navigator.clipboard.writeText(createdToken);
+    } catch {
+      // A plain-http deployment is not a secure context, so clipboard API is
+      // unavailable; fall back to the legacy selection trick.
+      const area = document.createElement("textarea");
+      area.value = createdToken;
+      area.style.position = "fixed";
+      area.style.opacity = "0";
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand("copy");
+      area.remove();
+    }
+    setCopied(true);
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -544,6 +619,142 @@ export default function SettingsPage({ embedded = false }: { embedded?: boolean 
         </CardContent>
       </Card>
 
+      <Card className="animate-fade-in-up" style={{ animationDelay: "225ms" }}>
+        <CardHeader>
+          <CardTitle>{t("settings.tokens")}</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-5">
+          <p className="text-xs text-muted-foreground">{t("settings.tokensHint")}</p>
+
+          <div className="flex flex-col gap-3">
+            {accessTokens && accessTokens.items.length > 0 ? (
+              accessTokens.items.map((token) => (
+                <div
+                  key={token.id}
+                  className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-border p-4"
+                >
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-medium">{token.name}</span>
+                      <Badge variant={token.scope === "write" ? "warning" : "neutral"}>
+                        {t(
+                          token.scope === "write"
+                            ? "settings.tokenScopeWrite"
+                            : "settings.tokenScopeRead",
+                        )}
+                      </Badge>
+                      {token.revoked_at ? (
+                        <Badge variant="danger">{t("settings.tokenRevoked")}</Badge>
+                      ) : null}
+                    </div>
+                    <div className="mt-1.5 font-mono text-xs text-muted-foreground">
+                      {token.token_prefix}…
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                      <span>
+                        {t("settings.tokenCreatedAt")} · {formatTokenDate(token.created_at)}
+                      </span>
+                      <span>
+                        {t("settings.tokenLastUsed")} ·{" "}
+                        {token.last_used_at
+                          ? formatTokenDate(token.last_used_at)
+                          : t("settings.tokenNeverUsed")}
+                      </span>
+                      <span>
+                        {t("settings.tokenExpires")} ·{" "}
+                        {token.expires_at
+                          ? formatTokenDate(token.expires_at)
+                          : t("settings.tokenNeverExpires")}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {token.revoked_at ? null : (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={revokeToken.isPending}
+                        onClick={() => revokeToken.mutate(token.id)}
+                      >
+                        {t("settings.tokenRevoke")}
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-danger"
+                      onClick={() => setDeletingToken(token)}
+                    >
+                      {t("settings.tokenDelete")}
+                    </Button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+                {t("settings.tokensEmpty")}
+              </p>
+            )}
+          </div>
+
+          <form
+            className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setTokenError(false);
+              createToken.mutate();
+            }}
+          >
+            <div className="lg:col-span-2">
+              <Label className="mb-1.5 block">{t("settings.tokenName")}</Label>
+              <Input
+                value={tokenForm.name}
+                onChange={(event) => setTokenForm({ ...tokenForm, name: event.target.value })}
+                placeholder={t("settings.tokenNamePlaceholder")}
+                maxLength={100}
+                required
+              />
+            </div>
+            <div>
+              <Label className="mb-1.5 block">{t("settings.tokenScope")}</Label>
+              <Select
+                value={tokenForm.scope}
+                onChange={(event) =>
+                  setTokenForm({ ...tokenForm, scope: event.target.value as AccessTokenScope })
+                }
+              >
+                <option value="read">{t("settings.tokenScopeRead")}</option>
+                <option value="write">{t("settings.tokenScopeWrite")}</option>
+              </Select>
+            </div>
+            <div>
+              <Label className="mb-1.5 block">{t("settings.tokenExpiry")}</Label>
+              <Select
+                value={tokenForm.expiresIn}
+                onChange={(event) =>
+                  setTokenForm({ ...tokenForm, expiresIn: event.target.value })
+                }
+              >
+                <option value="30">{t("settings.tokenExpiry30")}</option>
+                <option value="90">{t("settings.tokenExpiry90")}</option>
+                <option value="365">{t("settings.tokenExpiry365")}</option>
+                <option value="never">{t("settings.tokenExpiryNever")}</option>
+              </Select>
+            </div>
+            <div className="flex items-center gap-3 lg:col-span-4">
+              <Button type="submit" disabled={createToken.isPending}>
+                {t(createToken.isPending ? "settings.tokenCreating" : "settings.tokenCreate")}
+              </Button>
+              {tokenError ? (
+                <span className="text-sm text-danger">{t("common.error")}</span>
+              ) : null}
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
       <Card
         className="animate-fade-in-up border-danger/40"
         style={{ animationDelay: "250ms" }}
@@ -650,6 +861,73 @@ export default function SettingsPage({ embedded = false }: { embedded?: boolean 
           </form>
         </CardContent>
       </Card>
+
+      <Dialog
+        open={Boolean(createdToken)}
+        onClose={() => {
+          setCreatedToken(null);
+          setCopied(false);
+        }}
+        title={t("settings.tokenCreatedTitle")}
+        variant="responsive"
+      >
+        <p className="text-sm text-muted-foreground">{t("settings.tokenCreatedHint")}</p>
+        <div className="mt-4 flex flex-col gap-2 rounded-lg border border-border bg-muted/40 p-3 sm:flex-row sm:items-center">
+          <code className="min-w-0 flex-1 select-all break-all font-mono text-xs">
+            {createdToken}
+          </code>
+          <Button type="button" variant="outline" size="sm" onClick={() => void copyToken()}>
+            {t(copied ? "settings.tokenCopied" : "settings.tokenCopy")}
+          </Button>
+        </div>
+        <div className="mt-6 flex justify-end">
+          <Button
+            type="button"
+            onClick={() => {
+              setCreatedToken(null);
+              setCopied(false);
+            }}
+          >
+            {t("common.close")}
+          </Button>
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(deletingToken)}
+        onClose={() => {
+          if (!deleteToken.isPending) setDeletingToken(null);
+        }}
+        title={t("common.confirmDelete")}
+        variant="responsive"
+      >
+        <p className="text-sm text-muted-foreground">{t("settings.tokenDeleteConfirm")}</p>
+        {deleteToken.isError ? (
+          <p role="alert" className="mt-3 text-sm text-danger">
+            {t("common.error")}
+          </p>
+        ) : null}
+        <div className="mt-6 flex justify-end gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={deleteToken.isPending}
+            onClick={() => setDeletingToken(null)}
+          >
+            {t("common.cancel")}
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            disabled={deleteToken.isPending}
+            onClick={() => {
+              if (deletingToken) deleteToken.mutate(deletingToken.id);
+            }}
+          >
+            {t(deleteToken.isPending ? "common.loading" : "common.delete")}
+          </Button>
+        </div>
+      </Dialog>
     </div>
   );
 }

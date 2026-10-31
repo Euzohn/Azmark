@@ -43,6 +43,9 @@ import type {
   TripInput,
   TripList,
   User,
+  AccessTokenList,
+  AccessTokenCreated,
+  AccessTokenScope,
 } from "@/lib/types";
 
 // Empty by default → requests go to the same origin (/api/v1/...), and the
@@ -313,6 +316,16 @@ export const api = {
   setAiSettings: (data: AiSettingsWrite) =>
     request<AiSettingsRead>("/settings/ai", { method: "PUT", body: JSON.stringify(data) }),
   deleteAiSettings: () => request<void>("/settings/ai", { method: "DELETE" }),
+
+  listAccessTokens: () => request<AccessTokenList>("/tokens"),
+  createAccessToken: (data: {
+    name: string;
+    scope: AccessTokenScope;
+    expires_in_days: number | null;
+  }) => request<AccessTokenCreated>("/tokens", { method: "POST", body: JSON.stringify(data) }),
+  revokeAccessToken: (id: string) =>
+    request<void>(`/tokens/${id}/revoke`, { method: "POST" }),
+  deleteAccessToken: (id: string) => request<void>(`/tokens/${id}`, { method: "DELETE" }),
 
   listAuditLogs: (params: { page?: number; page_size?: number } = {}) => {
     const query = new URLSearchParams();

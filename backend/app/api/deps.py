@@ -1,19 +1,30 @@
 import uuid
 from functools import lru_cache
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.db import get_db
-from app.core.security import decode_access_token
+from app.core.rate_limit import SlidingWindowLimiter
+from app.core.security import PAT_PREFIX, decode_access_token
+from app.models.personal_access_token import TokenScope
 from app.models.user import User, UserRole, UserStatus
+from app.services.access_token import AccessTokenService
 from app.services.storage import StorageProvider
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
+# Only mutating HTTP methods need the write scope; everything a read-only token
+# can reach must stay side-effect free (spec #33, #85).
+SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+access_token_limiter = SlidingWindowLimiter(settings.pat_rate_limit_per_minute)
+
 
 def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> User:
@@ -25,7 +36,38 @@ def get_current_user(
     if credentials is None:
         raise unauthorized
 
-    subject = decode_access_token(credentials.credentials)
+    raw = credentials.credentials
+
+    # Personal access token (spec #85): agents and scripts present a long-lived
+    # secret instead of a browser session token.
+    if raw.startswith(PAT_PREFIX):
+        resolved = AccessTokenService(db).authenticate(raw)
+        if resolved is None:
+            raise unauthorized
+        user, token = resolved
+
+        if settings.pat_rate_limit_per_minute > 0 and not access_token_limiter.allow(str(token.id)):
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many requests",
+                headers={"Retry-After": "60"},
+            )
+
+        if request.method not in SAFE_METHODS and token.scope != TokenScope.WRITE:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This access token is read-only",
+            )
+
+        # Audit entries pick this up so the user can see which agent acted.
+        request.state.actor = {
+            "kind": "access_token",
+            "id": str(token.id),
+            "name": token.name,
+        }
+        return user
+
+    subject = decode_access_token(raw)
     if subject is None:
         raise unauthorized
 
@@ -125,6 +167,12 @@ def get_data_source_service(db: Session = Depends(get_db)):
     from app.services.data_source import DataSourceService
 
     return DataSourceService(db)
+
+
+def get_access_token_service(db: Session = Depends(get_db)):
+    from app.services.access_token import AccessTokenService
+
+    return AccessTokenService(db)
 
 
 def get_admin_service(db: Session = Depends(get_db)):

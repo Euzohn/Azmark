@@ -37,13 +37,27 @@ class AuditService:
             user_id=user_id,
             resource_type=resource_type,
             resource_id=resource_id,
-            meta=meta,
+            meta=self._with_actor(meta, request),
             ip_hash=hash_ip(client_ip(request)) if request is not None else None,
         )
         self.db.add(entry)
         self.db.commit()
         self.db.refresh(entry)
         return entry
+
+    @staticmethod
+    def _with_actor(meta: dict[str, Any] | None, request: Request | None) -> dict[str, Any] | None:
+        """Attribute the action to the access token that performed it (#85).
+
+        JWT sessions leave ``request.state.actor`` unset, so existing call sites
+        keep their metadata untouched.
+        """
+        if request is None:
+            return meta
+        actor = getattr(request.state, "actor", None)
+        if not actor:
+            return meta
+        return {**(meta or {}), "actor": actor}
 
     def list_all(
         self,

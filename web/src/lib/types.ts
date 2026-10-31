@@ -488,6 +488,27 @@ export interface ProviderKeysRead {
   providers: ProviderKeyStatus[];
 }
 
+export type AccessTokenScope = "read" | "write";
+
+export interface AccessToken {
+  id: string;
+  name: string;
+  token_prefix: string;
+  scope: AccessTokenScope;
+  expires_at: string | null;
+  last_used_at: string | null;
+  revoked_at: string | null;
+  created_at: string;
+}
+
+export interface AccessTokenCreated extends AccessToken {
+  token: string;
+}
+
+export interface AccessTokenList {
+  items: AccessToken[];
+}
+
 export interface AiSettingsRead {
   provider: string;
   model: string;
