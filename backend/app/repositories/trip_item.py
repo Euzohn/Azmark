@@ -1,12 +1,22 @@
 import uuid
+from datetime import UTC, date, datetime, time
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.models.hotel import Hotel
 from app.models.transport_record import TransportRecord
 from app.models.trip_item import TripItem
 
 TRANSPORT_ITEM = "transport"
+HOTEL_ITEM = "hotel"
+
+
+def _date_at_midnight(value: date | None) -> datetime | None:
+    """Turn a hotel check-in/out date into a sortable UTC timestamp."""
+    if value is None:
+        return None
+    return datetime.combine(value, time.min, tzinfo=UTC)
 
 
 class TripItemRepository:
@@ -68,6 +78,54 @@ class TripItemRepository:
 
     def delete_transport(self, *, user_id: uuid.UUID, record_id: uuid.UUID) -> None:
         item = self.get_for_record(user_id=user_id, record_id=record_id)
+        if item is not None:
+            self.db.delete(item)
+            self.db.commit()
+
+    def get_for_hotel(self, *, user_id: uuid.UUID, hotel_id: uuid.UUID) -> TripItem | None:
+        return self.db.scalar(
+            select(TripItem).where(
+                TripItem.user_id == user_id,
+                TripItem.item_type == HOTEL_ITEM,
+                TripItem.item_id == hotel_id,
+            )
+        )
+
+    def sync_hotel(self, hotel: Hotel) -> None:
+        """Mirror ``hotel.trip_id`` into TripItem, keeping dates in sync."""
+        item = self.get_for_hotel(user_id=hotel.user_id, hotel_id=hotel.id)
+
+        if hotel.trip_id is None:
+            if item is not None:
+                self.db.delete(item)
+                self.db.commit()
+            return
+
+        if item is None:
+            item = TripItem(
+                user_id=hotel.user_id,
+                trip_id=hotel.trip_id,
+                item_type=HOTEL_ITEM,
+                item_id=hotel.id,
+                sort_order=self._next_sort_order(user_id=hotel.user_id, trip_id=hotel.trip_id),
+                start_at=_date_at_midnight(hotel.check_in),
+                end_at=_date_at_midnight(hotel.check_out),
+            )
+            self.db.add(item)
+        else:
+            if item.trip_id != hotel.trip_id:
+                # Moving between trips appends to the destination trip.
+                item.sort_order = self._next_sort_order(
+                    user_id=hotel.user_id, trip_id=hotel.trip_id
+                )
+                item.trip_id = hotel.trip_id
+            item.start_at = _date_at_midnight(hotel.check_in)
+            item.end_at = _date_at_midnight(hotel.check_out)
+
+        self.db.commit()
+
+    def delete_hotel(self, *, user_id: uuid.UUID, hotel_id: uuid.UUID) -> None:
+        item = self.get_for_hotel(user_id=user_id, hotel_id=hotel_id)
         if item is not None:
             self.db.delete(item)
             self.db.commit()

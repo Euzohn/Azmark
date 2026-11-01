@@ -8,18 +8,26 @@ import { useI18n } from "@/lib/i18n";
 
 export interface ExistingRecord {
   id: string;
+  // Transport fields
   service_number: string | null;
   carrier: string | null;
   departure_time: string | null;
   departure_timezone: string | null;
   origin: string | null;
   destination: string | null;
+  // Hotel fields (spec #17)
+  hotel: string | null;
+  check_in: string | null;
+  check_out: string | null;
+  address: string | null;
 }
+
+type DuplicateRecordType = "flight" | "train" | "other" | "hotel";
 
 interface DuplicateDialogProps {
   open: boolean;
   record: ExistingRecord | null;
-  recordType: "flight" | "train" | "other";
+  recordType: DuplicateRecordType;
   submitting?: boolean;
   onOpenExisting: () => void;
   onKeepNew: () => void;
@@ -58,14 +66,19 @@ export function DuplicateDialog({
       ? t("flights.serviceNumber")
       : recordType === "train"
         ? t("trains.serviceNumber")
-        : t("transports.serviceNumber");
+        : recordType === "hotel"
+          ? t("hotels.name")
+          : t("transports.serviceNumber");
   const carrierLabel =
     recordType === "flight"
       ? t("flights.carrier")
       : recordType === "train"
         ? t("trains.carrier")
-        : t("transports.carrier");
+        : recordType === "hotel"
+          ? t("hotels.address")
+          : t("transports.carrier");
 
+  const isHotel = recordType === "hotel";
   const route =
     record?.origin && record?.destination
       ? `${record.origin} → ${record.destination}`
@@ -74,6 +87,18 @@ export function DuplicateDialog({
   const date = record?.departure_time
     ? formatDate(record.departure_time, record.departure_timezone, locale)
     : t("common.none");
+
+  const hotelNights =
+    record?.check_in && record?.check_out
+      ? Math.round(
+          (new Date(record.check_out).getTime() - new Date(record.check_in).getTime()) /
+            (1000 * 60 * 60 * 24),
+        )
+      : null;
+  const hotelDateRange =
+    record?.check_in
+      ? `${record.check_in}${record.check_out ? ` → ${record.check_out}` : ""}`
+      : t("common.none");
 
   return (
     <Modal open={open} onClose={onCancel} title={t("records.duplicateTitle")}>
@@ -91,15 +116,28 @@ export function DuplicateDialog({
           <dl className="grid grid-cols-3 gap-y-2 rounded-xl border border-border bg-background/50 p-4 text-sm">
             <dt className="text-muted-foreground">{serviceLabel}</dt>
             <dd className="col-span-2 font-medium">
-              {record.service_number || t("common.none")}
+              {isHotel ? record.hotel || t("common.none") : record.service_number || t("common.none")}
             </dd>
-            <dt className="text-muted-foreground">{t("flights.date")}</dt>
-            <dd className="col-span-2 font-medium">{date}</dd>
-            <dt className="text-muted-foreground">{t("flights.route")}</dt>
-            <dd className="col-span-2 font-medium">{route}</dd>
+            {isHotel ? (
+              <>
+                <dt className="text-muted-foreground">{t("hotels.checkIn")}</dt>
+                <dd className="col-span-2 font-medium">{hotelDateRange}</dd>
+                <dt className="text-muted-foreground">{t("hotels.nights")}</dt>
+                <dd className="col-span-2 font-medium">
+                  {hotelNights != null ? t("hotels.nightsValue", { count: hotelNights }) : t("common.none")}
+                </dd>
+              </>
+            ) : (
+              <>
+                <dt className="text-muted-foreground">{t("flights.date")}</dt>
+                <dd className="col-span-2 font-medium">{date}</dd>
+                <dt className="text-muted-foreground">{t("flights.route")}</dt>
+                <dd className="col-span-2 font-medium">{route}</dd>
+              </>
+            )}
             <dt className="text-muted-foreground">{carrierLabel}</dt>
             <dd className="col-span-2 font-medium">
-              {record.carrier || t("common.none")}
+              {isHotel ? record.address || t("common.none") : record.carrier || t("common.none")}
             </dd>
           </dl>
         ) : null}

@@ -3,6 +3,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.schemas.hotel import HotelRead
 from app.schemas.transport import FlightRead
 
 
@@ -49,7 +50,11 @@ class TripRead(TripBase):
 
 
 class TripItemRead(BaseModel):
-    """Ordered trip member (spec #16). ``record`` is populated for transport."""
+    """Ordered trip member (spec #16).
+
+    ``record`` is populated for transport items, ``hotel`` for accommodation;
+    exactly one is set per item.
+    """
 
     id: uuid.UUID
     item_type: str
@@ -58,6 +63,7 @@ class TripItemRead(BaseModel):
     start_at: datetime | None = None
     end_at: datetime | None = None
     record: FlightRead | None = None
+    hotel: HotelRead | None = None
 
 
 class TripItemUpdate(BaseModel):

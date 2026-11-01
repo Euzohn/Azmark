@@ -244,6 +244,60 @@ export interface FlightFilters {
   page_size?: number;
 }
 
+export interface HotelFilters {
+  search?: string;
+  status?: string;
+  trip_id?: string;
+  date_from?: string;
+  date_to?: string;
+  sort?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export type HotelStatus = "scheduled" | "completed" | "cancelled";
+
+export interface Hotel {
+  id: string;
+  user_id: string;
+  hotel: string;
+  check_in: string;
+  check_out: string | null;
+  room_type: string | null;
+  room_number: string | null;
+  booking_reference: string | null;
+  price: number | null;
+  currency: string | null;
+  address: string | null;
+  notes: string | null;
+  trip_id: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface HotelInput {
+  hotel?: string;
+  check_in?: string;
+  check_out?: string | null;
+  room_type?: string | null;
+  room_number?: string | null;
+  booking_reference?: string | null;
+  price?: number | null;
+  currency?: string | null;
+  address?: string | null;
+  notes?: string | null;
+  trip_id?: string | null;
+  status?: string;
+}
+
+export interface HotelList {
+  items: Hotel[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 export type RecordType = "flight" | "train" | "other";
 export type RecordSort = "newest" | "oldest" | "departure" | "arrival" | "created";
 
@@ -301,6 +355,7 @@ export interface TripItem {
   start_at: string | null;
   end_at: string | null;
   record: TimelineRecord | null;
+  hotel: Hotel | null;
 }
 
 export interface TripDetail extends Trip {

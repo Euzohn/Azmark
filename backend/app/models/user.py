@@ -46,3 +46,6 @@ class User(Base):
     records: Mapped[list["TransportRecord"]] = relationship(  # noqa: F821
         back_populates="user", cascade="all, delete-orphan"
     )
+    hotels: Mapped[list["Hotel"]] = relationship(  # noqa: F821
+        back_populates="user", cascade="all, delete-orphan"
+    )

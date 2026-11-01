@@ -126,6 +126,12 @@ def get_transport_service(db: Session = Depends(get_db)):
     return OtherTransportService(db)
 
 
+def get_hotel_service(db: Session = Depends(get_db)):
+    from app.services.hotel import HotelService
+
+    return HotelService(db)
+
+
 def get_auth_service(db: Session = Depends(get_db)):
     from app.services.auth import AuthService
 

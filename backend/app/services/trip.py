@@ -4,8 +4,10 @@ from sqlalchemy.orm import Session
 
 from app.models.transport_record import TransportRecord
 from app.models.trip import Trip
+from app.repositories.hotel import HotelRepository
 from app.repositories.trip import TripRepository
-from app.repositories.trip_item import TRANSPORT_ITEM, TripItemRepository
+from app.repositories.trip_item import HOTEL_ITEM, TRANSPORT_ITEM, TripItemRepository
+from app.schemas.hotel import HotelRead
 from app.schemas.transport import FlightRead
 from app.schemas.trip import TripCreate, TripItemRead, TripItemUpdate, TripUpdate
 
@@ -26,6 +28,7 @@ class TripService:
     def __init__(self, db: Session) -> None:
         self.trips = TripRepository(db)
         self.items = TripItemRepository(db)
+        self.hotels = HotelRepository(db)
 
     def list_trips(
         self,
@@ -46,27 +49,39 @@ class TripService:
         return self.trips.list_records(user_id=user_id, trip_id=trip_id)
 
     def list_items(self, *, user_id: uuid.UUID, trip_id: uuid.UUID) -> list[TripItemRead]:
-        """Return trip items in display order with their transport record (#16)."""
+        """Return trip items in display order with their transport/hotel payload (#16)."""
         self.items.ensure_transport_items(user_id=user_id, trip_id=trip_id)
         records = {
             record.id: record for record in self.list_records(user_id=user_id, trip_id=trip_id)
         }
-        return [
-            TripItemRead(
-                id=item.id,
-                item_type=item.item_type,
-                item_id=item.item_id,
-                sort_order=item.sort_order,
-                start_at=item.start_at,
-                end_at=item.end_at,
-                record=(
-                    FlightRead.model_validate(records[item.item_id], from_attributes=True)
-                    if item.item_type == TRANSPORT_ITEM and item.item_id in records
-                    else None
-                ),
+        hotels = {
+            hotel.id: hotel for hotel in self.hotels.list_for_trip(user_id=user_id, trip_id=trip_id)
+        }
+        items: list[TripItemRead] = []
+        for item in self.items.list_for_trip(user_id=user_id, trip_id=trip_id):
+            record = (
+                FlightRead.model_validate(records[item.item_id], from_attributes=True)
+                if item.item_type == TRANSPORT_ITEM and item.item_id in records
+                else None
             )
-            for item in self.items.list_for_trip(user_id=user_id, trip_id=trip_id)
-        ]
+            hotel = (
+                HotelRead.model_validate(hotels[item.item_id], from_attributes=True)
+                if item.item_type == HOTEL_ITEM and item.item_id in hotels
+                else None
+            )
+            items.append(
+                TripItemRead(
+                    id=item.id,
+                    item_type=item.item_type,
+                    item_id=item.item_id,
+                    sort_order=item.sort_order,
+                    start_at=item.start_at,
+                    end_at=item.end_at,
+                    record=record,
+                    hotel=hotel,
+                )
+            )
+        return items
 
     def reorder_items(
         self, *, user_id: uuid.UUID, trip_id: uuid.UUID, item_ids: list[uuid.UUID]

@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowUp,
+  BedDouble,
   Bus,
   Plane,
   Plus,
@@ -28,6 +29,7 @@ import { api } from "@/lib/api";
 import { formatZonedDateTime } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 import type {
+  Hotel,
   OtherTransport,
   TimelineRecord,
   Train,
@@ -123,9 +125,11 @@ export default function TripDetailPage() {
           start_at: record.departure_time,
           end_at: record.arrival_time,
           record,
+          hotel: null,
         }));
   const displayItems = items.filter(
-    (item): item is TripItem & { record: TimelineRecord } => item.record !== null,
+    (item): item is TripItem & { record: TimelineRecord | null; hotel: Hotel | null } =>
+      item.record !== null || item.hotel !== null,
   );
   const canReorder = Boolean(data.items && data.items.length > 1);
 
@@ -210,8 +214,69 @@ export default function TripDetailPage() {
             />
           ) : (
             displayItems.map((item, index) => {
-              const record = item.record;
               const itemIndex = items.findIndex((entry) => entry.id === item.id);
+              if (item.hotel) {
+                const hotel = item.hotel;
+                return (
+                  <Card
+                    key={hotel.id}
+                    interactive
+                    className="group animate-fade-in-up"
+                    style={{ animationDelay: `${index * 40}ms` }}
+                  >
+                    <CardContent className="flex items-center gap-4 p-4">
+                      <Link
+                        href={`/hotels/${hotel.id}`}
+                        className="flex min-w-0 flex-1 items-center gap-4"
+                      >
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                          <BedDouble className="h-4 w-4" strokeWidth={1.75} />
+                        </span>
+                        <div className="min-w-0">
+                          <div className="font-display text-base font-semibold tracking-tight">
+                            {hotel.hotel}
+                          </div>
+                          <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                            {hotel.check_in}
+                            {hotel.check_out ? ` → ${hotel.check_out}` : ""}
+                            {hotel.address ? ` · ${hotel.address}` : ""}
+                          </div>
+                        </div>
+                      </Link>
+                      {canReorder ? (
+                        <div className="flex shrink-0 flex-col">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            disabled={itemIndex <= 0 || reorder.isPending}
+                            onClick={() => moveItem(item.id, -1)}
+                            title={t("trips.moveUp")}
+                            aria-label={t("trips.moveUp")}
+                          >
+                            <ArrowUp className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            disabled={itemIndex >= items.length - 1 || reorder.isPending}
+                            onClick={() => moveItem(item.id, 1)}
+                            title={t("trips.moveDown")}
+                            aria-label={t("trips.moveDown")}
+                          >
+                            <ArrowDown className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      ) : null}
+                    </CardContent>
+                  </Card>
+                );
+              }
+              const record = item.record;
+              if (!record) return null;
               const isTrain = isTrainRecord(record);
               const isOther = isOtherRecord(record);
               const detailHref = isTrain

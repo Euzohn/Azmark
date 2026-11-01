@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 
-type ResourceType = "flight" | "train" | "transport";
+type ResourceType = "flight" | "train" | "transport" | "hotel";
 
 interface AttachmentPanelProps {
   resourceType: ResourceType;

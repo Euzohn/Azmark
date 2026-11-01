@@ -50,6 +50,19 @@ def record_signature(*, record_type: str, payload: dict[str, Any]) -> str:
     return "|".join([record_type, dep_date, carrier, number, origin, destination])
 
 
+def hotel_signature(*, check_in: Any, hotel_name: str | None, check_out: Any = None) -> str:
+    """Deduplication fingerprint for a hotel stay (spec #41).
+
+    A stay is uniquely identified by its hotel name, check-in date and (when
+    present) check-out date — two bookings of the same hotel on the same nights
+    are the same stay.
+    """
+    check_in_str = iso_date(check_in)
+    check_out_str = iso_date(check_out)
+    name = str(hotel_name or "").strip().lower()
+    return "|".join(["hotel", check_in_str, name, check_out_str])
+
+
 def record_signature_from_model(record: Any) -> str:
     """Compute signature from a TransportRecord ORM model."""
     dep_date = iso_date(record.departure_time)

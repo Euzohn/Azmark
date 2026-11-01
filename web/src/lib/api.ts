@@ -17,6 +17,7 @@ import type {
   DataSourceList,
   Flight,
   FlightFilters,
+  HotelFilters,
   FlightInput,
   FlightList,
   FlightLookup,
@@ -46,6 +47,9 @@ import type {
   AccessTokenList,
   AccessTokenCreated,
   AccessTokenScope,
+  Hotel,
+  HotelInput,
+  HotelList,
   PendingAction,
   PendingActionList,
 } from "@/lib/types";
@@ -212,6 +216,29 @@ export const api = {
   updateFlight: (id: string, data: FlightInput) =>
     request<Flight>(`/flights/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteFlight: (id: string) => request<void>(`/flights/${id}`, { method: "DELETE" }),
+
+  listHotels: (params: HotelFilters = {}) => {
+    const query = new URLSearchParams();
+    if (params.search) query.set("search", params.search);
+    if (params.status) query.set("status", params.status);
+    if (params.trip_id) query.set("trip_id", params.trip_id);
+    if (params.date_from) query.set("date_from", params.date_from);
+    if (params.date_to) query.set("date_to", params.date_to);
+    if (params.sort) query.set("sort", params.sort);
+    if (params.page) query.set("page", String(params.page));
+    if (params.page_size) query.set("page_size", String(params.page_size));
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return request<HotelList>(`/hotels${suffix}`);
+  },
+  createHotel: (data: HotelInput, force = false) =>
+    request<Hotel>(`/hotels${force ? "?force=true" : ""}`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  getHotel: (id: string) => request<Hotel>(`/hotels/${id}`),
+  updateHotel: (id: string, data: HotelInput) =>
+    request<Hotel>(`/hotels/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteHotel: (id: string) => request<void>(`/hotels/${id}`, { method: "DELETE" }),
 
   listTrains: (params: FlightFilters = {}) => {
     const query = new URLSearchParams();

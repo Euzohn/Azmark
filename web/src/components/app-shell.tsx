@@ -3,6 +3,7 @@
 import {
   Backpack,
   BarChart3,
+  BedDouble,
   Bot,
   ClipboardCheck,
   Home,
@@ -39,6 +40,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", key: "nav.dashboard", icon: Home },
   { href: "/trips", key: "nav.trips", icon: Backpack },
   { href: "/records", key: "nav.records", icon: ListIcon },
+  { href: "/hotels", key: "nav.hotels", icon: BedDouble },
   { href: "/ai", key: "nav.ai", icon: Bot },
   { href: "/pending", key: "nav.pending", icon: ClipboardCheck },
   { href: "/map", key: "nav.map", icon: MapIcon },
@@ -52,6 +54,9 @@ function isNavActive(href: string, pathname: string): boolean {
     return ["/records", "/flights", "/trains", "/transports"].some((base) =>
       pathname.startsWith(base),
     );
+  }
+  if (href === "/hotels") {
+    return pathname.startsWith("/hotels");
   }
   // The old settings/data/audit/admin routes are now tabs under /account.
   if (href === "/account") {
@@ -70,6 +75,7 @@ const MOBILE_MAIN: NavItem[] = [
 ];
 
 const MOBILE_MORE: NavItem[] = [
+  { href: "/hotels", key: "nav.hotels", icon: BedDouble },
   { href: "/ai", key: "nav.ai", icon: Bot },
   { href: "/pending", key: "nav.pending", icon: ClipboardCheck },
   { href: "/statistics", key: "nav.stats", icon: BarChart3 },
