@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, KeyRound, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,20 +28,17 @@ const PROVIDER_LABELS: Record<string, string> = {
   searxng: "SearXNG",
 };
 
-/**
- * Section label that groups related cards inside the Profile tab. The Profile
- * tab pulls the whole settings page together, so without these headings six
- * equally-weighted cards blur into one undifferentiated list.
- */
-function SectionHeading({ children }: { children: React.ReactNode }) {
-  return (
-    <h2 className="mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-      {children}
-    </h2>
-  );
-}
+type SettingsSection = "profile" | "integrations" | "security";
 
-export default function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) {
+/**
+ * The account page splits the old monolithic settings view across three
+ * top-level tabs. Each tab renders one section of this panel, so a single
+ * component owns all the hooks/state and the JSX branches on `section`.
+ */
+export function SettingsPanel({
+  embedded = false,
+  section = "profile",
+}: { embedded?: boolean; section?: SettingsSection } = {}) {
   const { t, locale } = useI18n();
   const { user, setUser, clear } = useAuth();
   const queryClient = useQueryClient();
@@ -275,67 +272,69 @@ export default function SettingsPage({ embedded = false }: { embedded?: boolean 
         </h1>
       )}
 
-      <SectionHeading>{t("account.section.identity")}</SectionHeading>
-      <Card className="animate-fade-in-up" style={{ animationDelay: "50ms" }}>
-        <CardHeader>
-          <CardTitle>{t("settings.profile")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form
-            className="grid gap-4 md:grid-cols-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              setProfileSaved(false);
-              updateProfile.mutate();
-            }}
-          >
-            <div>
-              <Label className="mb-1.5 block">{t("settings.displayName")}</Label>
-              <Input
-                value={profile.display_name}
-                onChange={(e) => setProfile({ ...profile, display_name: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label className="mb-1.5 block">{t("settings.email")}</Label>
-              <Input
-                type="email"
-                value={profile.email}
-                onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label className="mb-1.5 block">{t("settings.timezone")}</Label>
-              <TimezoneSelect
-                value={profile.timezone}
-                onChange={(timezone) => setProfile({ ...profile, timezone })}
-                allowEmpty={false}
-              />
-            </div>
-            <div>
-              <Label className="mb-1.5 block">{t("settings.currency")}</Label>
-              <Input
-                maxLength={3}
-                value={profile.currency}
-                onChange={(e) =>
-                  setProfile({ ...profile, currency: e.target.value.toUpperCase() })
-                }
-              />
-            </div>
-            <div className="flex items-center gap-3 md:col-span-2">
-              <Button type="submit" disabled={updateProfile.isPending}>
-                {t("common.save")}
-              </Button>
-              {profileSaved ? (
-                <span className="text-sm text-primary">{t("settings.saved")}</span>
-              ) : null}
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+      {section === "profile" ? (
+        <Card className="animate-fade-in-up" style={{ animationDelay: "50ms" }}>
+          <CardHeader>
+            <CardTitle>{t("settings.profile")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form
+              className="grid gap-4 md:grid-cols-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                setProfileSaved(false);
+                updateProfile.mutate();
+              }}
+            >
+              <div>
+                <Label className="mb-1.5 block">{t("settings.displayName")}</Label>
+                <Input
+                  value={profile.display_name}
+                  onChange={(e) => setProfile({ ...profile, display_name: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label className="mb-1.5 block">{t("settings.email")}</Label>
+                <Input
+                  type="email"
+                  value={profile.email}
+                  onChange={(e) => setProfile({ ...profile, email: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label className="mb-1.5 block">{t("settings.timezone")}</Label>
+                <TimezoneSelect
+                  value={profile.timezone}
+                  onChange={(timezone) => setProfile({ ...profile, timezone })}
+                  allowEmpty={false}
+                />
+              </div>
+              <div>
+                <Label className="mb-1.5 block">{t("settings.currency")}</Label>
+                <Input
+                  maxLength={3}
+                  value={profile.currency}
+                  onChange={(e) =>
+                    setProfile({ ...profile, currency: e.target.value.toUpperCase() })
+                  }
+                />
+              </div>
+              <div className="flex items-center gap-3 md:col-span-2">
+                <Button type="submit" disabled={updateProfile.isPending}>
+                  {t("common.save")}
+                </Button>
+                {profileSaved ? (
+                  <span className="text-sm text-primary">{t("settings.saved")}</span>
+                ) : null}
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      ) : null}
 
-      <SectionHeading>{t("account.section.integrations")}</SectionHeading>
-      <Card className="animate-fade-in-up" style={{ animationDelay: "100ms" }}>
+      {section === "integrations" ? (
+        <>
+          <Card className="animate-fade-in-up" style={{ animationDelay: "50ms" }}>
         <CardHeader>
           <CardTitle>{t("settings.providerKeys")}</CardTitle>
         </CardHeader>
@@ -526,9 +525,12 @@ export default function SettingsPage({ embedded = false }: { embedded?: boolean 
           </form>
         </CardContent>
       </Card>
+        </>
+      ) : null}
 
-      <SectionHeading>{t("account.section.security")}</SectionHeading>
-      <Card className="animate-fade-in-up" style={{ animationDelay: "200ms" }}>
+      {section === "security" ? (
+        <>
+      <Card className="animate-fade-in-up" style={{ animationDelay: "50ms" }}>
         <CardHeader>
           <CardTitle>{t("settings.security")}</CardTitle>
         </CardHeader>
@@ -750,7 +752,6 @@ export default function SettingsPage({ embedded = false }: { embedded?: boolean 
         </CardContent>
       </Card>
 
-      <SectionHeading>{t("account.section.danger")}</SectionHeading>
       <Card
         className="animate-fade-in-up border-danger/40"
         style={{ animationDelay: "250ms" }}
@@ -838,6 +839,8 @@ export default function SettingsPage({ embedded = false }: { embedded?: boolean 
           </form>
         </CardContent>
       </Card>
+        </>
+      ) : null}
 
       <Dialog
         open={Boolean(createdToken)}
@@ -907,4 +910,17 @@ export default function SettingsPage({ embedded = false }: { embedded?: boolean 
       </Dialog>
     </div>
   );
+}
+
+/**
+ * The standalone /settings route is a legacy entry point — the settings live
+ * under /account now. Redirect to the profile tab instead of duplicating the
+ * UI. The panel itself is consumed via the named `SettingsPanel` export.
+ */
+export default function SettingsRedirect() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace("/account?tab=profile");
+  }, [router]);
+  return null;
 }

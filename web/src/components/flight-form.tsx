@@ -624,7 +624,7 @@ export function FlightForm({ initial, submitting, onSubmit, onCancel, onDirtyCha
                 {lookupStatus === "local" ? (
                   <>
                     {t("flights.lookupLocal")}{" "}
-                    <Link href="/settings" className="text-primary hover:underline">
+                    <Link href="/account?tab=integrations" className="text-primary hover:underline">
                       {t("nav.settings")}
                     </Link>
                   </>
