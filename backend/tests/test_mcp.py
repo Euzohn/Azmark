@@ -139,6 +139,8 @@ def test_only_read_tools_are_exposed(client):
     assert names == {
         "search_records",
         "get_record",
+        "search_hotels",
+        "get_hotel",
         "list_trips",
         "get_trip",
         "get_statistics",
@@ -274,6 +276,8 @@ async def test_official_client_round_trip(db, monkeypatch):
                     assert {tool.name for tool in listed.tools} == {
                         "search_records",
                         "get_record",
+                        "search_hotels",
+                        "get_hotel",
                         "list_trips",
                         "get_trip",
                         "get_statistics",

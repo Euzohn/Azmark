@@ -146,3 +146,14 @@ class HotelService:
         hotel = self.get_hotel(user_id=user_id, hotel_id=hotel_id)
         self.trip_items.delete_hotel(user_id=user_id, hotel_id=hotel.id)
         self.hotels.delete(hotel)
+
+    # -- pending-action surface ------------------------------------------------
+    # The approval inbox (spec #69) executes proposals through the same method
+    # names the transport services expose, so an agent can propose a hotel stay
+    # the same way it proposes a flight. These delegate to the hotel-specific
+    # methods above.
+    def create_record(self, *, user_id: uuid.UUID, payload, force: bool = False) -> Hotel:
+        return self.create_hotel(user_id=user_id, payload=payload, force=force)
+
+    def update_record(self, *, user_id: uuid.UUID, record_id: uuid.UUID, payload) -> Hotel:
+        return self.update_hotel(user_id=user_id, hotel_id=record_id, payload=payload)

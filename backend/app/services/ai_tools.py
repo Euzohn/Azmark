@@ -128,6 +128,65 @@ async def _get_record(db: Session, user_id: uuid.UUID, args: dict) -> dict:
     return compact
 
 
+def _compact_hotel(hotel) -> dict:
+    """Serialize a hotel for the LLM — the confirmation number is sensitive (#45/#96)."""
+    nights = None
+    if hotel.check_in and hotel.check_out:
+        delta = hotel.check_out - hotel.check_in
+        nights = delta.days if delta.days >= 0 else None
+    return {
+        "id": str(hotel.id),
+        "hotel": hotel.hotel,
+        "check_in": hotel.check_in.isoformat() if hotel.check_in else None,
+        "check_out": hotel.check_out.isoformat() if hotel.check_out else None,
+        "nights": nights,
+        "status": hotel.status,
+        "room_type": hotel.room_type,
+        "room_number": hotel.room_number,
+        "address": hotel.address,
+        "price": float(hotel.price) if hotel.price is not None else None,
+        "currency": hotel.currency,
+        "trip_id": str(hotel.trip_id) if hotel.trip_id else None,
+    }
+
+
+async def _search_hotels(db: Session, user_id: uuid.UUID, args: dict) -> dict:
+    """Hotel stays by keyword (name, address) or status; capped like _search_records."""
+    from app.repositories.hotel import HotelRepository
+
+    query = args.get("query", "")
+    status = args.get("status")
+    limit = _clamp_limit(args.get("limit"), 20)
+    repo = HotelRepository(db)
+    hotels, total = repo.list(
+        user_id=user_id,
+        search=query or None,
+        status=status,
+        page=1,
+        page_size=limit,
+    )
+    return {"count": len(hotels), "total": total, "items": [_compact_hotel(h) for h in hotels]}
+
+
+async def _get_hotel(db: Session, user_id: uuid.UUID, args: dict) -> dict:
+    """One hotel by id; notes are non-sensitive so they are included."""
+    from app.repositories.hotel import HotelRepository
+
+    hotel_id = args.get("hotel_id") or args.get("id")
+    if not hotel_id:
+        return {"error": "hotel_id is required"}
+    try:
+        parsed_id = uuid.UUID(str(hotel_id))
+    except (ValueError, TypeError):
+        return {"error": "invalid hotel id"}
+    hotel = HotelRepository(db).get(user_id=user_id, hotel_id=parsed_id)
+    if hotel is None:
+        return {"error": "hotel not found"}
+    compact = _compact_hotel(hotel)
+    compact["notes"] = hotel.notes
+    return compact
+
+
 def _compact_trip(trip) -> dict:
     """Trip header without owner ids — safe for both the chat and MCP layers."""
     return {
@@ -520,6 +579,23 @@ def _delete_transport_proposal(args: dict) -> AiProposal:
     )
 
 
+def _create_hotel_proposal(args: dict) -> AiProposal:
+    """Propose creating a hotel stay (spec #17). Never executes immediately (#69)."""
+    data = dict(args.get("data", {}) or {})
+    summary_parts = ["Create hotel", data.get("hotel") or "—"]
+    if data.get("check_in"):
+        summary_parts.append(str(data["check_in"]))
+    if data.get("check_out"):
+        summary_parts.append(f"→ {data['check_out']}")
+    return AiProposal(
+        id=uuid.uuid4().hex,
+        action="create_hotel",
+        record_type="hotel",
+        summary=" · ".join(summary_parts),
+        data=data,
+    )
+
+
 TOOLS: dict[str, ToolDef] = {
     "search_records": ToolDef(
         name="search_records",
@@ -575,6 +651,47 @@ TOOLS: dict[str, ToolDef] = {
         },
         permission=ToolPermission.READ,
         read=_get_record,
+    ),
+    "search_hotels": ToolDef(
+        name="search_hotels",
+        description=(
+            "Search the user's hotel stays by keyword (hotel name or address) or "
+            "by status (scheduled/completed/cancelled). Returns compact stays "
+            "without the confirmation number, which is sensitive."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search keyword: hotel name or address",
+                },
+                "status": {
+                    "type": "string",
+                    "enum": ["scheduled", "completed", "cancelled"],
+                    "description": "Filter by stay status, or omit to list all",
+                },
+                "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+            },
+        },
+        permission=ToolPermission.READ,
+        read=_search_hotels,
+    ),
+    "get_hotel": ToolDef(
+        name="get_hotel",
+        description=(
+            "Get a single hotel stay by its id. Returns the stay fields and notes "
+            "(never the confirmation number, which is sensitive)."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "hotel_id": {"type": "string", "description": "The hotel UUID"},
+            },
+            "required": ["hotel_id"],
+        },
+        permission=ToolPermission.READ,
+        read=_get_hotel,
     ),
     "list_trips": ToolDef(
         name="list_trips",
@@ -886,6 +1003,55 @@ TOOLS: dict[str, ToolDef] = {
         permission=ToolPermission.WRITE,
         proposal=_create_transport_proposal,
     ),
+    "create_hotel": ToolDef(
+        name="create_hotel",
+        description=(
+            "Propose creating a hotel/accommodation stay. Nothing is saved: the "
+            "user must confirm in the UI. Pass hotel name, check_in (YYYY-MM-DD) "
+            "and check_out; optionally room_type, room_number, address, price, "
+            "currency, booking_reference (SENSITIVE — only from an image the "
+            "user shared), notes and trip_id."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "hotel": {"type": "string", "description": "Hotel name"},
+                        "check_in": {
+                            "type": "string",
+                            "description": "Check-in date YYYY-MM-DD",
+                        },
+                        "check_out": {
+                            "type": "string",
+                            "description": "Check-out date YYYY-MM-DD",
+                        },
+                        "room_type": {"type": "string"},
+                        "room_number": {"type": "string"},
+                        "booking_reference": {
+                            "type": "string",
+                            "description": (
+                                "Confirmation number. SENSITIVE — extract from an image only."
+                            ),
+                        },
+                        "price": {"type": "number"},
+                        "currency": {
+                            "type": "string",
+                            "description": "ISO 4217 code, e.g. CNY, USD, SGD",
+                        },
+                        "address": {"type": "string"},
+                        "notes": {"type": "string"},
+                        "trip_id": {"type": "string"},
+                    },
+                    "required": ["hotel", "check_in"],
+                },
+            },
+            "required": ["data"],
+        },
+        permission=ToolPermission.WRITE,
+        proposal=_create_hotel_proposal,
+    ),
     "delete_transport": ToolDef(
         name="delete_transport",
         description=(
@@ -930,6 +1096,8 @@ def tool_schemas() -> list[dict]:
 MCP_READ_TOOL_NAMES: tuple[str, ...] = (
     "search_records",
     "get_record",
+    "search_hotels",
+    "get_hotel",
     "list_trips",
     "get_trip",
     "get_statistics",

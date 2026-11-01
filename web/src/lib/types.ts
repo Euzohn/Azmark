@@ -615,6 +615,7 @@ export interface DashboardStats {
   flights: number;
   trains: number;
   transports: number;
+  hotels: number;
   trips: number;
 }
 
@@ -655,6 +656,7 @@ export interface StatisticsTotals {
   flights: number;
   trains: number;
   transports: number;
+  hotels: number;
 }
 
 export interface StatisticsRead {

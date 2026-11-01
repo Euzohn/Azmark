@@ -25,8 +25,8 @@ from app.services.pending_action import (
 
 _RECORD_TYPE = {
     "type": "string",
-    "enum": ["flight", "train", "other"],
-    "description": "Which transport record type this proposal targets",
+    "enum": ["flight", "train", "other", "hotel"],
+    "description": "Which record type this proposal targets (hotel = accommodation)",
 }
 
 WRITE_TOOL_DEFINITIONS: list[Tool] = [
@@ -45,9 +45,13 @@ WRITE_TOOL_DEFINITIONS: list[Tool] = [
                 "data": {
                     "type": "object",
                     "description": (
-                        "Record fields: origin, destination, departure_time, "
-                        "arrival_time, carrier, service_number, seat, notes, "
-                        "trip_id. Same shape as POST /api/v1/<type>."
+                        "Record fields. For transport (flight/train/other): "
+                        "origin, destination, departure_time, arrival_time, "
+                        "carrier, service_number, seat, notes, trip_id. For "
+                        "hotel: hotel, check_in, check_out, room_type, "
+                        "room_number, booking_reference, price, currency, "
+                        "address, notes, trip_id. Same shape as POST "
+                        "/api/v1/<type>."
                     ),
                 },
             },

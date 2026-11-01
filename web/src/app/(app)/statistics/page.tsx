@@ -285,6 +285,7 @@ export default function StatisticsPage() {
       label: t("dashboard.stats.distance"),
       value: `${Math.round(totals?.distance_km ?? 0).toLocaleString(locale)} ${t("stats.km")}`,
     },
+    { label: t("dashboard.stats.hotels"), value: totals?.hotels ?? 0 },
     { label: t("dashboard.stats.trips"), value: totals?.trips ?? 0 },
   ];
 

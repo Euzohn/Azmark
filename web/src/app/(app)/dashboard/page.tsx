@@ -207,12 +207,13 @@ export default function DashboardPage() {
 
   const name = user?.display_name ?? user?.username ?? "";
   const stats = data?.stats;
-  const hasRecords = (stats?.journeys ?? 0) > 0;
+  const hasRecords = (stats?.journeys ?? 0) + (stats?.hotels ?? 0) > 0;
 
   const metrics = [
     { label: t("dashboard.stats.countries"), value: stats?.countries ?? 0 },
     { label: t("dashboard.stats.cities"), value: stats?.cities ?? 0 },
     { label: t("dashboard.stats.journeys"), value: stats?.journeys ?? 0 },
+    { label: t("dashboard.stats.hotels"), value: stats?.hotels ?? 0 },
     {
       label: t("dashboard.stats.distance"),
       value: `${Math.round(stats?.distance_km ?? 0).toLocaleString(locale)} ${t("stats.km")}`,

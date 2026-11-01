@@ -34,6 +34,7 @@ const RECORD_PATH: Record<string, string> = {
   flight: "/flights",
   train: "/trains",
   other: "/transports",
+  hotel: "/hotels",
 };
 
 function formatDateTime(value: string | null, locale: string): string {

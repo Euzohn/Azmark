@@ -14,6 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.timezones import in_timezone
+from app.models.hotel import Hotel
 from app.models.transport_record import TransportRecord
 from app.models.trip import Trip
 from app.repositories.transport import TransportRepository
@@ -110,6 +111,13 @@ class DashboardService:
     # public API
     # ------------------------------------------------------------------
 
+    def _count_hotels(self, *, user_id: uuid.UUID) -> int:
+        """Accommodation is its own table, so it needs its own count (spec #17)."""
+        return int(
+            self.db.scalar(select(func.count()).select_from(Hotel).where(Hotel.user_id == user_id))
+            or 0
+        )
+
     def overview(self, *, user_id: uuid.UUID) -> DashboardRead:
         all_records = self.records.list_all(user_id=user_id)
         flights_desc = [r for r in all_records if r.type == "flight"]
@@ -156,6 +164,7 @@ class DashboardService:
                 flights=len(flights_desc),
                 trains=len(trains),
                 transports=len(other),
+                hotels=self._count_hotels(user_id=user_id),
                 trips=int(trips_total),
             ),
             recent=all_records[:5],
@@ -268,6 +277,7 @@ class DashboardService:
                 flights=len(flights),
                 trains=len(trains),
                 transports=len(other),
+                hotels=self._count_hotels(user_id=user_id),
             ),
             by_year=self._chronological(years),
             by_month=self._chronological(months),

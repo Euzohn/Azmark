@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.models.pending_action import PendingAction, PendingActionKind, PendingActionStatus
 from app.models.user import utcnow
+from app.schemas.hotel import HotelCreate, HotelUpdate
 from app.schemas.transport import (
     FlightCreate,
     FlightUpdate,
@@ -26,6 +27,7 @@ from app.schemas.transport import (
     TrainCreate,
     TrainUpdate,
 )
+from app.services.hotel import DuplicateHotelError, HotelService
 from app.services.transport import (
     DuplicateRecordError,
     FlightService,
@@ -38,24 +40,27 @@ from app.services.transport import (
 #: slower, but an unbounded queue of stale writes is a liability.
 DEFAULT_TTL = timedelta(days=7)
 
-RECORD_TYPES = ("flight", "train", "other")
+RECORD_TYPES = ("flight", "train", "other", "hotel")
 
 _CREATE_SCHEMAS = {
     "flight": FlightCreate,
     "train": TrainCreate,
     "other": OtherTransportCreate,
+    "hotel": HotelCreate,
 }
 
 _UPDATE_SCHEMAS = {
     "flight": FlightUpdate,
     "train": TrainUpdate,
     "other": OtherTransportUpdate,
+    "hotel": HotelUpdate,
 }
 
 _SERVICES = {
     "flight": FlightService,
     "train": TrainService,
     "other": OtherTransportService,
+    "hotel": HotelService,
 }
 
 
@@ -133,6 +138,19 @@ def validate_update(record_type: str, record_id: str, data: dict[str, Any]) -> d
 
 def describe(action: str, record_type: str, payload: dict[str, Any]) -> str:
     """One-line summary for the approval inbox and the agent's tool result."""
+    if record_type == "hotel":
+        label = "Hotel"
+        if action == PendingActionKind.CREATE:
+            parts = [f"Create {label}", payload.get("hotel") or "—"]
+            if payload.get("check_in"):
+                parts.append(str(payload["check_in"]))
+            if payload.get("check_out"):
+                parts.append(f"→ {payload['check_out']}")
+            return " · ".join(parts)
+        data = payload.get("data") or {}
+        changed = ", ".join(sorted(data))
+        return f"Update {label} {payload.get('record_id', '')} · {changed}"
+
     label = {"flight": "Flight", "train": "Train", "other": "Transport"}.get(
         record_type, record_type
     )
@@ -296,7 +314,7 @@ class PendingActionService:
                 )
             else:  # pragma: no cover - guarded at creation
                 raise PendingActionInvalidError(record.action)
-        except DuplicateRecordError:
+        except (DuplicateRecordError, DuplicateHotelError):
             raise
         except (RecordNotFoundError, PendingActionInvalidError, ValueError, KeyError) as exc:
             record.status = PendingActionStatus.FAILED

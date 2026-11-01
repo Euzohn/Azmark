@@ -23,6 +23,7 @@ from app.schemas.pending_action import (
     PendingActionRead,
 )
 from app.services.audit import AuditService
+from app.services.hotel import DuplicateHotelError
 from app.services.pending_action import (
     PendingActionInvalidError,
     PendingActionNotFoundError,
@@ -107,6 +108,21 @@ def confirm_pending_action(
                     ),
                     "origin": existing.origin,
                     "destination": existing.destination,
+                },
+            },
+        ) from None
+    except DuplicateHotelError as exc:
+        existing = exc.existing_hotel
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": "Duplicate hotel",
+                "existing_record": {
+                    "id": str(existing.id),
+                    "hotel": existing.hotel,
+                    "check_in": existing.check_in.isoformat() if existing.check_in else None,
+                    "check_out": existing.check_out.isoformat() if existing.check_out else None,
+                    "address": existing.address,
                 },
             },
         ) from None

@@ -15,6 +15,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.models.hotel import Hotel
 from app.models.transport_record import TransportRecord
 from app.models.trip import Trip
 from app.models.user import User
@@ -75,6 +76,24 @@ SENSITIVE_FIELDS: tuple[str, ...] = (
     "ticket_number",
     "purchase_credential",
 )
+
+# Accommodation is a separate entity (spec #17), so it gets its own column set.
+# It has no timezones: check-in/out are plain dates.
+HOTEL_FIELDS: tuple[str, ...] = (
+    "hotel",
+    "status",
+    "check_in",
+    "check_out",
+    "room_type",
+    "room_number",
+    "price",
+    "currency",
+    "address",
+    "notes",
+    "trip_name",
+)
+
+HOTEL_SENSITIVE_FIELDS: tuple[str, ...] = ("booking_reference",)
 
 DATETIME_FIELDS = {
     "departure_time",
@@ -270,6 +289,10 @@ class DataTransferService:
             },
             "trips": [self._export_trip(t) for t in self._all_trips(user_id)],
             "records": [self._export_record(r, include_sensitive, trip_names) for r in records],
+            "hotels": [
+                self._export_hotel(h, include_sensitive, trip_names)
+                for h in self._all_hotels(user_id)
+            ],
         }
         return json.dumps(bundle, ensure_ascii=False, indent=2)
 
@@ -426,6 +449,36 @@ class DataTransferService:
 
     def _all_trips(self, user_id: uuid.UUID) -> list[Trip]:
         return list(self.db.scalars(select(Trip).where(Trip.user_id == user_id)))
+
+    def _all_hotels(self, user_id: uuid.UUID) -> list[Hotel]:
+        return list(
+            self.db.scalars(
+                select(Hotel)
+                .where(Hotel.user_id == user_id)
+                .order_by(Hotel.check_in.asc(), Hotel.id)
+            )
+        )
+
+    def _export_hotel(
+        self, hotel: Hotel, include_sensitive: bool, trip_names: dict[uuid.UUID, str]
+    ) -> dict[str, Any]:
+        data: dict[str, Any] = {}
+        for field in HOTEL_FIELDS:
+            value = (
+                trip_names.get(hotel.trip_id)
+                if field == "trip_name"
+                else getattr(hotel, field, None)
+            )
+            if field in ("check_in", "check_out"):
+                data[field] = value.isoformat() if value else None
+            elif isinstance(value, Decimal):
+                data[field] = float(value)
+            else:
+                data[field] = value
+        if include_sensitive:
+            for field in HOTEL_SENSITIVE_FIELDS:
+                data[field] = getattr(hotel, field, None)
+        return data
 
     def _export_trip(self, trip: Trip) -> dict[str, Any]:
         return {

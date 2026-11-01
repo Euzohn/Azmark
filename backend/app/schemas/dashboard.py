@@ -36,6 +36,7 @@ class DashboardStats(BaseModel):
     flights: int
     trains: int
     transports: int
+    hotels: int = 0
     trips: int
 
 
@@ -62,6 +63,7 @@ class StatisticsTotals(BaseModel):
     flights: int
     trains: int
     transports: int
+    hotels: int = 0
 
 
 class StatisticsRead(BaseModel):

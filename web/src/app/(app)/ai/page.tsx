@@ -99,6 +99,28 @@ function formatProposalData(
   locale: string,
 ): string[] {
   const lines: string[] = [];
+  // Hotel proposals carry a `hotel` name and date-based fields (spec #17).
+  if (data.hotel) {
+    lines.push(data.hotel as string);
+    if (data.check_in) {
+      const range = data.check_out
+        ? `${data.check_in} → ${data.check_out}`
+        : String(data.check_in);
+      lines.push(`${t("ai.proposal.hotelDates")}: ${range}`);
+    }
+    if (data.status === "completed") lines.push(t("ai.proposal.statusCompleted"));
+    else if (data.status === "scheduled") lines.push(t("ai.proposal.statusScheduled"));
+    if (data.room_type) lines.push(`${t("ai.proposal.roomType")}: ${data.room_type}`);
+    if (data.room_number) lines.push(`${t("ai.proposal.roomNumber")}: ${data.room_number}`);
+    if (data.address) lines.push(`${t("ai.proposal.hotelAddress")}: ${data.address}`);
+    if (data.price !== undefined && data.price !== null) {
+      const currency = data.currency ? ` ${data.currency}` : "";
+      lines.push(`${t("ai.proposal.price")}: ${data.price}${currency}`);
+    }
+    if (data.notes) lines.push(data.notes as string);
+    return lines;
+  }
+
   if (data.origin || data.destination) {
     lines.push(`${data.origin ?? "?"} → ${data.destination ?? "?"}`);
   }
@@ -383,6 +405,9 @@ export default function AiChatPage() {
       }
       if (proposal.record_type === "train") {
         return api.createTrain(data, force);
+      }
+      if (proposal.record_type === "hotel") {
+        return api.createHotel(data, force);
       }
       return api.createOtherTransport(data, force);
     },
