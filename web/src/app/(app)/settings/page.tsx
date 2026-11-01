@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, KeyRound, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -26,6 +27,19 @@ const PROVIDER_LABELS: Record<string, string> = {
   brave: "Brave Search",
   searxng: "SearXNG",
 };
+
+/**
+ * Section label that groups related cards inside the Profile tab. The Profile
+ * tab pulls the whole settings page together, so without these headings six
+ * equally-weighted cards blur into one undifferentiated list.
+ */
+function SectionHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+      {children}
+    </h2>
+  );
+}
 
 export default function SettingsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { t, locale } = useI18n();
@@ -86,28 +100,6 @@ export default function SettingsPage({ embedded = false }: { embedded?: boolean 
     },
     onError: () => setPasswordStatus("error"),
   });
-
-  const [exportSensitive, setExportSensitive] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const [exportError, setExportError] = useState(false);
-
-  const downloadExport = async () => {
-    setExportError(false);
-    setExporting(true);
-    try {
-      const blob = await api.exportData("json", exportSensitive);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "azmark-export.json";
-      link.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      setExportError(true);
-    } finally {
-      setExporting(false);
-    }
-  };
 
   const [confirmUsername, setConfirmUsername] = useState("");
   const [deletePassword, setDeletePassword] = useState("");
@@ -283,6 +275,7 @@ export default function SettingsPage({ embedded = false }: { embedded?: boolean 
         </h1>
       )}
 
+      <SectionHeading>{t("account.section.identity")}</SectionHeading>
       <Card className="animate-fade-in-up" style={{ animationDelay: "50ms" }}>
         <CardHeader>
           <CardTitle>{t("settings.profile")}</CardTitle>
@@ -341,6 +334,7 @@ export default function SettingsPage({ embedded = false }: { embedded?: boolean 
         </CardContent>
       </Card>
 
+      <SectionHeading>{t("account.section.integrations")}</SectionHeading>
       <Card className="animate-fade-in-up" style={{ animationDelay: "100ms" }}>
         <CardHeader>
           <CardTitle>{t("settings.providerKeys")}</CardTitle>
@@ -533,6 +527,7 @@ export default function SettingsPage({ embedded = false }: { embedded?: boolean 
         </CardContent>
       </Card>
 
+      <SectionHeading>{t("account.section.security")}</SectionHeading>
       <Card className="animate-fade-in-up" style={{ animationDelay: "200ms" }}>
         <CardHeader>
           <CardTitle>{t("settings.security")}</CardTitle>
@@ -755,6 +750,7 @@ export default function SettingsPage({ embedded = false }: { embedded?: boolean 
         </CardContent>
       </Card>
 
+      <SectionHeading>{t("account.section.danger")}</SectionHeading>
       <Card
         className="animate-fade-in-up border-danger/40"
         style={{ animationDelay: "250ms" }}
@@ -765,38 +761,19 @@ export default function SettingsPage({ embedded = false }: { embedded?: boolean 
         <CardContent className="flex flex-col gap-5">
           <p className="text-sm text-muted-foreground">{t("settings.dangerZoneHint")}</p>
 
-          <div className="flex flex-col gap-3 rounded-lg border border-border p-4">
+          <div className="flex flex-col gap-3 rounded-lg border border-border p-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="text-sm font-medium">{t("settings.exportFirst")}</div>
               <p className="mt-1 text-xs text-muted-foreground">
                 {t("settings.exportFirstHint")}
               </p>
             </div>
-            <label className="flex items-start gap-3">
-              <input
-                type="checkbox"
-                className="mt-0.5 h-4 w-4 accent-[var(--color-primary)]"
-                checked={exportSensitive}
-                onChange={(event) => setExportSensitive(event.target.checked)}
-              />
-              <span className="text-xs text-muted-foreground">
-                {t("data.includeSensitiveHint")}
-              </span>
-            </label>
-            <div className="flex items-center gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void downloadExport()}
-                disabled={exporting}
-              >
+            <Link href="/account?tab=data" className="shrink-0">
+              <Button type="button" variant="outline">
                 <Download className="h-4 w-4" />
-                {t("settings.exportFirstButton")}
+                {t("settings.exportGoToData")}
               </Button>
-              {exportError ? (
-                <span className="text-sm text-danger">{t("common.error")}</span>
-              ) : null}
-            </div>
+            </Link>
           </div>
 
           <form
