@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.db import get_db
-from app.core.rate_limit import SlidingWindowLimiter
+from app.core.rate_limit import access_token_limiter
 from app.core.security import PAT_PREFIX, decode_access_token
 from app.models.personal_access_token import TokenScope
 from app.models.user import User, UserRole, UserStatus
@@ -19,8 +19,6 @@ bearer_scheme = HTTPBearer(auto_error=False)
 # Only mutating HTTP methods need the write scope; everything a read-only token
 # can reach must stay side-effect free (spec #33, #85).
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
-
-access_token_limiter = SlidingWindowLimiter(settings.pat_rate_limit_per_minute)
 
 
 def get_current_user(

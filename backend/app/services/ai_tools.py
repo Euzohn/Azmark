@@ -71,12 +71,21 @@ class ToolDef:
     proposal: Callable[[dict], AiProposal] | None = None
 
 
+def _clamp_limit(value, default: int) -> int:
+    """Tool arguments come from models and agents; never trust the type."""
+    try:
+        limit = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(1, min(limit, 50))
+
+
 async def _search_records(db: Session, user_id: uuid.UUID, args: dict) -> dict:
     from app.repositories.transport import TransportRepository
 
     query = args.get("query", "")
     record_type = args.get("record_type")
-    limit = min(int(args.get("limit", 20)), 50)
+    limit = _clamp_limit(args.get("limit"), 20)
     repo = TransportRepository(db)
     records = repo.search(user_id=user_id, query=query, record_type=record_type, limit=limit)
     return {"count": len(records), "items": [_compact_record(r) for r in records]}
@@ -117,6 +126,52 @@ async def _get_record(db: Session, user_id: uuid.UUID, args: dict) -> dict:
     compact = _compact_record(record)
     compact["notes"] = record.notes
     return compact
+
+
+def _compact_trip(trip) -> dict:
+    """Trip header without owner ids — safe for both the chat and MCP layers."""
+    return {
+        "id": str(trip.id),
+        "name": trip.name,
+        "description": trip.description,
+        "start_date": trip.start_date.isoformat() if trip.start_date else None,
+        "end_date": trip.end_date.isoformat() if trip.end_date else None,
+        "origin": trip.origin,
+        "destination": trip.destination,
+        "status": trip.status,
+    }
+
+
+async def _list_trips(db: Session, user_id: uuid.UUID, args: dict) -> dict:
+    """Most recent trips first; ``limit`` is capped so a loop cannot flood."""
+    from app.services.trip import TripService
+
+    limit = _clamp_limit(args.get("limit"), 20)
+    trips, total = TripService(db).list_trips(user_id=user_id, page=1, page_size=limit)
+    return {"count": len(trips), "total": total, "items": [_compact_trip(t) for t in trips]}
+
+
+async def _get_trip(db: Session, user_id: uuid.UUID, args: dict) -> dict:
+    from app.services.trip import TripNotFoundError, TripService
+
+    trip_id = args.get("trip_id") or args.get("id")
+    if not trip_id:
+        return {"error": "trip_id is required"}
+    try:
+        parsed_id = uuid.UUID(str(trip_id))
+    except (ValueError, TypeError):
+        return {"error": "invalid trip id"}
+
+    service = TripService(db)
+    try:
+        trip = service.get_trip(user_id=user_id, trip_id=parsed_id)
+    except TripNotFoundError:
+        return {"error": "trip not found"}
+
+    # Read-only on purpose: unlike ``list_items`` this does not materialise
+    # TripItem rows, so a read token never writes as a side effect.
+    records = service.list_records(user_id=user_id, trip_id=parsed_id)
+    return {**_compact_trip(trip), "records": [_compact_record(r) for r in records]}
 
 
 def _flight_source_summary(data) -> dict | None:
@@ -521,6 +576,38 @@ TOOLS: dict[str, ToolDef] = {
         permission=ToolPermission.READ,
         read=_get_record,
     ),
+    "list_trips": ToolDef(
+        name="list_trips",
+        description=(
+            "List the user's trips, most recent first. Use it to find a trip id "
+            "before calling get_trip. Returns name, dates, origin, destination, "
+            "status and the total number of trips."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+            },
+        },
+        permission=ToolPermission.READ,
+        read=_list_trips,
+    ),
+    "get_trip": ToolDef(
+        name="get_trip",
+        description=(
+            "Get one trip by id with its transport records in chronological "
+            "order (compact fields, never sensitive PNR/ticket data)."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "trip_id": {"type": "string", "description": "The trip UUID"},
+            },
+            "required": ["trip_id"],
+        },
+        permission=ToolPermission.READ,
+        read=_get_trip,
+    ),
     "lookup_flight": ToolDef(
         name="lookup_flight",
         description=(
@@ -834,3 +921,16 @@ def tool_schemas() -> list[dict]:
         }
         for tool in TOOLS.values()
     ]
+
+
+# READ-only tools exposed by the MCP server (spec #85). The MCP layer filters on
+# this tuple, so adding a tool here is the only way to publish it to agents.
+# ``list_trips`` is an extra: #85 lists get_trip but nothing that yields trip
+# ids, which would leave that tool unreachable.
+MCP_READ_TOOL_NAMES: tuple[str, ...] = (
+    "search_records",
+    "get_record",
+    "list_trips",
+    "get_trip",
+    "get_statistics",
+)

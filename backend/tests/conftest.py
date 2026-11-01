@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from contextlib import nullcontext
 
 import pytest
 from fastapi.testclient import TestClient
@@ -64,12 +65,21 @@ def storage() -> FakeStorageProvider:
 
 
 @pytest.fixture
-def client(db: Session, storage: FakeStorageProvider) -> Generator[TestClient, None, None]:
+def client(
+    db: Session, storage: FakeStorageProvider, monkeypatch: pytest.MonkeyPatch
+) -> Generator[TestClient, None, None]:
     def override_get_db() -> Generator[Session, None, None]:
         yield db
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_storage_provider] = lambda: storage
+
+    # The MCP endpoint is a raw ASGI mount, so it cannot use get_db; point its
+    # session scope at the same in-memory session.
+    from app.mcp import db as mcp_db
+
+    monkeypatch.setattr(mcp_db, "session_scope", lambda: nullcontext(db))
+
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()

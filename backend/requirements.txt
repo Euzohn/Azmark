@@ -11,3 +11,4 @@ cryptography>=42.0
 httpx>=0.27
 python-multipart>=0.0.9
 boto3>=1.34,<2.0
+mcp>=2.3,<3.0

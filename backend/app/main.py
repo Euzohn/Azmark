@@ -6,15 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
 from app.core.config import settings
+from app.mcp.server import MCPMount
 from app.services.admin import bootstrap_admin_from_env
-
-
-@asynccontextmanager
-async def lifespan(_: FastAPI):
-    # spec #78: create the first admin from ADMIN_EMAIL / ADMIN_PASSWORD.
-    # No-op unless both are configured and no active admin exists.
-    bootstrap_admin_from_env()
-    yield
 
 
 def create_app() -> FastAPI:
@@ -22,6 +15,22 @@ def create_app() -> FastAPI:
         level=getattr(logging, settings.log_level.upper(), logging.INFO),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+
+    # spec #85: MCP shares the api process; MCP_ENABLED=false removes the route.
+    mcp_mount = MCPMount() if settings.mcp_enabled else None
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        # spec #78: create the first admin from ADMIN_EMAIL / ADMIN_PASSWORD.
+        # No-op unless both are configured and no active admin exists.
+        bootstrap_admin_from_env()
+        if mcp_mount is None:
+            yield
+            return
+        # The MCP session manager can only be started once, so it lives here.
+        async with mcp_mount.run():
+            yield
+
     app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
@@ -31,6 +40,9 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.include_router(api_router, prefix=settings.api_v1_prefix)
+    if mcp_mount is not None:
+        # Raw ASGI mount: the MCP transport authenticates its own Bearer token.
+        app.mount(f"{settings.api_v1_prefix}/mcp", mcp_mount)
     return app
 
 

@@ -12,6 +12,8 @@ import time
 from collections import deque
 from threading import Lock
 
+from app.core.config import settings
+
 
 class SlidingWindowLimiter:
     """Allow at most ``limit`` hits per ``window_seconds`` for each key."""
@@ -47,3 +49,8 @@ class SlidingWindowLimiter:
         stale = [key for key, hits in self._hits.items() if not hits or hits[-1] <= cutoff]
         for key in stale:
             del self._hits[key]
+
+
+# One bucket per personal access token, shared by the REST API and MCP so an
+# agent cannot double its budget by switching surfaces (spec #69).
+access_token_limiter = SlidingWindowLimiter(settings.pat_rate_limit_per_minute)

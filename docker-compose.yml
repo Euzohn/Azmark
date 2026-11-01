@@ -58,6 +58,8 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       # 个人访问令牌限流（spec #85），0 关闭。
       PAT_RATE_LIMIT_PER_MINUTE: ${PAT_RATE_LIMIT_PER_MINUTE:-120}
+      # 只读 MCP Server（spec #85）：false 时不挂载 /api/v1/mcp。
+      MCP_ENABLED: ${MCP_ENABLED:-true}
     depends_on:
       postgres:
         condition: service_healthy

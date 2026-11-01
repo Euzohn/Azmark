@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     # Personal access token rate limit per token (spec #69, #85). 0 disables it.
     pat_rate_limit_per_minute: int = 120
 
+    # MCP server for external agents (spec #85), mounted at /api/v1/mcp.
+    # Authenticates personal access tokens only; set false to hide the route.
+    mcp_enabled: bool = True
+
     cors_origins: str = "http://localhost:3000"
 
     aerodatabox_base_url: str = "https://aerodatabox.p.rapidapi.com"
