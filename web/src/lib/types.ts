@@ -509,6 +509,31 @@ export interface AccessTokenList {
   items: AccessToken[];
 }
 
+export type PendingActionStatus = "pending" | "confirmed" | "rejected" | "failed" | "expired";
+
+export interface PendingAction {
+  id: string;
+  action: "create" | "update";
+  record_type: "flight" | "train" | "other";
+  summary: string;
+  payload: Record<string, unknown>;
+  status: PendingActionStatus;
+  result: { record_type: string; record_id: string } | null;
+  error: string | null;
+  token_name: string | null;
+  created_at: string;
+  expires_at: string | null;
+  resolved_at: string | null;
+}
+
+export interface PendingActionList {
+  items: PendingAction[];
+  total: number;
+  page: number;
+  page_size: number;
+  pending_total: number;
+}
+
 export interface AiSettingsRead {
   provider: string;
   model: string;

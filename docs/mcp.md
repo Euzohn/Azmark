@@ -30,6 +30,20 @@ Azmark 内置一个**只读** MCP Server（spec #85）。Claude、Cursor 等 MCP
 
 > `list_trips` 是对 #85 的补充：#85 只列了 `get_trip`，但没有能拿到 trip id 的工具，`get_trip` 会变成死路。
 
+### 写工具（需要 write scope 令牌）
+
+| 工具 | 说明 |
+| --- | --- |
+| `create_record` | 提议新建一条航班 / 火车 / 其他交通记录。**不会立即写入**，返回 `pending_action_id`，需用户在网页「待确认」里批准 |
+| `update_record` | 提议修改已有记录的字段。同样只生成提案，等待批准 |
+| `get_pending_action` | 查询某个提案的状态（pending / confirmed / rejected / failed / expired）。任何 scope 的令牌都能用 |
+
+写入流程（spec #69）：agent 调 `create_record` → Azmark 落一条 `pending_action`（**不碰业务数据**）→ agent 拿到 id 并提示用户去网页确认 → 用户在「待确认」页面点 Confirm → 记录才真正写入，审计日志记录是哪个令牌发起的。
+
+> 删除（DESTRUCTIVE）**不通过 MCP 暴露**。要删记录，请用户在网页操作。这是故意的：destructive 操作的确认必须发生在 agent 无法触及的地方。
+
+> 为什么 agent 不能自己确认？因为 MCP 客户端由模型驱动，提示注入可能让 agent "替用户确认"。确认接口 `/api/v1/pending-actions/*` **只接受浏览器会话（JWT），个人访问令牌一律 403**——这是整个设计的安全支点。
+
 ## 客户端配置
 
 HTTP 传输（支持 `type: "http"` 的客户端，如 Claude Desktop 新版、Cursor）：

@@ -142,11 +142,15 @@ def test_only_read_tools_are_exposed(client):
         "list_trips",
         "get_trip",
         "get_statistics",
+        "get_pending_action",
     }
 
-    is_error, payload = _call(client, secret, "create_transport", {"record_type": "flight"})
+    # A read token cannot reach the write tools at all.
+    is_error, payload = _call(
+        client, secret, "create_record", {"record_type": "flight", "data": {}}
+    )
     assert is_error is True
-    assert "Unknown tool" in payload["error"]
+    assert "read-only" in payload["error"]
     is_error, payload = _call(client, secret, "delete_transport", {"record_id": "x"})
     assert is_error is True
 
@@ -273,6 +277,7 @@ async def test_official_client_round_trip(db, monkeypatch):
                         "list_trips",
                         "get_trip",
                         "get_statistics",
+                        "get_pending_action",
                     }
                     result = await session.call_tool("search_records", {"query": ""})
                     assert result.is_error is False

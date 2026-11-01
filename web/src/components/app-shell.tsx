@@ -4,6 +4,7 @@ import {
   Backpack,
   BarChart3,
   Bot,
+  ClipboardCheck,
   Home,
   List as ListIcon,
   LogOut,
@@ -39,6 +40,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/trips", key: "nav.trips", icon: Backpack },
   { href: "/records", key: "nav.records", icon: ListIcon },
   { href: "/ai", key: "nav.ai", icon: Bot },
+  { href: "/pending", key: "nav.pending", icon: ClipboardCheck },
   { href: "/map", key: "nav.map", icon: MapIcon },
   { href: "/statistics", key: "nav.stats", icon: BarChart3 },
   { href: "/account", key: "nav.account", icon: User },
@@ -69,6 +71,7 @@ const MOBILE_MAIN: NavItem[] = [
 
 const MOBILE_MORE: NavItem[] = [
   { href: "/ai", key: "nav.ai", icon: Bot },
+  { href: "/pending", key: "nav.pending", icon: ClipboardCheck },
   { href: "/statistics", key: "nav.stats", icon: BarChart3 },
   { href: "/account", key: "nav.account", icon: User },
 ];

@@ -46,6 +46,8 @@ import type {
   AccessTokenList,
   AccessTokenCreated,
   AccessTokenScope,
+  PendingAction,
+  PendingActionList,
 } from "@/lib/types";
 
 // Empty by default → requests go to the same origin (/api/v1/...), and the
@@ -326,6 +328,23 @@ export const api = {
   revokeAccessToken: (id: string) =>
     request<void>(`/tokens/${id}/revoke`, { method: "POST" }),
   deleteAccessToken: (id: string) => request<void>(`/tokens/${id}`, { method: "DELETE" }),
+
+  listPendingActions: (params: { status?: string; page?: number; page_size?: number } = {}) => {
+    const query = new URLSearchParams();
+    if (params.status) query.set("status", params.status);
+    if (params.page) query.set("page", String(params.page));
+    if (params.page_size) query.set("page_size", String(params.page_size));
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return request<PendingActionList>(`/pending-actions${suffix}`);
+  },
+  getPendingAction: (id: string) => request<PendingAction>(`/pending-actions/${id}`),
+  confirmPendingAction: (id: string, force: boolean) =>
+    request<PendingAction>(`/pending-actions/${id}/confirm`, {
+      method: "POST",
+      body: JSON.stringify({ force }),
+    }),
+  rejectPendingAction: (id: string) =>
+    request<PendingAction>(`/pending-actions/${id}/reject`, { method: "POST" }),
 
   listAuditLogs: (params: { page?: number; page_size?: number } = {}) => {
     const query = new URLSearchParams();

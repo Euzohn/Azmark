@@ -49,7 +49,8 @@
 | 统计 | 航班/火车明细分组、年份/月份/日期分布（不重复总览指标） |
 | 审计日志 | 登录/失败/注册/改密/改用户名/增改删航班火车；IP 仅存加盐哈希 |
 | Agent 接入 | 个人访问令牌（read/write 权限、可吊销、按令牌限流）；脚本与 AI agent 可直接调用 REST API |
-| MCP | 只读 MCP Server（Streamable HTTP），Claude / Cursor 用访问令牌直连 `/api/v1/mcp` |
+| MCP | MCP Server（Streamable HTTP）：只读工具 + `write` scope 令牌的写提案；Claude / Cursor 用访问令牌直连 `/api/v1/mcp` |
+| 待确认操作 | agent 通过 MCP 提交的写入不会立即生效，需用户在网页「待确认」批准；确认接口拒绝令牌，杜绝 agent 自证 |
 | 国际化 | zh-CN / en-US，浅色/深色/跟随系统，移动端底部导航 |
 
 ## 为什么不同
@@ -89,7 +90,7 @@ curl http://<服务器IP>:3000/api/v1/auth/me \
 - 每个令牌默认每分钟 120 次请求（`PAT_RATE_LIMIT_PER_MINUTE` 可调，0 关闭）。
 - OpenAPI 描述：`/api/v1/openapi.json`。
 
-### MCP（只读）
+### MCP（只读 + 写提案）
 
 同一套工具层也通过 MCP Server 暴露给 Claude、Cursor 等客户端，传输为 Streamable HTTP，凭证仍是个人访问令牌：
 
@@ -105,7 +106,7 @@ curl http://<服务器IP>:3000/api/v1/auth/me \
 }
 ```
 
-暴露的工具：`search_records` / `get_record` / `list_trips` / `get_trip` / `get_statistics`，只读、按令牌所属用户隔离。写工具不暴露（破坏性操作仍需在网页里显式确认）。完整配置、curl 验证与排错见 [`docs/mcp.md`](./docs/mcp.md)。
+只读工具：`search_records` / `get_record` / `list_trips` / `get_trip` / `get_statistics`。`write` scope 令牌还能用 `create_record` / `update_record`，但**它们不会直接写库**——而是生成一个「待确认操作」，由用户在网页「待确认」页面批准后才生效（spec #69）；agent 无法自己确认。完整配置、curl 验证与排错见 [`docs/mcp.md`](./docs/mcp.md)。
 
 ## 快速部署（服务器）
 
@@ -238,7 +239,7 @@ docker compose exec api python -c "from app.core.db import SessionLocal; from ap
 
 - **MVP（已完成）** — 账号、航班 / 火车 / 其他交通记录、行程、附件、地图 / 时间线 / 总览 / 统计、审计日志；AI 对话与自然语言录入（含确认流）；JSON 导入导出；zh-CN / en-US 与移动端适配；个人访问令牌。
 - **P1（下一步）** — 酒店 / 住宿、地点、活动、开销、照片、笔记、OCR、登机牌解析。
-- **P2** — 邮件导入、MCP 写入（复用确认流）、自动化规则、AI 旅行日志、Travel Wrapped、高级 OCR、AI 照片整理。
+- **P2** — 邮件导入、自动化规则、AI 旅行日志、Travel Wrapped、高级 OCR、AI 照片整理。
 - **P3** — 行程协作、家庭账户、多用户共享行程、公开行程页、移动原生 App、插件生态。
 
 ## 参与贡献

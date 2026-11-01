@@ -58,6 +58,7 @@ def get_current_user(
             )
 
         # Audit entries pick this up so the user can see which agent acted.
+        request.state.auth_kind = "access_token"
         request.state.actor = {
             "kind": "access_token",
             "id": str(token.id),
@@ -79,7 +80,25 @@ def get_current_user(
         raise unauthorized
     if user.status != UserStatus.ACTIVE:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
+    request.state.auth_kind = "session"
     return user
+
+
+def get_current_session_user(
+    request: Request, current_user: User = Depends(get_current_user)
+) -> User:
+    """A human in the web UI — personal access tokens are refused (spec #69, #85).
+
+    Approving an agent's proposal is the one action an agent must never be able
+    to perform for itself, otherwise confirmation is theatre. Keeping this check
+    in one dependency makes the rule impossible to forget on a new route.
+    """
+    if getattr(request.state, "auth_kind", None) != "session":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This action requires a signed-in browser session, not an access token",
+        )
+    return current_user
 
 
 def get_current_admin(current_user: User = Depends(get_current_user)) -> User:
@@ -200,3 +219,9 @@ def get_record_service(db: Session = Depends(get_db)):
     from app.services.record import RecordService
 
     return RecordService(db)
+
+
+def get_pending_action_service(db: Session = Depends(get_db)):
+    from app.services.pending_action import PendingActionService
+
+    return PendingActionService(db)

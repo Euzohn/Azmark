@@ -50,3 +50,6 @@ class AuditAction:
     CREATE_ACCESS_TOKEN = "create_access_token"
     REVOKE_ACCESS_TOKEN = "revoke_access_token"
     DELETE_ACCESS_TOKEN = "delete_access_token"
+    CREATE_PENDING_ACTION = "create_pending_action"
+    CONFIRM_PENDING_ACTION = "confirm_pending_action"
+    REJECT_PENDING_ACTION = "reject_pending_action"
