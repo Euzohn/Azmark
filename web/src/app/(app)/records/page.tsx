@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 
 import { AirlineLogo } from "@/components/airline-logo";
 import { AirportName } from "@/components/airport-name";
@@ -34,6 +34,7 @@ import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { parseRecordPage, parseRecordSort } from "@/lib/record-navigation";
+import { saveScroll, takeScroll } from "@/lib/scroll-memory";
 import { formatZonedDateTime, zonedDateKey } from "@/lib/datetime";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
 import type {
@@ -124,6 +125,7 @@ function RecordCard({
 
   return (
     <Link href={`${recordHref(record)}?from=${encodeURIComponent(`/records?${searchParams.toString()}`)}`}
+      onClick={() => saveScroll(window.location.pathname + window.location.search)}
       className="group grid items-center gap-3 border-b border-border bg-card px-4 py-4 last:border-b-0 hover:bg-muted/50 focus-visible:relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:grid-cols-[minmax(0,2fr)_minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_7rem] lg:gap-5 lg:px-5">
         <div className="flex min-w-0 items-center gap-3">
           {record.type === "flight" ? (
@@ -234,6 +236,20 @@ function RecordsContent() {
     queryFn: api.getTimeline,
     enabled: view === "timeline",
   });
+
+  // Coming back from a record detail page, restore where the user left off.
+  // Next.js scrolls to top on every push navigation, so restore once the list
+  // is on screen; the extra frame re-applies after the router's own scroll.
+  const scrollRestored = useRef(false);
+  const listReady = view === "list" ? Boolean(data) : Boolean(timeline);
+  useEffect(() => {
+    if (scrollRestored.current || !listReady) return;
+    scrollRestored.current = true;
+    const y = takeScroll(window.location.pathname + window.location.search);
+    if (y === null) return;
+    window.scrollTo(0, y);
+    requestAnimationFrame(() => window.scrollTo(0, y));
+  }, [listReady]);
 
   const tripNames = new Map<string, string>(
     (trips?.items ?? []).map((trip) => [trip.id, trip.name] as const),

@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { BedDouble, Plus, Search } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,7 @@ import { Fab } from "@/components/ui/fab";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
+import { saveScroll, takeScroll } from "@/lib/scroll-memory";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
 
 const STATUS_VARIANT: Record<string, "neutral" | "success" | "danger"> = {
@@ -29,6 +30,19 @@ export default function HotelsPage() {
     queryKey: ["hotels", { search }],
     queryFn: () => api.listHotels({ search: search || undefined, page_size: 100 }),
   });
+
+  // Coming back from a hotel detail page, restore where the user left off.
+  // Next.js scrolls to top on every push navigation, so restore once the list
+  // is on screen; the extra frame re-applies after the router's own scroll.
+  const scrollRestored = useRef(false);
+  useEffect(() => {
+    if (scrollRestored.current || !data) return;
+    scrollRestored.current = true;
+    const y = takeScroll(window.location.pathname + window.location.search);
+    if (y === null) return;
+    window.scrollTo(0, y);
+    requestAnimationFrame(() => window.scrollTo(0, y));
+  }, [data]);
 
   return (
     <div className="flex flex-col gap-5">
@@ -94,6 +108,7 @@ export default function HotelsPage() {
             <Link
               key={hotel.id}
               href={`/hotels/${hotel.id}`}
+              onClick={() => saveScroll(window.location.pathname + window.location.search)}
               className="group grid items-center gap-3 border-b border-border bg-card px-4 py-4 last:border-b-0 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_7rem] lg:gap-5 lg:px-5"
             >
               <div className="flex min-w-0 items-center gap-3">
