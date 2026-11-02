@@ -3,7 +3,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { BedDouble, Plus, Search } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
 
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -22,14 +23,21 @@ const STATUS_VARIANT: Record<string, "neutral" | "success" | "danger"> = {
   cancelled: "danger",
 };
 
-export default function HotelsPage() {
+function HotelsContent() {
   const { t } = useI18n();
-  const [search, setSearch] = useState("");
+  const searchParams = useSearchParams();
+  const [search, setSearch] = useState(() => searchParams.get("search") ?? "");
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["hotels", { search }],
     queryFn: () => api.listHotels({ search: search || undefined, page_size: 100 }),
   });
+
+  // Keep the search term in the URL so it survives the trip to a detail page.
+  useEffect(() => {
+    const query = search ? `?search=${encodeURIComponent(search)}` : "";
+    window.history.replaceState(null, "", `/hotels${query}`);
+  }, [search]);
 
   // Coming back from a hotel detail page, restore where the user left off.
   // Next.js scrolls to top on every push navigation, so restore once the list
@@ -107,7 +115,7 @@ export default function HotelsPage() {
           {data.items.map((hotel) => (
             <Link
               key={hotel.id}
-              href={`/hotels/${hotel.id}`}
+              href={`/hotels/${hotel.id}?from=${encodeURIComponent(search ? `/hotels?search=${encodeURIComponent(search)}` : "/hotels")}`}
               onClick={() => saveScroll(window.location.pathname + window.location.search)}
               className="group grid items-center gap-3 border-b border-border bg-card px-4 py-4 last:border-b-0 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_7rem] lg:gap-5 lg:px-5"
             >
@@ -144,5 +152,22 @@ export default function HotelsPage() {
         <Plus className="h-6 w-6" />
       </Fab>
     </div>
+  );
+}
+
+export default function HotelsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-col gap-5">
+          <Skeleton className="h-10 w-56" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-24 w-full rounded-xl" />
+          <Skeleton className="h-24 w-full rounded-xl" />
+        </div>
+      }
+    >
+      <HotelsContent />
+    </Suspense>
   );
 }

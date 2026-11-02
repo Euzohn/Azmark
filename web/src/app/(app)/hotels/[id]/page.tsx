@@ -2,8 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
-import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 
 import { AttachmentPanel } from "@/components/attachment-panel";
 import { HotelForm } from "@/components/hotel-form";
@@ -14,11 +14,14 @@ import { Dialog } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { hotelsReturnHref } from "@/lib/record-navigation";
 import type { HotelInput } from "@/lib/types";
 
-export default function HotelDetailPage() {
+function HotelDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const backHref = hotelsReturnHref(searchParams.get("from"));
   const queryClient = useQueryClient();
   const { t } = useI18n();
   const [editing, setEditing] = useState(false);
@@ -56,7 +59,7 @@ export default function HotelDetailPage() {
     mutationFn: () => api.deleteHotel(id),
     onSuccess: async () => {
       await refresh();
-      router.replace("/hotels");
+      router.replace(backHref);
     },
   });
 
@@ -84,7 +87,7 @@ export default function HotelDetailPage() {
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
       <PageHeader
         title={t(editing ? "hotels.edit" : "hotels.detail")}
-        backHref="/hotels"
+        backHref={backHref}
         backLabel={t("common.back")}
         actions={
           editing ? undefined : (
@@ -197,5 +200,13 @@ function DetailSkeleton() {
       <Skeleton className="h-64 w-full rounded-xl" />
       <Skeleton className="h-48 w-full rounded-xl" />
     </div>
+  );
+}
+
+export default function HotelDetailPage() {
+  return (
+    <Suspense fallback={<DetailSkeleton />}>
+      <HotelDetail />
+    </Suspense>
   );
 }
