@@ -24,7 +24,14 @@ import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-store";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
 import { formatZonedDateTime } from "@/lib/datetime";
-import type { AiProposal } from "@/lib/types";
+import type {
+  AiProposal,
+  FlightInput,
+  HotelInput,
+  OtherTransportInput,
+  TrainInput,
+  TripInput,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const HISTORY_KEY = "azmark-ai-chat-history";
@@ -99,6 +106,24 @@ function formatProposalData(
   locale: string,
 ): string[] {
   const lines: string[] = [];
+  // Trip proposals carry a `name` field (spec #12).
+  if (data.name) {
+    lines.push(data.name as string);
+    if (data.start_date) {
+      const range = data.end_date
+        ? `${data.start_date} → ${data.end_date}`
+        : String(data.start_date);
+      lines.push(`${t("ai.proposal.tripDates")}: ${range}`);
+    }
+    if (data.origin && data.destination) {
+      lines.push(`${data.origin} → ${data.destination}`);
+    } else if (data.destination) {
+      lines.push(data.destination as string);
+    }
+    if (data.description) lines.push(data.description as string);
+    if (data.status) lines.push(String(data.status));
+    return lines;
+  }
   // Hotel proposals carry a `hotel` name and date-based fields (spec #17).
   if (data.hotel) {
     lines.push(data.hotel as string);
@@ -386,12 +411,14 @@ export default function AiChatPage() {
     queryClient.invalidateQueries({ queryKey: ["flights"] });
     queryClient.invalidateQueries({ queryKey: ["trains"] });
     queryClient.invalidateQueries({ queryKey: ["transports"] });
+    queryClient.invalidateQueries({ queryKey: ["hotels"] });
+    queryClient.invalidateQueries({ queryKey: ["trips"] });
     queryClient.invalidateQueries({ queryKey: ["timeline"] });
     queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     queryClient.invalidateQueries({ queryKey: ["statistics"] });
   };
 
-  const confirmCreate = useMutation({
+  const confirmWrite = useMutation({
     mutationFn: async ({
       proposal,
       force,
@@ -400,6 +427,31 @@ export default function AiChatPage() {
       force: boolean;
     }) => {
       const data = proposal.data as Record<string, unknown>;
+      const isUpdate = proposal.action.startsWith("update");
+      const id = String(data.record_id ?? "");
+      const fields = Object.fromEntries(
+        Object.entries(data).filter(([key]) => key !== "record_id"),
+      );
+
+      if (isUpdate) {
+        if (proposal.record_type === "flight") {
+          return api.updateFlight(id, fields as unknown as FlightInput);
+        }
+        if (proposal.record_type === "train") {
+          return api.updateTrain(id, fields as unknown as TrainInput);
+        }
+        if (proposal.record_type === "hotel") {
+          return api.updateHotel(id, fields as unknown as HotelInput);
+        }
+        if (proposal.record_type === "trip") {
+          return api.updateTrip(id, fields as unknown as Partial<TripInput>);
+        }
+        return api.updateOtherTransport(
+          id,
+          fields as unknown as OtherTransportInput,
+        );
+      }
+
       if (proposal.record_type === "flight") {
         return api.createFlight(data, force);
       }
@@ -409,6 +461,9 @@ export default function AiChatPage() {
       if (proposal.record_type === "hotel") {
         return api.createHotel(data, force);
       }
+      if (proposal.record_type === "trip") {
+        return api.createTrip(data as unknown as TripInput);
+      }
       return api.createOtherTransport(data, force);
     },
     onSuccess: () => invalidateAll(),
@@ -416,8 +471,9 @@ export default function AiChatPage() {
 
   const confirmDelete = useMutation({
     mutationFn: async (proposal: AiProposal) => {
-      const id = (proposal.data as Record<string, unknown>)
-        .record_id as string;
+      const id = (proposal.data as Record<string, unknown>).record_id as string;
+      if (proposal.record_type === "trip") return api.deleteTrip(id);
+      if (proposal.record_type === "hotel") return api.deleteHotel(id);
       if (proposal.record_type === "flight") return api.deleteFlight(id);
       if (proposal.record_type === "train") return api.deleteTrain(id);
       return api.deleteOtherTransport(id);
@@ -426,13 +482,13 @@ export default function AiChatPage() {
   });
 
   const handleConfirm = (messageId: string, proposal: AiProposal) => {
-    if (proposal.action === "delete_transport") {
+    if (proposal.action.startsWith("delete")) {
       if (!window.confirm(t("ai.deleteConfirm"))) return;
       confirmDelete.mutate(proposal, {
         onSuccess: () => markProposal(messageId, proposal.id, "saved"),
       });
     } else {
-      confirmCreate.mutate(
+      confirmWrite.mutate(
         { proposal, force: false },
         {
           onSuccess: () => markProposal(messageId, proposal.id, "saved"),
@@ -606,7 +662,7 @@ export default function AiChatPage() {
                           proposal={proposal}
                           onSave={() => handleConfirm(msg.id, proposal)}
                           onForce={() =>
-                            confirmCreate.mutate(
+                            confirmWrite.mutate(
                               { proposal, force: true },
                               {
                                 onSuccess: () =>
@@ -616,7 +672,7 @@ export default function AiChatPage() {
                           }
                           onCancel={() => markProposal(msg.id, proposal.id, "cancelled")}
                           saving={
-                            confirmCreate.isPending || confirmDelete.isPending
+                            confirmWrite.isPending || confirmDelete.isPending
                           }
                         />
                       ))}
@@ -726,7 +782,8 @@ function ProposalCard({
   saving: boolean;
 }) {
   const { t, locale } = useI18n();
-  const isDelete = proposal.action === "delete_transport";
+  const isDelete = proposal.action.startsWith("delete");
+  const isUpdate = proposal.action.startsWith("update");
   const saved = proposal.status === "saved";
   const cancelled = proposal.status === "cancelled";
   const duplicate = proposal.status === "duplicate";
@@ -738,7 +795,11 @@ function ProposalCard({
         ? "flights"
         : proposal.record_type === "train"
           ? "trains"
-          : "transports";
+          : proposal.record_type === "hotel"
+            ? "hotels"
+            : proposal.record_type === "trip"
+              ? "trips"
+              : "transports";
     return (
       <div className="rounded-lg border border-warning/40 bg-warning/5 px-3 py-2.5">
         <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-warning">
@@ -787,7 +848,11 @@ function ProposalCard({
           <Sparkles className="h-3.5 w-3.5 text-primary" />
         )}
         <span>
-          {isDelete ? t("ai.proposal.delete") : t("ai.proposal.create")}{" "}
+          {isDelete
+            ? t("ai.proposal.delete")
+            : isUpdate
+              ? t("ai.proposal.update")
+              : t("ai.proposal.create")}{" "}
           {proposal.record_type}
         </span>
       </div>

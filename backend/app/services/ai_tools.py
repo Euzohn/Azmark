@@ -602,6 +602,83 @@ def _create_hotel_proposal(args: dict) -> AiProposal:
     )
 
 
+def _create_trip_proposal(args: dict) -> AiProposal:
+    """Propose creating a trip (spec #12). Never executes immediately (#69)."""
+    data = dict(args.get("data", {}) or {})
+    summary_parts = ["Create trip", data.get("name") or "—"]
+    if data.get("start_date"):
+        summary_parts.append(str(data["start_date"]))
+    if data.get("end_date"):
+        summary_parts.append(f"→ {data['end_date']}")
+    return AiProposal(
+        id=uuid.uuid4().hex,
+        action="create_trip",
+        record_type="trip",
+        summary=" · ".join(summary_parts),
+        data=data,
+    )
+
+
+def _update_proposal(args: dict, *, action: str, record_type: str, label: str) -> AiProposal:
+    """Shared shape for update proposals: ``record_id`` plus the changed fields.
+
+    The frontend splits ``record_id`` off and PATCHes the rest, so this mirrors
+    what the REST update endpoints expect.
+    """
+    record_id = args.get("record_id") or args.get("id") or ""
+    fields = dict(args.get("data", {}) or {})
+    summary = f"Update {label} {record_id or '—'}"
+    if fields:
+        summary = f"{summary} · {', '.join(sorted(fields))}"
+    return AiProposal(
+        id=uuid.uuid4().hex,
+        action=action,
+        record_type=record_type,
+        summary=summary,
+        data={"record_id": record_id, **fields},
+    )
+
+
+def _update_transport_proposal(args: dict) -> AiProposal:
+    """Propose updating a flight/train/other record (spec #69)."""
+    record_type = args.get("record_type") or args.get("type") or "other"
+    return _update_proposal(
+        args, action="update_transport", record_type=record_type, label=record_type
+    )
+
+
+def _update_hotel_proposal(args: dict) -> AiProposal:
+    """Propose updating a hotel stay (spec #17, #69)."""
+    return _update_proposal(args, action="update_hotel", record_type="hotel", label="hotel")
+
+
+def _update_trip_proposal(args: dict) -> AiProposal:
+    """Propose updating a trip header (spec #12, #69)."""
+    return _update_proposal(args, action="update_trip", record_type="trip", label="trip")
+
+
+def _delete_proposal(args: dict, *, action: str, record_type: str, label: str) -> AiProposal:
+    """Shared shape for destructive deletes: only a ``record_id`` is carried."""
+    record_id = args.get("record_id") or args.get("id") or ""
+    return AiProposal(
+        id=uuid.uuid4().hex,
+        action=action,
+        record_type=record_type,
+        summary=f"Delete {label} {record_id or '—'}",
+        data={"record_id": record_id},
+    )
+
+
+def _delete_hotel_proposal(args: dict) -> AiProposal:
+    """Propose deleting a hotel stay (spec #17, #69)."""
+    return _delete_proposal(args, action="delete_hotel", record_type="hotel", label="hotel")
+
+
+def _delete_trip_proposal(args: dict) -> AiProposal:
+    """Propose deleting a trip; its records are detached server-side (spec #12)."""
+    return _delete_proposal(args, action="delete_trip", record_type="trip", label="trip")
+
+
 TOOLS: dict[str, ToolDef] = {
     "search_records": ToolDef(
         name="search_records",
@@ -967,9 +1044,12 @@ TOOLS: dict[str, ToolDef] = {
                                 "standing",
                             ],
                             "description": (
-                                "Train seat position: window (A/F), aisle (C/D), middle (B), "
-                                "sleeper for berths (上/中/下铺), standing for 无座. The "
-                                "server backfills it from the seat number when omitted."
+                                "Physical seat position, applies to BOTH flights "
+                                "and trains: window (A/F), aisle (C/D), middle "
+                                "(B), sleeper for berths (上/中/下铺), reclining "
+                                "for 可躺座椅, standing for 无座. Fill it yourself "
+                                "when you know the seat; the server also "
+                                "backfills it from the seat number when omitted."
                             ),
                         },
                         "ticket_type": {
@@ -990,6 +1070,23 @@ TOOLS: dict[str, ToolDef] = {
                             "type": "string",
                             "description": ("Ticket number. SENSITIVE — extract from image only."),
                         },
+                        "purchase_credential_type": {
+                            "type": "string",
+                            "description": (
+                                "Type of credential used to buy the ticket, "
+                                "e.g. 身份证/护照/通行证. SENSITIVE — extract from "
+                                "image or user text only."
+                            ),
+                        },
+                        "purchase_credential": {
+                            "type": "string",
+                            "description": (
+                                "The credential number used to purchase the "
+                                "ticket (ID card / passport / permit number). "
+                                "SENSITIVE — extract from image or user text "
+                                "only, never guess."
+                            ),
+                        },
                         "price": {"type": "number"},
                         "currency": {
                             "type": "string",
@@ -1000,6 +1097,13 @@ TOOLS: dict[str, ToolDef] = {
                         },
                         "distance": {"type": "number", "description": "Distance in km"},
                         "notes": {"type": "string"},
+                        "trip_id": {
+                            "type": "string",
+                            "description": (
+                                "UUID of the trip to attach this record to. "
+                                "Omit if the record is standalone."
+                            ),
+                        },
                     },
                     "required": ["origin", "destination"],
                 },
@@ -1058,6 +1162,190 @@ TOOLS: dict[str, ToolDef] = {
         permission=ToolPermission.WRITE,
         proposal=_create_hotel_proposal,
     ),
+    "create_trip": ToolDef(
+        name="create_trip",
+        description=(
+            "Propose creating a trip (a journey that groups flights, trains and "
+            "hotel stays). Nothing is saved: the user must confirm in the UI. "
+            "Pass name (required), optionally start_date / end_date (YYYY-MM-DD), "
+            "origin, destination, description and status (planned/ongoing/"
+            "completed/cancelled)."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Trip name (required)",
+                        },
+                        "start_date": {
+                            "type": "string",
+                            "description": "Start date YYYY-MM-DD",
+                        },
+                        "end_date": {
+                            "type": "string",
+                            "description": "End date YYYY-MM-DD",
+                        },
+                        "origin": {"type": "string"},
+                        "destination": {"type": "string"},
+                        "description": {"type": "string"},
+                        "status": {
+                            "type": "string",
+                            "enum": ["planned", "ongoing", "completed", "cancelled"],
+                        },
+                    },
+                    "required": ["name"],
+                },
+            },
+            "required": ["data"],
+        },
+        permission=ToolPermission.WRITE,
+        proposal=_create_trip_proposal,
+    ),
+    "update_transport": ToolDef(
+        name="update_transport",
+        description=(
+            "Propose changing fields on an existing flight/train/other record. "
+            "Nothing is saved until the user confirms. Pass record_type, "
+            "record_id, and only the fields that should change (e.g. a new "
+            "seat, gate, time or status)."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "record_type": {
+                    "type": "string",
+                    "enum": ["flight", "train", "other"],
+                },
+                "record_id": {"type": "string", "description": "The record UUID"},
+                "data": {
+                    "type": "object",
+                    "description": (
+                        "Only the fields that should change. See create_transport "
+                        "for field meanings; the same fields are editable here."
+                    ),
+                    "properties": {
+                        "origin": {"type": "string"},
+                        "destination": {"type": "string"},
+                        "status": {
+                            "type": "string",
+                            "enum": ["scheduled", "completed", "cancelled"],
+                            "description": "Infer from dates when not stated.",
+                        },
+                        "departure_time": {
+                            "type": "string",
+                            "description": "ISO 8601 datetime with offset",
+                        },
+                        "arrival_time": {
+                            "type": "string",
+                            "description": "ISO 8601 datetime with offset",
+                        },
+                        "actual_departure_time": {"type": "string"},
+                        "actual_arrival_time": {"type": "string"},
+                        "departure_timezone": {"type": "string"},
+                        "arrival_timezone": {"type": "string"},
+                        "carrier": {"type": "string"},
+                        "airline_code": {"type": "string"},
+                        "service_number": {"type": "string"},
+                        "cabin_class": {"type": "string"},
+                        "seat": {"type": "string"},
+                        "seat_type": {
+                            "type": "string",
+                            "enum": [
+                                "window",
+                                "aisle",
+                                "middle",
+                                "sleeper",
+                                "reclining",
+                                "standing",
+                            ],
+                            "description": (
+                                "Physical seat position (flights & trains): "
+                                "window (A/F), aisle (C/D), middle (B), sleeper "
+                                "for berths, standing for 无座."
+                            ),
+                        },
+                        "departure_terminal": {"type": "string"},
+                        "departure_gate": {"type": "string"},
+                        "arrival_terminal": {"type": "string"},
+                        "arrival_gate": {"type": "string"},
+                        "check_in_desk": {"type": "string"},
+                        "baggage_belt": {"type": "string"},
+                        "aircraft_model": {"type": "string"},
+                        "aircraft_reg": {"type": "string"},
+                        "train_type": {"type": "string"},
+                        "carriage": {"type": "string"},
+                        "ticket_type": {"type": "string"},
+                        "vehicle_type": {"type": "string"},
+                        "booking_reference": {
+                            "type": "string",
+                            "description": "SENSITIVE — from image or user text only.",
+                        },
+                        "ticket_number": {
+                            "type": "string",
+                            "description": "SENSITIVE — from image or user text only.",
+                        },
+                        "purchase_credential_type": {
+                            "type": "string",
+                            "description": "SENSITIVE — from image or user text only.",
+                        },
+                        "purchase_credential": {
+                            "type": "string",
+                            "description": "SENSITIVE — from image or user text only.",
+                        },
+                        "price": {"type": "number"},
+                        "currency": {"type": "string"},
+                        "distance": {"type": "number"},
+                        "notes": {"type": "string"},
+                        "trip_id": {"type": "string"},
+                    },
+                },
+            },
+            "required": ["record_type", "record_id", "data"],
+        },
+        permission=ToolPermission.WRITE,
+        proposal=_update_transport_proposal,
+    ),
+    "update_hotel": ToolDef(
+        name="update_hotel",
+        description=(
+            "Propose changing fields on an existing hotel stay. Nothing is saved "
+            "until the user confirms. Pass record_id and only the fields that "
+            "should change."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "record_id": {"type": "string", "description": "The hotel UUID"},
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "hotel": {"type": "string"},
+                        "check_in": {"type": "string"},
+                        "check_out": {"type": "string"},
+                        "room_type": {"type": "string"},
+                        "room_number": {"type": "string"},
+                        "address": {"type": "string"},
+                        "price": {"type": "number"},
+                        "currency": {"type": "string"},
+                        "booking_reference": {"type": "string"},
+                        "status": {
+                            "type": "string",
+                            "enum": ["scheduled", "completed", "cancelled"],
+                        },
+                        "notes": {"type": "string"},
+                        "trip_id": {"type": "string"},
+                    },
+                },
+            },
+            "required": ["record_id", "data"],
+        },
+        permission=ToolPermission.WRITE,
+        proposal=_update_hotel_proposal,
+    ),
     "delete_transport": ToolDef(
         name="delete_transport",
         description=(
@@ -1076,6 +1364,71 @@ TOOLS: dict[str, ToolDef] = {
         },
         permission=ToolPermission.DESTRUCTIVE,
         proposal=_delete_transport_proposal,
+    ),
+    "delete_hotel": ToolDef(
+        name="delete_hotel",
+        description=(
+            "Propose deleting a hotel stay. This is DESTRUCTIVE: the user must "
+            "explicitly confirm before anything is removed."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "record_id": {"type": "string", "description": "The hotel UUID"},
+            },
+            "required": ["record_id"],
+        },
+        permission=ToolPermission.DESTRUCTIVE,
+        proposal=_delete_hotel_proposal,
+    ),
+    "update_trip": ToolDef(
+        name="update_trip",
+        description=(
+            "Propose changing a trip header (name, dates, origin, destination, "
+            "status or description). Nothing is saved until the user confirms. "
+            "Pass record_id and only the fields that should change."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "record_id": {"type": "string", "description": "The trip UUID"},
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "start_date": {"type": "string"},
+                        "end_date": {"type": "string"},
+                        "origin": {"type": "string"},
+                        "destination": {"type": "string"},
+                        "description": {"type": "string"},
+                        "status": {
+                            "type": "string",
+                            "enum": ["planned", "ongoing", "completed", "cancelled"],
+                        },
+                    },
+                },
+            },
+            "required": ["record_id", "data"],
+        },
+        permission=ToolPermission.WRITE,
+        proposal=_update_trip_proposal,
+    ),
+    "delete_trip": ToolDef(
+        name="delete_trip",
+        description=(
+            "Propose deleting a trip. This is DESTRUCTIVE: the user must "
+            "explicitly confirm. Records attached to the trip are detached "
+            "server-side, not deleted."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "record_id": {"type": "string", "description": "The trip UUID"},
+            },
+            "required": ["record_id"],
+        },
+        permission=ToolPermission.DESTRUCTIVE,
+        proposal=_delete_trip_proposal,
     ),
 }
 

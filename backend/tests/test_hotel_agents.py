@@ -245,3 +245,219 @@ def test_chat_create_hotel_proposal(client, monkeypatch):
     assert prop["data"]["hotel"] == "Marina Bay Sands"
     # Nothing was written without confirmation.
     assert client.get("/api/v1/hotels", headers=headers).json()["total"] == 0
+
+
+TRIP = {
+    "name": "东京之行",
+    "start_date": "2026-04-29",
+    "end_date": "2026-05-05",
+    "origin": "上海",
+    "destination": "东京",
+    "status": "planned",
+}
+
+
+def test_chat_create_trip_proposal(client, monkeypatch):
+    headers = auth_headers(register_and_login(client, "ai_trip")["access_token"])
+    client.put(
+        "/api/v1/settings/ai",
+        json={
+            "provider": "openai_compatible",
+            "model": "test-model",
+            "base_url": "https://fake.example/v1",
+            "api_key": "fake-key",
+        },
+        headers=headers,
+    )
+
+    fake = _ScriptedProvider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    LLMToolCall(
+                        id="call_1",
+                        name="create_trip",
+                        arguments={"data": TRIP},
+                    )
+                ],
+            ),
+            LLMResponse(content="I prepared a Tokyo trip, please confirm."),
+        ]
+    )
+    monkeypatch.setattr(agent_mod.AiAgentService, "_build_provider", lambda self, user_id: fake)
+
+    resp = client.post(
+        "/api/v1/ai/chat",
+        json={"message": "帮我记一次东京之行"},
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body["proposals"]) == 1
+    prop = body["proposals"][0]
+    assert prop["action"] == "create_trip"
+    assert prop["record_type"] == "trip"
+    assert prop["data"]["name"] == "东京之行"
+    # Nothing was written without confirmation.
+    assert client.get("/api/v1/trips", headers=headers).json()["total"] == 0
+
+
+# -- chat update / delete proposals -------------------------------------------
+
+
+FLIGHT = {
+    "origin": "HKG",
+    "destination": "SIN",
+    "departure_time": "2026-09-26T01:45:00Z",
+    "arrival_time": "2026-09-26T05:50:00Z",
+    "carrier": "Cathay Pacific",
+    "airline_code": "CX",
+    "service_number": "CX659",
+    "distance": "2540.0",
+}
+
+
+def _configure_chat_ai(client, headers) -> None:
+    client.put(
+        "/api/v1/settings/ai",
+        json={
+            "provider": "openai_compatible",
+            "model": "test-model",
+            "base_url": "https://fake.example/v1",
+            "api_key": "fake-key",
+        },
+        headers=headers,
+    )
+
+
+def _chat_with_tool(client, headers, monkeypatch, name, arguments, message="go"):
+    """Run one chat turn where the LLM calls ``name(arguments)``; return proposals."""
+    fake = _ScriptedProvider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[LLMToolCall(id="call_1", name=name, arguments=arguments)],
+            ),
+            LLMResponse(content="Done, please confirm."),
+        ]
+    )
+    monkeypatch.setattr(agent_mod.AiAgentService, "_build_provider", lambda self, user_id: fake)
+    resp = client.post(
+        "/api/v1/ai/chat",
+        json={"message": message},
+        headers=headers,
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert len(body["proposals"]) == 1, body
+    return body["proposals"][0]
+
+
+def test_chat_update_trip_proposal(client, monkeypatch):
+    headers = auth_headers(register_and_login(client, "ai_trip_upd")["access_token"])
+    _configure_chat_ai(client, headers)
+    trip = client.post("/api/v1/trips", json=TRIP, headers=headers).json()
+
+    prop = _chat_with_tool(
+        client,
+        headers,
+        monkeypatch,
+        "update_trip",
+        {"record_id": trip["id"], "data": {"name": "东京之行（改）"}},
+        message="把行程名字改一下",
+    )
+    assert prop["action"] == "update_trip"
+    assert prop["record_type"] == "trip"
+    assert prop["data"]["record_id"] == trip["id"]
+    assert prop["data"]["name"] == "东京之行（改）"
+    # Only the changed field rides along — no full resend.
+    assert set(prop["data"]) == {"record_id", "name"}
+    # Nothing was written without confirmation.
+    got = client.get(f"/api/v1/trips/{trip['id']}", headers=headers).json()
+    assert got["name"] == "东京之行"
+
+
+def test_chat_delete_trip_proposal(client, monkeypatch):
+    headers = auth_headers(register_and_login(client, "ai_trip_del")["access_token"])
+    _configure_chat_ai(client, headers)
+    trip = client.post("/api/v1/trips", json=TRIP, headers=headers).json()
+
+    prop = _chat_with_tool(
+        client,
+        headers,
+        monkeypatch,
+        "delete_trip",
+        {"record_id": trip["id"]},
+        message="删掉这个行程",
+    )
+    assert prop["action"] == "delete_trip"
+    assert prop["record_type"] == "trip"
+    assert prop["data"] == {"record_id": trip["id"]}
+    # Still exists until the user confirms.
+    assert client.get(f"/api/v1/trips/{trip['id']}", headers=headers).status_code == 200
+
+
+def test_chat_update_hotel_proposal(client, monkeypatch):
+    headers = auth_headers(register_and_login(client, "ai_hotel_upd")["access_token"])
+    _configure_chat_ai(client, headers)
+    hotel = client.post("/api/v1/hotels", json=HOTEL, headers=headers).json()
+
+    prop = _chat_with_tool(
+        client,
+        headers,
+        monkeypatch,
+        "update_hotel",
+        {"record_id": hotel["id"], "data": {"room_number": "1500"}},
+        message="把房号改成 1500",
+    )
+    assert prop["action"] == "update_hotel"
+    assert prop["record_type"] == "hotel"
+    assert prop["data"] == {"record_id": hotel["id"], "room_number": "1500"}
+    # Nothing was written without confirmation.
+    got = client.get(f"/api/v1/hotels/{hotel['id']}", headers=headers).json()
+    assert got["room_number"] == "1208"
+
+
+def test_chat_delete_hotel_proposal(client, monkeypatch):
+    headers = auth_headers(register_and_login(client, "ai_hotel_del")["access_token"])
+    _configure_chat_ai(client, headers)
+    hotel = client.post("/api/v1/hotels", json=HOTEL, headers=headers).json()
+
+    prop = _chat_with_tool(
+        client,
+        headers,
+        monkeypatch,
+        "delete_hotel",
+        {"record_id": hotel["id"]},
+        message="删掉这条酒店记录",
+    )
+    assert prop["action"] == "delete_hotel"
+    assert prop["record_type"] == "hotel"
+    assert prop["data"] == {"record_id": hotel["id"]}
+    assert client.get(f"/api/v1/hotels/{hotel['id']}", headers=headers).status_code == 200
+
+
+def test_chat_update_transport_proposal(client, monkeypatch):
+    headers = auth_headers(register_and_login(client, "ai_flight_upd")["access_token"])
+    _configure_chat_ai(client, headers)
+    flight = client.post("/api/v1/flights", json=FLIGHT, headers=headers).json()
+
+    prop = _chat_with_tool(
+        client,
+        headers,
+        monkeypatch,
+        "update_transport",
+        {
+            "record_type": "flight",
+            "record_id": flight["id"],
+            "data": {"departure_gate": "A12"},
+        },
+        message="把登机口改成 A12",
+    )
+    assert prop["action"] == "update_transport"
+    assert prop["record_type"] == "flight"
+    assert prop["data"] == {"record_id": flight["id"], "departure_gate": "A12"}
+    # Nothing was written without confirmation.
+    got = client.get(f"/api/v1/flights/{flight['id']}", headers=headers).json()
+    assert got.get("departure_gate") in (None, "")
