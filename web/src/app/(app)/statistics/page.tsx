@@ -45,10 +45,22 @@ const SEAT_TYPE_KEYS: Record<string, TranslationKey> = {
 };
 
 const TRAIN_TYPE_KEYS: Record<string, TranslationKey> = {
-  high_speed: "trains.trainType.high_speed",
-  intercity: "trains.trainType.intercity",
-  conventional: "trains.trainType.conventional",
-  night: "trains.trainType.night",
+  新时速: "trains.trainType.x",
+  高铁: "trains.trainType.g",
+  动车300: "trains.trainType.t",
+  动车250: "trains.trainType.k",
+  动力集中: "trains.trainType.d",
+  城际: "trains.trainType.c",
+  市郊: "trains.trainType.s",
+  快速160: "trains.trainType.z",
+  快速140: "trains.trainType.n",
+  普速: "trains.trainType.v",
+  旅游: "trains.trainType.y",
+  // Legacy enum values created before the 2026 revision.
+  high_speed: "trains.trainType.g",
+  intercity: "trains.trainType.c",
+  conventional: "trains.trainType.v",
+  night: "trains.trainType.y",
 };
 
 const ALLIANCE_KEYS: Record<string, TranslationKey> = {

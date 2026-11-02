@@ -151,10 +151,13 @@ CA → Air China, MU → China Eastern).
 
 3. From a train number (e.g. "G1234"):
    - service_number = "G1234".
-   - train_type = the category named by the leading letter: G=高铁 \
-(high-speed), D=动车 (EMU), C=城际 (intercity), Z=直达特快 (direct express), \
-T=特快 (express), K=快速 (fast), L=临时 (temporary), Y=旅游 (tourist). If you \
-do not recognize the letter, omit train_type rather than guessing.
+   - train_type = the category named by the leading letter (2026 revision): \
+X=新时速 (≥350 km/h future CR), G=高铁 (350 km/h CR), T=动车300 (300 km/h EMU), \
+K=动车250 (200–250 km/h EMU), D=动力集中 (≤200 km/h power-concentrated EMU), \
+C=城际 (≤200 km/h intercity), S=市郊 (≤160 km/h suburban), Z=快速160 \
+(160 km/h 快速旅客列车), N=快速140 (140 km/h 快速旅客列车), V=普速 (120 km/h \
+普速旅客列车), Y=旅游 (tourist train). If you do not recognize the letter, \
+omit train_type rather than guessing.
    - carrier = the rail operator when known (Chinese train numbers → \
 中国铁路); never override an operator the user named.
    - Also fill carriage, seat_type, ticket_type, seat, cabin_class and \

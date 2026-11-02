@@ -464,17 +464,23 @@ async def _search_web(db: Session, user_id: uuid.UUID, args: dict) -> dict:
     }
 
 
-# Chinese train-number prefixes → category. Used as a server-side safety net so
-# train_type is filled even if the LLM omits it (spec #13).
+# Chinese train-number prefixes → category (2026 revision). Used as a
+# server-side safety net so train_type is filled even if the LLM omits it
+# (spec #13). The prefix letters and their meaning were redefined: T/K/Z are
+# no longer the old 普速 categories — they are now EMU / 快速旅客列车 at new
+# speed tiers. S/N/V are new.
 _TRAIN_TYPE_BY_PREFIX: dict[str, str] = {
-    "G": "高铁",
-    "D": "动车",
-    "C": "城际",
-    "Z": "直达特快",
-    "T": "特快",
-    "K": "快速",
-    "L": "临时",
-    "Y": "旅游",
+    "X": "新时速",  # ≥350 km/h CR future high-speed
+    "G": "高铁",  # 350 km/h CR
+    "T": "动车300",  # 300 km/h EMU
+    "K": "动车250",  # 200–250 km/h EMU
+    "D": "动力集中",  # ≤200 km/h power-concentrated EMU
+    "C": "城际",  # ≤200 km/h intercity
+    "S": "市郊",  # ≤160 km/h suburban
+    "Z": "快速160",  # 160 km/h 快速旅客列车
+    "N": "快速140",  # 140 km/h 快速旅客列车
+    "V": "普速",  # 120 km/h 普速旅客列车
+    "Y": "旅游",  # tourist train
 }
 
 

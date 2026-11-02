@@ -319,10 +319,17 @@ export function TrainForm({
               onChange={(e) => set("train_type", e.target.value)}
             >
               <option value="">{t("flights.credentialType.none")}</option>
-              <option value="high_speed">{t("trains.trainType.high_speed")}</option>
-              <option value="intercity">{t("trains.trainType.intercity")}</option>
-              <option value="conventional">{t("trains.trainType.conventional")}</option>
-              <option value="night">{t("trains.trainType.night")}</option>
+              <option value="新时速">{t("trains.trainType.x")}</option>
+              <option value="高铁">{t("trains.trainType.g")}</option>
+              <option value="动车300">{t("trains.trainType.t")}</option>
+              <option value="动车250">{t("trains.trainType.k")}</option>
+              <option value="动力集中">{t("trains.trainType.d")}</option>
+              <option value="城际">{t("trains.trainType.c")}</option>
+              <option value="市郊">{t("trains.trainType.s")}</option>
+              <option value="快速160">{t("trains.trainType.z")}</option>
+              <option value="快速140">{t("trains.trainType.n")}</option>
+              <option value="普速">{t("trains.trainType.v")}</option>
+              <option value="旅游">{t("trains.trainType.y")}</option>
             </Select>
           </Field>
           <Field label={t("trains.trip")} marked={isChanged("trip_id")}>
