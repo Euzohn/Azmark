@@ -640,8 +640,14 @@ def _update_proposal(args: dict, *, action: str, record_type: str, label: str) -
 
 
 def _update_transport_proposal(args: dict) -> AiProposal:
-    """Propose updating a flight/train/other record (spec #69)."""
-    record_type = args.get("record_type") or args.get("type") or "other"
+    """Propose updating a flight/train/other record (spec #69).
+
+    Normalizes the record_type so the frontend can dispatch safely: anything
+    outside {flight, train, other} collapses to "other" instead of leaking an
+    unknown value into the proposal.
+    """
+    raw = args.get("record_type") or args.get("type") or "other"
+    record_type = raw if raw in {"flight", "train", "other"} else "other"
     return _update_proposal(
         args, action="update_transport", record_type=record_type, label=record_type
     )
@@ -1048,8 +1054,8 @@ TOOLS: dict[str, ToolDef] = {
                                 "and trains: window (A/F), aisle (C/D), middle "
                                 "(B), sleeper for berths (上/中/下铺), reclining "
                                 "for 可躺座椅, standing for 无座. Fill it yourself "
-                                "when you know the seat; the server also "
-                                "backfills it from the seat number when omitted."
+                                "whenever you know the seat; for trains the "
+                                "server also backfills it from the seat number."
                             ),
                         },
                         "ticket_type": {

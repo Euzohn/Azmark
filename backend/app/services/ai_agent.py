@@ -53,6 +53,12 @@ stays; pass a name and, if known, start_date / end_date, origin and \
 destination. If the user only gives a destination and no name, use the \
 destination as the trip name. After the trip is confirmed, records can be \
 attached to it via their trip_id field.
+- When the user wants to attach a record to a trip (e.g. "把这张机票加到 \
+东京之行" / "add this flight to my Tokyo trip"), first call list_trips to \
+find the trip's UUID, then include that trip_id in the create_transport / \
+update_transport / create_hotel / update_hotel data. If list_trips returns \
+nothing matching, ask the user which trip (or whether to create one) instead \
+of guessing a trip_id.
 - Use update_transport / update_hotel / update_trip to change an existing \
 record. First find it (search_records, search_hotels, list_trips, get_trip), \
 then pass its id and ONLY the fields that change. Do not resend every field.

@@ -461,3 +461,24 @@ def test_chat_update_transport_proposal(client, monkeypatch):
     # Nothing was written without confirmation.
     got = client.get(f"/api/v1/flights/{flight['id']}", headers=headers).json()
     assert got.get("departure_gate") in (None, "")
+
+
+def test_chat_update_transport_proposal_normalizes_record_type(client, monkeypatch):
+    """An unknown record_type from the LLM must collapse to "other" so the
+    frontend dispatch (flight/train/other) can never land on the wrong endpoint.
+    """
+    from app.services.ai_tools import _update_transport_proposal
+
+    for raw, expected in [
+        ("plane", "other"),
+        ("PLANE", "other"),
+        ("", "other"),
+        (None, "other"),
+        ("flight", "flight"),
+        ("train", "train"),
+        ("other", "other"),
+    ]:
+        prop = _update_transport_proposal(
+            {"record_type": raw, "record_id": "x", "data": {"seat": "1A"}}
+        )
+        assert prop.record_type == expected, f"input {raw!r} -> {prop.record_type!r}"
