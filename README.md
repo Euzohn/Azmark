@@ -1,4 +1,8 @@
 <p align="center">
+  <a href="./README.md">中文</a> · <a href="./README.en.md">English</a>
+</p>
+
+<p align="center">
   <img src="./assets/readme/hero.svg" width="100%" alt="Azmark 行迹 — 自托管、AI 原生的个人旅行 OS">
 </p>
 
@@ -7,7 +11,7 @@
   &nbsp;
   <img src="https://img.shields.io/badge/self--hosted-252822" alt="Self-hosted">
   &nbsp;
-  <img src="https://img.shields.io/badge/FastAPI%20%C2%B7%20Next.js%20%C2%B7%20TypeScript-b45309" alt="技术栈：FastAPI · Next.js · TypeScript">
+  <img src="https://img.shields.io/badge/FastAPI%20%C2%B7%20Next.js%20%C2%B7%20TypeScript-6B6557" alt="技术栈：FastAPI · Next.js · TypeScript">
   &nbsp;
   <img src="https://img.shields.io/badge/PostgreSQL-PostGIS-78816A" alt="PostgreSQL + PostGIS">
 </p>
@@ -15,6 +19,10 @@
 **Azmark（行迹）** 是一个开源、自托管、AI 原生的个人旅行记录与数据管理系统。它把你每一段航班、火车与旅程，记录成一份只属于你自己的旅行手账——数据在你自己的服务器上，不依赖任何第三方云账号。
 
 > A self-hosted, AI-native personal travel OS — every flight, train and journey in a logbook that belongs only to you.
+
+<p align="center">
+  <img src="./assets/readme/showcase.svg" width="100%" alt="界面结构示意：大圆航线地图、时间线、按行程归组的记录列表（线框示意，非截图）">
+</p>
 
 仓库开发约定见 [`AGENTS.md`](./AGENTS.md)，备份 / 恢复运维见 [`docs/backup.md`](./docs/backup.md)，MCP 接入见 [`docs/mcp.md`](./docs/mcp.md)。
 

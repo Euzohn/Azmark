@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="heroTitle heroDesc">
+  <title id="heroTitle">Azmark — a self-hosted, AI-native personal travel OS</title>
+  <desc id="heroDesc">Left: the Azmark logo lockup and one-line value — every flight, train and journey, recorded in a logbook that is only yours. Right: a great-circle route schematic (PEK to CDG).</desc>
+
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="0%" r="75%">
+      <stop offset="0%" stop-color="#C66B4E" stop-opacity="0.08"/>
+      <stop offset="68%" stop-color="#C66B4E" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- warm paper canvas (self-contained: reads as a card on light and dark GitHub) -->
+  <rect width="1200" height="360" rx="24" fill="#F5F1E8" stroke="#E3DDD1" stroke-width="1.5"/>
+  <rect width="1200" height="360" rx="24" fill="url(#glow)"/>
+
+  <!-- ===== left: logo lockup + value ===== -->
+  <g id="title-block" transform="translate(64 0)">
+    <!-- eyebrow -->
+    <text x="0" y="70" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="19" letter-spacing="2" fill="#6B6557">SELF-HOSTED · AI-NATIVE · PERSONAL TRAVEL OS</text>
+
+    <!-- logo mark (folded AZ, destination dot) -->
+    <g transform="translate(-5.5 81.3) scale(0.65)">
+      <g fill="#252822">
+        <path d="M8.5 97 C8.5 99.5 9.5 100 11.5 100 H30 Q33 100 34.2 96 L73 36 Q75.5 32.8 78 36 L101 72 Q103 74 105 71 C108.5 66.5 110 63 110 61 C110 55 105 46 101 33 C97 20 89 9 80 8 C73 8 66 12 61 20 Z"/>
+        <rect x="112" y="33" width="57" height="15" rx="7.5"/>
+        <rect x="102" y="92" width="72.5" height="19" rx="9.5"/>
+      </g>
+      <path d="M158 44 L110 100" fill="none" stroke="#252822" stroke-width="23" stroke-linecap="round"/>
+      <circle cx="191.5" cy="85.5" r="11" fill="#C66B4E"/>
+    </g>
+    <!-- wordmark -->
+    <text x="142" y="152" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="96" font-weight="700" letter-spacing="8" fill="#252822">AZMARK</text>
+
+    <!-- subtitle -->
+    <text x="0" y="196" font-family="Georgia, 'Songti SC', 'Noto Serif SC', serif" font-size="34" fill="#C66B4E">行迹 — Personal Travel OS</text>
+
+    <!-- value -->
+    <text x="0" y="240" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif" font-size="25" font-weight="500" fill="#252822">Every flight, train and journey,</text>
+    <text x="0" y="270" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif" font-size="25" font-weight="500" fill="#252822">recorded in a logbook that is only yours.</text>
+
+    <!-- stack metadata -->
+    <text x="0" y="316" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" fill="#6B6557">FastAPI · Next.js · PostgreSQL/PostGIS · MapLibre GL</text>
+  </g>
+
+  <!-- ===== right: great-circle route motif ===== -->
+  <g id="route-motif">
+    <!-- card -->
+    <rect x="728" y="52" width="408" height="256" rx="18" fill="#FFFFFF" stroke="#E3DDD1" stroke-width="1.5"/>
+
+    <!-- faint graticule -->
+    <g stroke="#E7E0D2" stroke-width="1" fill="none">
+      <line x1="752" y1="120" x2="1112" y2="120"/>
+      <line x1="752" y1="180" x2="1112" y2="180"/>
+      <line x1="752" y1="240" x2="1112" y2="240"/>
+      <line x1="832" y1="72" x2="832" y2="288"/>
+      <line x1="932" y1="72" x2="932" y2="288"/>
+      <line x1="1032" y1="72" x2="1032" y2="288"/>
+    </g>
+
+    <!-- great-circle arc PEK -> CDG -->
+    <path d="M 784 252 Q 930 64 1080 116" fill="none" stroke="#C66B4E" stroke-width="2.5" stroke-linecap="round"/>
+
+    <!-- faint second route PEK -> HKG -->
+    <path d="M 784 252 Q 870 210 940 224" fill="none" stroke="#C9BDA6" stroke-width="2" stroke-dasharray="4 5" stroke-linecap="round"/>
+
+    <!-- plane glyph along the main arc (near apex) -->
+    <g transform="translate(930 124) rotate(-25)">
+      <path d="M -10 0 L 10 0 M 0 -7 L 5 0 L 0 7 M 7 -3.5 L 10 0 L 7 3.5" fill="none" stroke="#C66B4E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+
+    <!-- origin waypoint -->
+    <circle cx="784" cy="252" r="5.5" fill="#252822"/>
+    <circle cx="784" cy="252" r="2" fill="#F5F1E8"/>
+    <text x="770" y="278" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" font-weight="600" fill="#252822">PEK</text>
+
+    <!-- destination waypoint -->
+    <circle cx="1080" cy="116" r="5.5" fill="#C66B4E"/>
+    <circle cx="1080" cy="116" r="2" fill="#FFFFFF"/>
+    <text x="1062" y="104" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" font-weight="600" fill="#C66B4E">CDG</text>
+
+    <!-- secondary waypoint label -->
+    <text x="928" y="246" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" fill="#6B6557">HKG</text>
+
+    <!-- card caption -->
+    <text x="728" y="332" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" fill="#6B6557">great-circle schematic</text>
+  </g>
+</svg>

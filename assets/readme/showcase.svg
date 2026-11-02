@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="640" viewBox="0 0 1200 640" role="img" aria-labelledby="showTitle showDesc">
+  <title id="showTitle">Azmark 界面一览：地图、时间线、记录与行程</title>
+  <desc id="showDesc">线框示意图（非真实截图）：左侧为带图标导航与大圆航线的地图视图；右上为按时间排列记录的时间线；右下为按行程归组的记录列表。</desc>
+
+  <!-- warm paper canvas -->
+  <rect width="1200" height="640" rx="24" fill="#F5F1E8" stroke="#E3DDD1" stroke-width="1.5"/>
+
+  <!-- heading -->
+  <text x="64" y="58" font-family="Georgia, 'Songti SC', 'Noto Serif SC', serif" font-size="40" font-weight="700" fill="#252822">界面一览</text>
+  <text x="64" y="88" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" fill="#6B6557">地图 · 时间线 · 记录与行程 — 线框示意，非截图</text>
+
+  <!-- ===== panel A: map view ===== -->
+  <g id="panel-map">
+    <rect x="48" y="112" width="520" height="440" rx="18" fill="#FFFFFF" stroke="#E3DDD1" stroke-width="1.5"/>
+    <!-- icon rail -->
+    <rect x="48" y="112" width="56" height="440" rx="18" fill="#EFE9DC"/>
+    <rect x="76" y="112" width="28" height="440" fill="#EFE9DC"/>
+    <circle cx="76" cy="160" r="7" fill="#252822"/>
+    <circle cx="76" cy="220" r="7" fill="none" stroke="#6B6557" stroke-width="1.5"/>
+    <circle cx="76" cy="280" r="7" fill="none" stroke="#6B6557" stroke-width="1.5"/>
+    <circle cx="76" cy="340" r="7" fill="none" stroke="#6B6557" stroke-width="1.5"/>
+    <circle cx="76" cy="400" r="7" fill="none" stroke="#6B6557" stroke-width="1.5"/>
+    <!-- panel title -->
+    <text x="124" y="142" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="600" fill="#252822">地图</text>
+    <!-- faint graticule -->
+    <g stroke="#E7E0D2" stroke-width="1" fill="none">
+      <line x1="120" y1="170" x2="544" y2="170"/>
+      <line x1="120" y1="242" x2="544" y2="242"/>
+      <line x1="120" y1="314" x2="544" y2="314"/>
+      <line x1="120" y1="386" x2="544" y2="386"/>
+      <line x1="120" y1="458" x2="544" y2="458"/>
+      <line x1="204" y1="156" x2="204" y2="536"/>
+      <line x1="308" y1="156" x2="308" y2="536"/>
+      <line x1="412" y1="156" x2="412" y2="536"/>
+      <line x1="516" y1="156" x2="516" y2="536"/>
+    </g>
+    <!-- great-circle arcs -->
+    <path d="M 160 470 Q 330 210 520 300" fill="none" stroke="#C66B4E" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M 160 470 Q 260 420 350 430" fill="none" stroke="#C9BDA6" stroke-width="2" stroke-dasharray="4 5" stroke-linecap="round"/>
+    <!-- plane glyph near apex -->
+    <g transform="translate(340 268) rotate(-20)">
+      <path d="M -10 0 L 10 0 M 0 -7 L 5 0 L 0 7 M 7 -3.5 L 10 0 L 7 3.5" fill="none" stroke="#C66B4E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <!-- waypoints -->
+    <circle cx="160" cy="470" r="5.5" fill="#252822"/>
+    <circle cx="160" cy="470" r="2" fill="#FFFFFF"/>
+    <text x="146" y="498" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" font-weight="600" fill="#252822">PEK</text>
+    <circle cx="520" cy="300" r="5.5" fill="#C66B4E"/>
+    <circle cx="520" cy="300" r="2" fill="#FFFFFF"/>
+    <text x="498" y="288" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" font-weight="600" fill="#C66B4E">CDG</text>
+    <text x="338" y="454" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" fill="#6B6557">HKG</text>
+  </g>
+
+  <!-- ===== panel B: timeline ===== -->
+  <g id="panel-timeline">
+    <rect x="592" y="112" width="560" height="200" rx="18" fill="#FFFFFF" stroke="#E3DDD1" stroke-width="1.5"/>
+    <text x="616" y="142" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="600" fill="#252822">时间线</text>
+    <!-- axis -->
+    <line x1="616" y1="208" x2="1128" y2="208" stroke="#C9BDA6" stroke-width="2"/>
+    <!-- service chips above axis -->
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" fill="#252822" text-anchor="middle">
+      <rect x="612" y="156" width="96" height="34" rx="8" fill="#EFE9DC"/>
+      <text x="660" y="178">CX659</text>
+      <rect x="742" y="156" width="96" height="34" rx="8" fill="#EFE9DC"/>
+      <text x="790" y="178">G1234</text>
+      <rect x="872" y="156" width="96" height="34" rx="8" fill="#EFE9DC"/>
+      <text x="920" y="178">CX988</text>
+      <rect x="1002" y="156" width="96" height="34" rx="8" fill="#EFE9DC"/>
+      <text x="1050" y="178">T102</text>
+    </g>
+    <!-- nodes on axis (one terracotta = destination motif) -->
+    <circle cx="660" cy="208" r="6" fill="#252822"/>
+    <circle cx="790" cy="208" r="6" fill="#252822"/>
+    <circle cx="920" cy="208" r="6" fill="#252822"/>
+    <circle cx="1050" cy="208" r="6" fill="#C66B4E"/>
+    <!-- dates below axis -->
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" fill="#6B6557" text-anchor="middle">
+      <text x="660" y="246">09-26</text>
+      <text x="790" y="246">10-02</text>
+      <text x="920" y="246">10-08</text>
+      <text x="1050" y="246">10-15</text>
+    </g>
+    <text x="616" y="288" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" fill="#6B6557">按时间排列全部交通记录</text>
+  </g>
+
+  <!-- ===== panel C: records grouped by trip ===== -->
+  <g id="panel-records">
+    <rect x="592" y="336" width="560" height="216" rx="18" fill="#FFFFFF" stroke="#E3DDD1" stroke-width="1.5"/>
+    <text x="616" y="368" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="600" fill="#252822">记录与行程</text>
+    <!-- trip group header -->
+    <rect x="616" y="382" width="512" height="34" rx="8" fill="#EFE9DC"/>
+    <text x="632" y="405" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif" font-size="20" font-weight="600" fill="#252822">东京之行 · 4 条记录</text>
+    <!-- row 1: flight -->
+    <circle cx="632" cy="440" r="5" fill="#C66B4E"/>
+    <text x="648" y="447" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif" font-size="20" fill="#252822">PEK → CDG · CX659</text>
+    <text x="960" y="446" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" fill="#6B6557">09-26</text>
+    <rect x="1052" y="427" width="76" height="26" rx="13" fill="none" stroke="#78816A" stroke-width="1.5"/>
+    <text x="1090" y="445" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif" font-size="18" fill="#78816A">已完成</text>
+    <!-- row 2: train -->
+    <circle cx="632" cy="476" r="5" fill="#252822"/>
+    <text x="648" y="483" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif" font-size="20" fill="#252822">北京南 → 上海虹桥 · G1234</text>
+    <text x="960" y="482" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" fill="#6B6557">10-02</text>
+    <rect x="1052" y="463" width="76" height="26" rx="13" fill="none" stroke="#6B6557" stroke-width="1.5"/>
+    <text x="1090" y="481" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif" font-size="18" fill="#6B6557">计划中</text>
+    <!-- row 3: other -->
+    <circle cx="632" cy="512" r="5" fill="#78816A"/>
+    <text x="648" y="519" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif" font-size="20" fill="#252822">轮渡 · 天星小轮</text>
+    <text x="960" y="518" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" fill="#6B6557">10-08</text>
+    <rect x="1052" y="499" width="76" height="26" rx="13" fill="none" stroke="#78816A" stroke-width="1.5"/>
+    <text x="1090" y="517" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif" font-size="18" fill="#78816A">已完成</text>
+  </g>
+
+  <!-- footer: honesty label -->
+  <text x="48" y="600" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" fill="#6B6557">线框示意 · 非真实截图 — 部署后以运行实例为准 · schematic wireframe, not screenshots</text>
+</svg>
