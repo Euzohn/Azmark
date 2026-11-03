@@ -60,6 +60,11 @@ services:
       PAT_RATE_LIMIT_PER_MINUTE: ${PAT_RATE_LIMIT_PER_MINUTE:-120}
       # 只读 MCP Server（spec #85）：false 时不挂载 /api/v1/mcp。
       MCP_ENABLED: ${MCP_ENABLED:-true}
+      # 酒店地图定位（spec #10/#66）：高德 Key 可选，配置后优先使用（国内可达、中文地址更准）。
+      GEOCODE_AMAP_KEY: ${GEOCODE_AMAP_KEY:-}
+      GEOCODE_PROVIDER: ${GEOCODE_PROVIDER:-photon,nominatim}
+      GEOCODE_PHOTON_URL: ${GEOCODE_PHOTON_URL:-https://photon.komoot.io}
+      GEOCODE_BASE_URL: ${GEOCODE_BASE_URL:-https://nominatim.openstreetmap.org}
     depends_on:
       postgres:
         condition: service_healthy

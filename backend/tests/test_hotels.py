@@ -257,3 +257,38 @@ def test_geocode_hotel_is_user_scoped(client, monkeypatch):
     monkeypatch.setattr(GeocodeProvider, "search", fake_search)
     resp = client.post(f"/api/v1/hotels/{created['id']}/geocode", headers=headers_b)
     assert resp.status_code == 404
+
+
+def test_geocode_hotel_falls_back_to_name(client, monkeypatch):
+    headers = _headers(client, "hotel_geocode_name")
+    created = client.post("/api/v1/hotels", json=HOTEL, headers=headers).json()
+
+    from app.providers.geocode import GeocodeProvider, GeocodeResult
+
+    seen: list[str] = []
+
+    async def fake_search(self, query, *, limit=1):
+        seen.append(query)
+        if query == HOTEL["hotel"]:
+            return GeocodeResult(lat=1.2834, lon=103.8607, provider="photon")
+        return None
+
+    monkeypatch.setattr(GeocodeProvider, "search", fake_search)
+    resp = client.post(f"/api/v1/hotels/{created['id']}/geocode", headers=headers)
+    assert resp.status_code == 200, resp.text
+    assert seen == [HOTEL["address"], HOTEL["hotel"]]
+    assert resp.json()["lat"] == 1.2834
+
+
+def test_geocode_hotel_unavailable_returns_503(client, monkeypatch):
+    headers = _headers(client, "hotel_geocode_down")
+    created = client.post("/api/v1/hotels", json=HOTEL, headers=headers).json()
+
+    from app.providers.geocode import GeocodeProvider, GeocodeUnavailableError
+
+    async def fake_search(self, query, *, limit=1):
+        raise GeocodeUnavailableError("all providers unreachable")
+
+    monkeypatch.setattr(GeocodeProvider, "search", fake_search)
+    resp = client.post(f"/api/v1/hotels/{created['id']}/geocode", headers=headers)
+    assert resp.status_code == 503

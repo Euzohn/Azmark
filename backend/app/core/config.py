@@ -43,8 +43,14 @@ class Settings(BaseSettings):
     search_api_key: str = ""
     searxng_base_url: str = ""
 
-    # Geocoding for hotel map coordinates (spec #66, Map provider). Nominatim is
-    # keyless; point this at a self-hosted instance to avoid the public rate limit.
+    # Geocoding for hotel map coordinates (spec #66, Map provider). The chain is
+    # configurable: Amap is preferred when a key is set (best for Chinese
+    # addresses), then Photon (keyless, OSM), then Nominatim (keyless, but often
+    # blocked from mainland networks — point GEOCODE_BASE_URL at a self-hosted
+    # instance to lift the public rate limit).
+    geocode_provider: str = "photon,nominatim"
+    geocode_amap_key: str = ""
+    geocode_photon_url: str = "https://photon.komoot.io"
     geocode_base_url: str = "https://nominatim.openstreetmap.org"
 
     # Object storage (spec #44/#75). Works with MinIO, AWS S3, R2 and OSS.

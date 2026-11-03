@@ -12,7 +12,7 @@ from app.api.deps import (
 )
 from app.models.audit_log import AuditAction
 from app.models.user import User
-from app.providers.geocode import GeocodeProvider
+from app.providers.geocode import GeocodeProvider, GeocodeUnavailableError
 from app.schemas.hotel import HotelCreate, HotelList, HotelRead, HotelUpdate
 from app.schemas.status import RecordStatus
 from app.services.attachment import AttachmentService
@@ -143,16 +143,36 @@ async def geocode_hotel(
 ):
     """Geocode the stay's address (or name) and store the coordinates (spec #10).
 
-    Explicit user action only: the public Nominatim instance allows roughly one
-    request per second, so this never runs inside list/create flows.
+    Explicit user action only: the public geocoders are rate-limited, so this
+    never runs inside list/create flows. The address is tried first, then the
+    hotel name (a bare "Marina Bay Sands" often resolves when the address is
+    incomplete). "No match" is a 404; an unreachable service is a 503 so the UI
+    does not blame the user's address for a network problem.
     """
     try:
         hotel = service.get_hotel(user_id=current_user.id, hotel_id=hotel_id)
     except HotelNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
 
-    query = (hotel.address or "").strip() or hotel.hotel
-    result = await GeocodeProvider().search(query)
+    queries: list[str] = []
+    for candidate in (hotel.address or "", hotel.hotel or ""):
+        value = candidate.strip()
+        if value and value not in queries:
+            queries.append(value)
+
+    provider = GeocodeProvider(language=current_user.locale)
+    result = None
+    try:
+        for query in queries:
+            result = await provider.search(query)
+            if result is not None:
+                break
+    except GeocodeUnavailableError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Geocoder unavailable",
+        ) from None
+
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No geocode result")
     hotel = service.set_coordinates(
@@ -163,7 +183,7 @@ async def geocode_hotel(
         user_id=current_user.id,
         resource_type="hotel",
         resource_id=str(hotel.id),
-        meta={"geocoded": True, "provider": "nominatim"},
+        meta={"geocoded": True, "provider": result.provider or provider.name},
         request=request,
     )
     return hotel

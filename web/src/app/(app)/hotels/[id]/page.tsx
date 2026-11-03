@@ -12,7 +12,7 @@ import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { hotelsReturnHref } from "@/lib/record-navigation";
 import type { HotelInput } from "@/lib/types";
@@ -142,7 +142,11 @@ function HotelDetail() {
       ) : null}
       {geocode.isError && !editing ? (
         <p role="alert" className="text-sm text-danger">
-          {t("hotels.locateFailed")}
+          {t(
+            geocode.error instanceof ApiError && geocode.error.status === 503
+              ? "hotels.locateUnavailable"
+              : "hotels.locateFailed",
+          )}
         </p>
       ) : null}
       {editing ? (
