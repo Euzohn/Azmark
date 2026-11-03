@@ -226,8 +226,10 @@ def test_geocode_hotel_stores_coordinates(client, monkeypatch):
 
     resp = client.post(f"/api/v1/hotels/{created['id']}/geocode", headers=headers)
     assert resp.status_code == 200, resp.text
-    assert resp.json()["lat"] == 1.2834
-    assert resp.json()["lon"] == 103.8607
+    body = resp.json()
+    assert body["hotel"]["lat"] == 1.2834
+    assert body["hotel"]["lon"] == 103.8607
+    assert body["matched_address"] == "Marina Bay Sands"
 
 
 def test_geocode_hotel_without_result_returns_404(client, monkeypatch):
@@ -277,7 +279,7 @@ def test_geocode_hotel_falls_back_to_name(client, monkeypatch):
     resp = client.post(f"/api/v1/hotels/{created['id']}/geocode", headers=headers)
     assert resp.status_code == 200, resp.text
     assert seen == [HOTEL["address"], HOTEL["hotel"]]
-    assert resp.json()["lat"] == 1.2834
+    assert resp.json()["hotel"]["lat"] == 1.2834
 
 
 def test_geocode_hotel_unavailable_returns_503(client, monkeypatch):

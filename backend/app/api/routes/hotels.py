@@ -13,7 +13,13 @@ from app.api.deps import (
 from app.models.audit_log import AuditAction
 from app.models.user import User
 from app.providers.geocode import GeocodeProvider, GeocodeUnavailableError
-from app.schemas.hotel import HotelCreate, HotelList, HotelRead, HotelUpdate
+from app.schemas.hotel import (
+    HotelCreate,
+    HotelGeocodeRead,
+    HotelList,
+    HotelRead,
+    HotelUpdate,
+)
 from app.schemas.status import RecordStatus
 from app.services.attachment import AttachmentService
 from app.services.audit import AuditService
@@ -133,7 +139,7 @@ def update_hotel(
     return hotel
 
 
-@router.post("/{hotel_id}/geocode", response_model=HotelRead)
+@router.post("/{hotel_id}/geocode", response_model=HotelGeocodeRead)
 async def geocode_hotel(
     hotel_id: uuid.UUID,
     request: Request,
@@ -186,7 +192,10 @@ async def geocode_hotel(
         meta={"geocoded": True, "provider": result.provider or provider.name},
         request=request,
     )
-    return hotel
+    return HotelGeocodeRead(
+        hotel=HotelRead.model_validate(hotel),
+        matched_address=result.display_name,
+    )
 
 
 @router.delete("/{hotel_id}", status_code=status.HTTP_204_NO_CONTENT)

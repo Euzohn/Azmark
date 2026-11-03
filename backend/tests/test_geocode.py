@@ -6,6 +6,7 @@ import httpx
 import pytest
 
 from app.providers.geocode import GeocodeProvider, GeocodeUnavailableError
+from app.utils.geo import gcj02_to_wgs84, out_of_china, wgs84_to_gcj02
 
 PHOTON_PAYLOAD = {
     "type": "FeatureCollection",
@@ -84,6 +85,9 @@ def test_nominatim_parses_first_result_and_sends_policy_headers():
 
 def test_amap_parses_lon_lat_location():
     seen: dict[str, str | None] = {}
+    # Amap answers in GCJ-02; the stored value must be WGS-84 for the OSM map.
+    wgs = (31.236305, 121.490317)
+    gcj_lat, gcj_lon = wgs84_to_gcj02(*wgs)
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen["host"] = request.url.host
@@ -97,7 +101,7 @@ def test_amap_parses_lon_lat_location():
                 "geocodes": [
                     {
                         "formatted_address": "上海市黄浦区外滩",
-                        "location": "121.490317,31.236305",
+                        "location": f"{gcj_lon},{gcj_lat}",
                     }
                 ],
             },
@@ -105,8 +109,8 @@ def test_amap_parses_lon_lat_location():
 
     result = _run(handler, query="上海外滩", providers=["amap"], amap_key="test-key")
     assert result is not None
-    assert result.lat == 31.236305
-    assert result.lon == 121.490317
+    assert abs(result.lat - wgs[0]) < 1e-4
+    assert abs(result.lon - wgs[1]) < 1e-4
     assert result.provider == "amap"
     assert seen["host"] == "restapi.amap.com"
     assert seen["address"] == "上海外滩"
@@ -211,3 +215,19 @@ def test_empty_query_returns_none_without_network_call():
 
     assert _run(handler, query="   ", providers=["photon"]) is None
     assert calls == []
+
+
+def test_gcj02_round_trip_inside_china():
+    wgs = (39.90766, 116.39122)  # Tiananmen, WGS-84
+    gcj = wgs84_to_gcj02(*wgs)
+    # GCJ-02 deliberately offsets by a few hundred metres inside China.
+    assert abs(gcj[0] - wgs[0]) > 0.0005
+    back = gcj02_to_wgs84(*gcj)
+    assert abs(back[0] - wgs[0]) < 1e-6
+    assert abs(back[1] - wgs[1]) < 1e-6
+
+
+def test_gcj02_conversion_is_noop_outside_china():
+    assert out_of_china(35.6762, 139.6503) is True
+    assert gcj02_to_wgs84(35.6762, 139.6503) == (35.6762, 139.6503)
+    assert wgs84_to_gcj02(35.6762, 139.6503) == (35.6762, 139.6503)

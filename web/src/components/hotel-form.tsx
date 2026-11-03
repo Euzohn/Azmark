@@ -34,6 +34,8 @@ interface FormState {
   address: string;
   notes: string;
   trip_id: string;
+  lat: string;
+  lon: string;
 }
 
 function toForm(hotel?: Hotel): FormState {
@@ -50,10 +52,20 @@ function toForm(hotel?: Hotel): FormState {
     address: hotel?.address ?? "",
     notes: hotel?.notes ?? "",
     trip_id: hotel?.trip_id ?? "",
+    lat: hotel?.lat != null ? String(hotel.lat) : "",
+    lon: hotel?.lon != null ? String(hotel.lon) : "",
   };
 }
 
 function toInput(form: FormState): HotelInput {
+  // Coordinates are optional: only send them when both are filled, otherwise
+  // an edit would silently wipe a pin placed by the locate action.
+  const lat = form.lat.trim() === "" ? null : Number(form.lat);
+  const lon = form.lon.trim() === "" ? null : Number(form.lon);
+  const coordinates =
+    lat !== null && lon !== null && Number.isFinite(lat) && Number.isFinite(lon)
+      ? { lat, lon }
+      : {};
   return {
     hotel: form.hotel.trim() || undefined,
     check_in: form.check_in || undefined,
@@ -67,6 +79,7 @@ function toInput(form: FormState): HotelInput {
     address: form.address || null,
     notes: form.notes || null,
     trip_id: form.trip_id || null,
+    ...coordinates,
   };
 }
 
@@ -184,6 +197,33 @@ export function HotelForm({
             <Field label={t("hotels.address")}>
               <Input value={form.address} maxLength={300} onChange={(e) => set("address", e.target.value)} />
             </Field>
+          </div>
+          <div className="grid gap-4 sm:col-span-2 sm:grid-cols-2">
+            <Field label={t("hotels.lat")}>
+              <Input
+                type="number"
+                step="any"
+                min={-90}
+                max={90}
+                value={form.lat}
+                placeholder="31.2304"
+                onChange={(e) => set("lat", e.target.value)}
+              />
+            </Field>
+            <Field label={t("hotels.lon")}>
+              <Input
+                type="number"
+                step="any"
+                min={-180}
+                max={180}
+                value={form.lon}
+                placeholder="121.4737"
+                onChange={(e) => set("lon", e.target.value)}
+              />
+            </Field>
+            <p className="text-xs text-muted-foreground sm:col-span-2">
+              {t("hotels.coordinatesHint")}
+            </p>
           </div>
           <div className="sm:col-span-2">
             <Field label={t("hotels.notes")}>

@@ -302,6 +302,11 @@ export interface HotelList {
   page_size: number;
 }
 
+export interface HotelGeocodeRead {
+  hotel: Hotel;
+  matched_address: string | null;
+}
+
 export type RecordType = "flight" | "train" | "other";
 export type RecordSort = "newest" | "oldest" | "departure" | "arrival" | "created";
 

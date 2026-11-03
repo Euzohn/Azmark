@@ -49,6 +49,7 @@ import type {
   AccessTokenCreated,
   AccessTokenScope,
   Hotel,
+  HotelGeocodeRead,
   HotelInput,
   HotelList,
   PendingAction,
@@ -241,7 +242,7 @@ export const api = {
     request<Hotel>(`/hotels/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteHotel: (id: string) => request<void>(`/hotels/${id}`, { method: "DELETE" }),
   geocodeHotel: (id: string) =>
-    request<Hotel>(`/hotels/${id}/geocode`, { method: "POST" }),
+    request<HotelGeocodeRead>(`/hotels/${id}/geocode`, { method: "POST" }),
 
   listTrains: (params: FlightFilters = {}) => {
     const query = new URLSearchParams();

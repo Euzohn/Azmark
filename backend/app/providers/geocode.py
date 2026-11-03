@@ -26,6 +26,7 @@ from dataclasses import dataclass
 import httpx
 
 from app.core.config import settings
+from app.utils.geo import gcj02_to_wgs84
 
 logger = logging.getLogger(__name__)
 
@@ -174,11 +175,13 @@ class GeocodeProvider:
         if not isinstance(first, dict):
             return None
         try:
-            # Amap returns "lon,lat" as a single string.
+            # Amap returns "lon,lat" as a single string in GCJ-02; the app stores
+            # and renders WGS-84, so shift it back before returning.
             lon_raw, lat_raw = str(first["location"]).split(",", 1)
+            lat, lon = gcj02_to_wgs84(float(lat_raw), float(lon_raw))
             return GeocodeResult(
-                lat=float(lat_raw),
-                lon=float(lon_raw),
+                lat=lat,
+                lon=lon,
                 display_name=first.get("formatted_address"),
                 provider="amap",
             )

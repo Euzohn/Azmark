@@ -29,6 +29,7 @@ function HotelDetail() {
   const [moreOpen, setMoreOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [geocodedAddress, setGeocodedAddress] = useState<string | null>(null);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["hotel", id],
@@ -57,8 +58,9 @@ function HotelDetail() {
 
   const geocode = useMutation({
     mutationFn: () => api.geocodeHotel(id),
-    onSuccess: async (hotel) => {
-      queryClient.setQueryData(["hotel", id], hotel);
+    onSuccess: async (result) => {
+      queryClient.setQueryData(["hotel", id], result.hotel);
+      setGeocodedAddress(result.matched_address);
       await refresh();
     },
   });
@@ -102,7 +104,10 @@ function HotelDetail() {
             <>
               <Button
                 variant="outline"
-                onClick={() => geocode.mutate()}
+                onClick={() => {
+                  setGeocodedAddress(null);
+                  geocode.mutate();
+                }}
                 disabled={geocode.isPending}
               >
                 <MapPin className="h-4 w-4" />
@@ -137,7 +142,9 @@ function HotelDetail() {
       ) : null}
       {geocode.isSuccess && !editing ? (
         <p role="status" className="text-sm text-success">
-          {t("hotels.located")}
+          {geocodedAddress
+            ? t("hotels.locatedAt", { address: geocodedAddress })
+            : t("hotels.located")}
         </p>
       ) : null}
       {geocode.isError && !editing ? (

@@ -69,6 +69,17 @@ class HotelRead(HotelBase):
     updated_at: datetime
 
 
+class HotelGeocodeRead(BaseModel):
+    """Result of the explicit locate action: the hotel plus what was matched.
+
+    ``matched_address`` lets the UI show which place the geocoder picked, so a
+    wrong match (same hotel name in another city) is visible instead of silent.
+    """
+
+    hotel: HotelRead
+    matched_address: str | None = None
+
+
 class HotelList(BaseModel):
     items: list[HotelRead]
     total: int
