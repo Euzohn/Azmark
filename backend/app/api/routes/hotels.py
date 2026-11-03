@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import date
 from typing import Literal
@@ -23,12 +24,19 @@ from app.schemas.hotel import (
 from app.schemas.status import RecordStatus
 from app.services.attachment import AttachmentService
 from app.services.audit import AuditService
+from app.services.geocoding import (
+    address_query_variants,
+    country_hint,
+    is_consistent,
+)
 from app.services.hotel import (
     DuplicateHotelError,
     HotelNotFoundError,
     HotelService,
     HotelTripAssignmentError,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/hotels", tags=["hotels"])
 
@@ -150,28 +158,41 @@ async def geocode_hotel(
     """Geocode the stay's address (or name) and store the coordinates (spec #10).
 
     Explicit user action only: the public geocoders are rate-limited, so this
-    never runs inside list/create flows. The address is tried first, then the
-    hotel name (a bare "Marina Bay Sands" often resolves when the address is
-    incomplete). "No match" is a 404; an unreachable service is a 503 so the UI
-    does not blame the user's address for a network problem.
+    never runs inside list/create flows.
+
+    Field order: ``address`` first (with postcodes/duplicates stripped as a
+    fallback variant), then ``hotel`` name only when the address yields
+    nothing. Every candidate is checked against the address's own country/city
+    hint, so a same-named street abroad is rejected instead of pinned.
+
+    "No match" is a 404; an unreachable service is a 503 so the UI does not
+    blame the user's address for a network problem.
     """
     try:
         hotel = service.get_hotel(user_id=current_user.id, hotel_id=hotel_id)
     except HotelNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
 
-    queries: list[str] = []
-    for candidate in (hotel.address or "", hotel.hotel or ""):
-        value = candidate.strip()
-        if value and value not in queries:
-            queries.append(value)
+    address = (hotel.address or "").strip()
+    name = (hotel.hotel or "").strip()
+    queries = address_query_variants(address)
+    if not queries:
+        queries = [name] if name else []
+    elif name and name not in queries:
+        queries.append(name)
 
+    hint = country_hint(address)
     provider = GeocodeProvider(language=current_user.locale)
     result = None
+    matched_query = ""
     try:
         for query in queries:
-            result = await provider.search(query)
+            candidates = await provider.search_candidates(
+                query, limit=5, accept=lambda item: is_consistent(item, hint)
+            )
+            result = next((item for item in candidates if is_consistent(item, hint)), None)
             if result is not None:
+                matched_query = query
                 break
     except GeocodeUnavailableError:
         raise HTTPException(
@@ -181,6 +202,14 @@ async def geocode_hotel(
 
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No geocode result")
+
+    logger.info(
+        "Geocode: hotel=%s query=%r -> %s (%s)",
+        hotel.id,
+        matched_query,
+        result.display_name,
+        result.provider,
+    )
     hotel = service.set_coordinates(
         user_id=current_user.id, hotel_id=hotel_id, lat=result.lat, lon=result.lon
     )

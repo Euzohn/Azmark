@@ -231,3 +231,74 @@ def test_gcj02_conversion_is_noop_outside_china():
     assert out_of_china(35.6762, 139.6503) is True
     assert gcj02_to_wgs84(35.6762, 139.6503) == (35.6762, 139.6503)
     assert wgs84_to_gcj02(35.6762, 139.6503) == (35.6762, 139.6503)
+
+
+def test_search_candidates_stops_early_when_accept_matches():
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.host)
+        return httpx.Response(200, json=PHOTON_PAYLOAD)
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            provider = GeocodeProvider(
+                client=client,
+                providers=["photon", "nominatim"],
+                photon_url="https://photon.example",
+                base_url="https://nominatim.example",
+            )
+            return await provider.search_candidates(
+                "Marina Bay Sands",
+                accept=lambda item: "singapore" in (item.display_name or "").lower(),
+            )
+
+    results = asyncio.run(run())
+    # The fallback provider is never contacted once an accepted match exists.
+    assert calls == ["photon.example"]
+    assert results[0].provider == "photon"
+
+
+def test_search_candidates_tries_next_provider_when_accept_rejects():
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.host)
+        if request.url.host == "photon.example":
+            return httpx.Response(
+                200,
+                json={
+                    "type": "FeatureCollection",
+                    "features": [
+                        {
+                            "geometry": {
+                                "type": "Point",
+                                "coordinates": [-103.3246, 49.1445],
+                            },
+                            "properties": {
+                                "name": "Outram",
+                                "city": "Saskatchewan",
+                                "country": "Canada",
+                            },
+                        }
+                    ],
+                },
+            )
+        return httpx.Response(200, json=NOMINATIM_PAYLOAD)
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            provider = GeocodeProvider(
+                client=client,
+                providers=["photon", "nominatim"],
+                photon_url="https://photon.example",
+                base_url="https://nominatim.example",
+            )
+            return await provider.search_candidates(
+                "Outram Rd, Singapore",
+                accept=lambda item: "singapore" in (item.display_name or "").lower(),
+            )
+
+    results = asyncio.run(run())
+    assert calls == ["photon.example", "nominatim.example"]
+    assert any(item.provider == "nominatim" for item in results)

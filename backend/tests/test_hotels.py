@@ -218,18 +218,24 @@ def test_geocode_hotel_stores_coordinates(client, monkeypatch):
 
     from app.providers.geocode import GeocodeProvider, GeocodeResult
 
-    async def fake_search(self, query, *, limit=1):
+    async def fake_search(self, query, *, limit=1, accept=None):
         assert query == HOTEL["address"]
-        return GeocodeResult(lat=1.2834, lon=103.8607, display_name="Marina Bay Sands")
+        return [
+            GeocodeResult(
+                lat=1.2834,
+                lon=103.8607,
+                display_name="Marina Bay Sands, Singapore",
+            )
+        ]
 
-    monkeypatch.setattr(GeocodeProvider, "search", fake_search)
+    monkeypatch.setattr(GeocodeProvider, "search_candidates", fake_search)
 
     resp = client.post(f"/api/v1/hotels/{created['id']}/geocode", headers=headers)
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["hotel"]["lat"] == 1.2834
     assert body["hotel"]["lon"] == 103.8607
-    assert body["matched_address"] == "Marina Bay Sands"
+    assert body["matched_address"] == "Marina Bay Sands, Singapore"
 
 
 def test_geocode_hotel_without_result_returns_404(client, monkeypatch):
@@ -238,10 +244,10 @@ def test_geocode_hotel_without_result_returns_404(client, monkeypatch):
 
     from app.providers.geocode import GeocodeProvider
 
-    async def fake_search(self, query, *, limit=1):
-        return None
+    async def fake_search(self, query, *, limit=1, accept=None):
+        return []
 
-    monkeypatch.setattr(GeocodeProvider, "search", fake_search)
+    monkeypatch.setattr(GeocodeProvider, "search_candidates", fake_search)
     resp = client.post(f"/api/v1/hotels/{created['id']}/geocode", headers=headers)
     assert resp.status_code == 404
 
@@ -253,10 +259,10 @@ def test_geocode_hotel_is_user_scoped(client, monkeypatch):
 
     from app.providers.geocode import GeocodeProvider, GeocodeResult
 
-    async def fake_search(self, query, *, limit=1):
-        return GeocodeResult(lat=0.0, lon=0.0)
+    async def fake_search(self, query, *, limit=1, accept=None):
+        return [GeocodeResult(lat=0.0, lon=0.0, display_name="Singapore")]
 
-    monkeypatch.setattr(GeocodeProvider, "search", fake_search)
+    monkeypatch.setattr(GeocodeProvider, "search_candidates", fake_search)
     resp = client.post(f"/api/v1/hotels/{created['id']}/geocode", headers=headers_b)
     assert resp.status_code == 404
 
@@ -269,13 +275,20 @@ def test_geocode_hotel_falls_back_to_name(client, monkeypatch):
 
     seen: list[str] = []
 
-    async def fake_search(self, query, *, limit=1):
+    async def fake_search(self, query, *, limit=1, accept=None):
         seen.append(query)
         if query == HOTEL["hotel"]:
-            return GeocodeResult(lat=1.2834, lon=103.8607, provider="photon")
-        return None
+            return [
+                GeocodeResult(
+                    lat=1.2834,
+                    lon=103.8607,
+                    display_name="Marina Bay Sands, Singapore",
+                    provider="photon",
+                )
+            ]
+        return []
 
-    monkeypatch.setattr(GeocodeProvider, "search", fake_search)
+    monkeypatch.setattr(GeocodeProvider, "search_candidates", fake_search)
     resp = client.post(f"/api/v1/hotels/{created['id']}/geocode", headers=headers)
     assert resp.status_code == 200, resp.text
     assert seen == [HOTEL["address"], HOTEL["hotel"]]
@@ -288,9 +301,60 @@ def test_geocode_hotel_unavailable_returns_503(client, monkeypatch):
 
     from app.providers.geocode import GeocodeProvider, GeocodeUnavailableError
 
-    async def fake_search(self, query, *, limit=1):
+    async def fake_search(self, query, *, limit=1, accept=None):
         raise GeocodeUnavailableError("all providers unreachable")
 
-    monkeypatch.setattr(GeocodeProvider, "search", fake_search)
+    monkeypatch.setattr(GeocodeProvider, "search_candidates", fake_search)
     resp = client.post(f"/api/v1/hotels/{created['id']}/geocode", headers=headers)
     assert resp.status_code == 503
+
+
+def test_geocode_rejects_match_in_wrong_country(client, monkeypatch):
+    """A same-named street abroad must not be pinned (Outram Rd exists in Canada)."""
+    headers = _headers(client, "hotel_geo_wrong_country")
+    created = client.post("/api/v1/hotels", json=HOTEL, headers=headers).json()
+
+    from app.providers.geocode import GeocodeProvider, GeocodeResult
+
+    async def fake_search(self, query, *, limit=1, accept=None):
+        return [
+            GeocodeResult(
+                lat=49.1445,
+                lon=-103.3246,
+                display_name="Outram, Saskatchewan, Canada",
+                provider="photon",
+            )
+        ]
+
+    monkeypatch.setattr(GeocodeProvider, "search_candidates", fake_search)
+    resp = client.post(f"/api/v1/hotels/{created['id']}/geocode", headers=headers)
+    assert resp.status_code == 404
+
+
+def test_geocode_retries_address_without_postcode(client, monkeypatch):
+    headers = _headers(client, "hotel_geo_variant")
+    payload = {**HOTEL, "address": "261 Outram Rd, Singapore, Singapore, 169057"}
+    created = client.post("/api/v1/hotels", json=payload, headers=headers).json()
+
+    from app.providers.geocode import GeocodeProvider, GeocodeResult
+
+    seen: list[str] = []
+
+    async def fake_search(self, query, *, limit=1, accept=None):
+        seen.append(query)
+        if query == "261 Outram Rd, Singapore":
+            return [
+                GeocodeResult(
+                    lat=1.2811,
+                    lon=103.8388,
+                    display_name="Outram Road, Singapore, Singapore",
+                    provider="photon",
+                )
+            ]
+        return []
+
+    monkeypatch.setattr(GeocodeProvider, "search_candidates", fake_search)
+    resp = client.post(f"/api/v1/hotels/{created['id']}/geocode", headers=headers)
+    assert resp.status_code == 200, resp.text
+    assert seen == ["261 Outram Rd, Singapore, Singapore, 169057", "261 Outram Rd, Singapore"]
+    assert resp.json()["hotel"]["lat"] == 1.2811
