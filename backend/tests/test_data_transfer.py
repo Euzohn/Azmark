@@ -154,6 +154,27 @@ def test_import_commit_creates_records_and_trip(client):
     assert again["skipped_duplicates"] == 2
 
 
+def test_import_normalizes_status_aliases(client):
+    """A free-form status column is normalized, never a row error (B-tier)."""
+    token = register_and_login(client, "import_status")["access_token"]
+    headers = auth_headers(token)
+    csv_text = (
+        "type,from,to,date,status,flight_number\n"
+        "flight,PEK,SFO,2026-08-01T08:00:00Z,delayed,CA985\n"
+        "flight,SFO,PEK,2026-08-10T08:00:00Z,landed,CA986\n"
+        "flight,SFO,LAX,2026-09-01T08:00:00Z,bogus,CA987\n"
+    )
+    response = _commit(client, headers, csv_text)
+    assert response.status_code == 200, response.text
+    assert response.json()["imported"] == 3
+    assert response.json()["failed"] == 0
+
+    flights = client.get("/api/v1/flights", headers=headers).json()["items"]
+    by_number = {f["service_number"]: f["status"] for f in flights}
+    # delayed → scheduled (alias), landed → completed (alias), bogus → default
+    assert by_number == {"CA985": "scheduled", "CA986": "completed", "CA987": "scheduled"}
+
+
 def test_import_json_roundtrip_between_users(client):
     token_a = register_and_login(client, "roundtrip_a")["access_token"]
     token_b = register_and_login(client, "roundtrip_b")["access_token"]

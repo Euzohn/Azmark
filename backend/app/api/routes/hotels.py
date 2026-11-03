@@ -12,7 +12,9 @@ from app.api.deps import (
 )
 from app.models.audit_log import AuditAction
 from app.models.user import User
+from app.providers.geocode import GeocodeProvider
 from app.schemas.hotel import HotelCreate, HotelList, HotelRead, HotelUpdate
+from app.schemas.status import RecordStatus
 from app.services.attachment import AttachmentService
 from app.services.audit import AuditService
 from app.services.hotel import (
@@ -30,7 +32,7 @@ HotelSort = Literal["newest", "oldest", "check_out", "created"]
 @router.get("", response_model=HotelList)
 def list_hotels(
     search: str | None = None,
-    status_filter: str | None = Query(default=None, alias="status"),
+    status_filter: RecordStatus | None = Query(default=None, alias="status"),
     trip_id: uuid.UUID | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
@@ -126,6 +128,42 @@ def update_hotel(
         resource_type="hotel",
         resource_id=str(hotel.id),
         meta={"changed_fields": sorted(payload.model_dump(exclude_unset=True).keys())},
+        request=request,
+    )
+    return hotel
+
+
+@router.post("/{hotel_id}/geocode", response_model=HotelRead)
+async def geocode_hotel(
+    hotel_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    service: HotelService = Depends(get_hotel_service),
+    audit: AuditService = Depends(get_audit_service),
+):
+    """Geocode the stay's address (or name) and store the coordinates (spec #10).
+
+    Explicit user action only: the public Nominatim instance allows roughly one
+    request per second, so this never runs inside list/create flows.
+    """
+    try:
+        hotel = service.get_hotel(user_id=current_user.id, hotel_id=hotel_id)
+    except HotelNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
+
+    query = (hotel.address or "").strip() or hotel.hotel
+    result = await GeocodeProvider().search(query)
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No geocode result")
+    hotel = service.set_coordinates(
+        user_id=current_user.id, hotel_id=hotel_id, lat=result.lat, lon=result.lon
+    )
+    audit.log(
+        action=AuditAction.UPDATE_RECORD,
+        user_id=current_user.id,
+        resource_type="hotel",
+        resource_id=str(hotel.id),
+        meta={"geocoded": True, "provider": "nominatim"},
         request=request,
     )
     return hotel

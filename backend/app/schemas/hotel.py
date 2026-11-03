@@ -4,6 +4,8 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.schemas.status import RecordStatus
+
 
 class _HotelDates(BaseModel):
     @model_validator(mode="after")
@@ -26,10 +28,13 @@ class HotelBase(_HotelDates):
     notes: str | None = None
     trip_id: uuid.UUID | None = None
     status: str = Field(default="scheduled", max_length=20)
+    # Optional map coordinates (spec #10); filled by the geocode action.
+    lat: float | None = Field(default=None, ge=-90, le=90)
+    lon: float | None = Field(default=None, ge=-180, le=180)
 
 
 class HotelCreate(HotelBase):
-    pass
+    status: RecordStatus = "scheduled"
 
 
 class HotelUpdate(BaseModel):
@@ -44,7 +49,9 @@ class HotelUpdate(BaseModel):
     address: str | None = Field(default=None, max_length=300)
     notes: str | None = None
     trip_id: uuid.UUID | None = None
-    status: str | None = Field(default=None, max_length=20)
+    status: RecordStatus | None = None
+    lat: float | None = Field(default=None, ge=-90, le=90)
+    lon: float | None = Field(default=None, ge=-180, le=180)
 
     @model_validator(mode="after")
     def _check_dates(self) -> "HotelUpdate":

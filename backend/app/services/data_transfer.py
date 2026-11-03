@@ -25,6 +25,7 @@ from app.schemas.data_transfer import (
     ImportResult,
     ImportRowError,
 )
+from app.schemas.status import normalize_record_status, normalize_trip_status
 from app.schemas.transport import FlightCreate, OtherTransportCreate, TrainCreate
 from app.services.dedup import iso_full, record_signature, record_signature_from_model
 from app.services.transport import FlightService, OtherTransportService, TrainService
@@ -621,7 +622,10 @@ class DataTransferService:
                 normalized["type"] = normalize_type(value)
                 continue
             if field == "status":
-                normalized["status"] = str(value or "scheduled").strip().lower() or "scheduled"
+                # Normalize through the canonical vocabulary (aliases included) so
+                # imports cannot smuggle free-form statuses past the tightened
+                # create schemas; unknown values fall back to the default.
+                normalized["status"] = normalize_record_status(value)
                 continue
             if isinstance(value, str):
                 value = value.strip() or None
@@ -668,6 +672,10 @@ class DataTransferService:
             if not name or name in existing:
                 continue
             data = {field: trip.get(field) for field in TRIP_FIELDS if field in trip}
+            if "status" in data:
+                # Trip rows bypass the Pydantic schemas (direct model insert),
+                # so normalize here to keep the vocabulary closed.
+                data["status"] = normalize_trip_status(data["status"])
             for field in ("start_date", "end_date"):
                 if data.get(field):
                     try:

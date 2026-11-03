@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { MoreHorizontal, MapPin, Pencil, Trash2 } from "lucide-react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
@@ -38,7 +38,7 @@ function HotelDetail() {
 
   const refresh = async () => {
     await Promise.all(
-      ["hotels", "trips", "trip", "dashboard"].map((key) =>
+      ["hotels", "hotel", "trips", "trip", "dashboard", "map-routes"].map((key) =>
         queryClient.invalidateQueries({ queryKey: [key] }),
       ),
     );
@@ -51,6 +51,14 @@ function HotelDetail() {
       setDirty(false);
       setEditing(false);
       setSaved(true);
+      await refresh();
+    },
+  });
+
+  const geocode = useMutation({
+    mutationFn: () => api.geocodeHotel(id),
+    onSuccess: async (hotel) => {
+      queryClient.setQueryData(["hotel", id], hotel);
       await refresh();
     },
   });
@@ -94,6 +102,14 @@ function HotelDetail() {
             <>
               <Button
                 variant="outline"
+                onClick={() => geocode.mutate()}
+                disabled={geocode.isPending}
+              >
+                <MapPin className="h-4 w-4" />
+                {t(geocode.isPending ? "hotels.locating" : "hotels.locate")}
+              </Button>
+              <Button
+                variant="outline"
                 onClick={() => {
                   setSaved(false);
                   setEditing(true);
@@ -117,6 +133,16 @@ function HotelDetail() {
       {saved && !editing ? (
         <p role="status" className="text-sm text-success">
           {t("common.saved")}
+        </p>
+      ) : null}
+      {geocode.isSuccess && !editing ? (
+        <p role="status" className="text-sm text-success">
+          {t("hotels.located")}
+        </p>
+      ) : null}
+      {geocode.isError && !editing ? (
+        <p role="alert" className="text-sm text-danger">
+          {t("hotels.locateFailed")}
         </p>
       ) : null}
       {editing ? (

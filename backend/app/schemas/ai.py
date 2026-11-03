@@ -1,8 +1,36 @@
 """AI chat schemas (spec #31, #32, #93)."""
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
+
+
+class AiHistoryProposalOutcome(BaseModel):
+    """What happened to a proposal the assistant raised in a prior turn.
+
+    The assistant itself can't see whether the user saved or cancelled a
+    proposal (it has no memory across requests), so the client relays the
+    outcome back as part of the conversation history (spec #69).
+    """
+
+    action: str
+    record_type: str
+    summary: str = Field(max_length=400)
+    status: Literal["pending", "saved", "cancelled", "duplicate"]
+
+
+class AiHistoryMessage(BaseModel):
+    """One turn of prior conversation, sent back by the client for context.
+
+    The client owns the chat history (stored locally); the backend is
+    stateless. Content is capped so a runaway local history cannot blow up the
+    request payload, and each entry is treated as untrusted user content
+    (spec #70).
+    """
+
+    role: Literal["user", "assistant"]
+    content: str = Field(max_length=4000)
+    proposals: list[AiHistoryProposalOutcome] | None = None
 
 
 class AiChatRequest(BaseModel):
@@ -11,6 +39,14 @@ class AiChatRequest(BaseModel):
         default=None,
         max_length=5_000_000,
         description="Optional data URL (data:image/...;base64,...) for vision models",
+    )
+    history: list[AiHistoryMessage] = Field(
+        default_factory=list,
+        max_length=20,
+        description=(
+            "Prior conversation turns (most recent last). Lets the assistant "
+            "follow up on earlier proposals and their saved/cancelled outcomes."
+        ),
     )
 
 

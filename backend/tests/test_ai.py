@@ -980,3 +980,83 @@ def test_create_proposal_does_not_override_explicit_values(client, monkeypatch):
     )
     assert prop["data"]["train_type"] == "复兴号"
     assert prop["data"]["status"] == "scheduled"
+
+
+def test_chat_injects_history_and_proposal_outcomes(client, monkeypatch):
+    """Prior turns — including saved/cancelled proposal outcomes — reach the LLM.
+
+    The backend is stateless, so the client relays its local chat history. The
+    outcomes are rendered as facts at the end of the assistant turn (spec #69).
+    """
+    token = register_and_login(client, "ai_history")["access_token"]
+    headers = auth_headers(token)
+    _configure_ai(client, headers)
+
+    from app.services import ai_agent as agent_mod
+
+    fake = _ScriptedProvider([LLMResponse(content="Sure — updating it now.")])
+    monkeypatch.setattr(
+        agent_mod.AiAgentService,
+        "_build_provider",
+        lambda self, user_id: fake,
+    )
+
+    history = [
+        {"role": "user", "content": "记录一下 CX659"},
+        {
+            "role": "assistant",
+            "content": "我准备创建这条航班。",
+            "proposals": [
+                {
+                    "action": "create",
+                    "record_type": "flight",
+                    "summary": "Create Flight · HKG → SIN · CX659",
+                    "status": "saved",
+                },
+                {
+                    "action": "create",
+                    "record_type": "hotel",
+                    "summary": "Create Hotel · Marina Bay",
+                    "status": "cancelled",
+                },
+                {
+                    "action": "create",
+                    "record_type": "train",
+                    "summary": "Create Train · G1234",
+                    "status": "pending",
+                },
+            ],
+        },
+        {"role": "user", "content": "把座位改成 32A"},
+    ]
+    response = client.post(
+        "/api/v1/ai/chat",
+        json={"message": "好的", "history": history},
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text
+
+    messages = fake.last_messages
+    assert messages[0]["role"] == "system"
+    assert messages[1] == {"role": "user", "content": "记录一下 CX659"}
+    assistant = messages[2]
+    assert assistant["role"] == "assistant"
+    assert "我准备创建这条航班。" in assistant["content"]
+    assert "Proposal outcomes:" in assistant["content"]
+    assert "confirmed by user" in assistant["content"]
+    assert "cancelled by user" in assistant["content"]
+    assert "still awaiting confirmation" in assistant["content"]
+    assert "HKG → SIN · CX659" in assistant["content"]
+    assert messages[3] == {"role": "user", "content": "把座位改成 32A"}
+    assert messages[-1] == {"role": "user", "content": "好的"}
+
+
+def test_chat_rejects_oversized_history(client):
+    token = register_and_login(client, "ai_history_cap")["access_token"]
+    headers = auth_headers(token)
+    _configure_ai(client, headers)
+    history = [{"role": "user", "content": f"turn {i}"} for i in range(21)]
+    response = client.post(
+        "/api/v1/ai/chat", json={"message": "hi", "history": history}, headers=headers
+    )
+    assert response.status_code == 422

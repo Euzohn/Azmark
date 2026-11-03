@@ -5,6 +5,7 @@ import type {
   AdminUser,
   AdminUserList,
   AiChatResponse,
+  AiHistoryMessage,
   Attachment,
   AttachmentList,
   AiSettingsRead,
@@ -239,6 +240,8 @@ export const api = {
   updateHotel: (id: string, data: HotelInput) =>
     request<Hotel>(`/hotels/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteHotel: (id: string) => request<void>(`/hotels/${id}`, { method: "DELETE" }),
+  geocodeHotel: (id: string) =>
+    request<Hotel>(`/hotels/${id}/geocode`, { method: "POST" }),
 
   listTrains: (params: FlightFilters = {}) => {
     const query = new URLSearchParams();
@@ -445,15 +448,16 @@ export const api = {
       body: importForm(file, mapping),
     }),
 
-  chatAi: (message: string, image?: string | null) =>
+  chatAi: (message: string, image?: string | null, history?: AiHistoryMessage[]) =>
     request<AiChatResponse>("/ai/chat", {
       method: "POST",
-      body: JSON.stringify({ message, image }),
+      body: JSON.stringify({ message, image, history }),
     }),
 
   chatAiStream: async function* (
     message: string,
     image?: string | null,
+    history?: AiHistoryMessage[],
   ): AsyncGenerator<AiStreamEvent> {
     const token = useAuth.getState().token;
     const response = await fetch(`${API_BASE}/api/v1/ai/chat/stream`, {
@@ -462,7 +466,7 @@ export const api = {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ message, image }),
+      body: JSON.stringify({ message, image, history }),
     });
 
     if (response.status === 401) {

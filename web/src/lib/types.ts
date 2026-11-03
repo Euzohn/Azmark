@@ -272,6 +272,8 @@ export interface Hotel {
   notes: string | null;
   trip_id: string | null;
   status: string;
+  lat: number | null;
+  lon: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -289,6 +291,8 @@ export interface HotelInput {
   notes?: string | null;
   trip_id?: string | null;
   status?: string;
+  lat?: number | null;
+  lon?: number | null;
 }
 
 export interface HotelList {
@@ -704,6 +708,17 @@ export interface MapRoute {
 export interface MapRoutesRead {
   items: MapRoute[];
   total: number;
+  hotels: MapHotel[];
+}
+
+export interface MapHotel {
+  id: string;
+  name: string;
+  lat: number;
+  lon: number;
+  check_in: string;
+  check_out: string | null;
+  status: string;
 }
 
 export interface AiProposal {
@@ -714,6 +729,20 @@ export interface AiProposal {
   data: Record<string, unknown>;
   status?: "pending" | "saved" | "cancelled" | "duplicate";
   existingRecordId?: string;
+}
+
+export interface AiHistoryProposalOutcome {
+  action: string;
+  record_type: string;
+  summary: string;
+  status: "pending" | "saved" | "cancelled" | "duplicate";
+}
+
+/** Prior chat turn relayed to the stateless backend for continuity. */
+export interface AiHistoryMessage {
+  role: "user" | "assistant";
+  content: string;
+  proposals?: AiHistoryProposalOutcome[];
 }
 
 export interface AiChatResponse {

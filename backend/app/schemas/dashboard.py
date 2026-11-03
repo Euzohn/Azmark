@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict
 
@@ -110,6 +110,20 @@ class MapRoute(BaseModel):
     distance_km: float | None = None
 
 
+class MapHotel(BaseModel):
+    """A geocoded accommodation stay pinned on the map (spec #10/#17)."""
+
+    id: uuid.UUID
+    name: str
+    lat: float
+    lon: float
+    check_in: date
+    check_out: date | None = None
+    status: str
+
+
 class MapRoutesRead(BaseModel):
     items: list[MapRoute]
     total: int
+    # Stays with coordinates render as pins next to the flight arcs (spec #10).
+    hotels: list[MapHotel] = []

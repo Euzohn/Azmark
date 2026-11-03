@@ -361,3 +361,34 @@ def test_dashboard_user_isolation(client):
     response = client.get("/api/v1/dashboard", headers=auth_headers(token_b))
     assert response.status_code == 200
     assert response.json()["stats"]["flights"] == 0
+
+
+def test_map_routes_include_geocoded_hotels_only(client):
+    token = register_and_login(client, "map_hotels")["access_token"]
+    headers = auth_headers(token)
+
+    client.post("/api/v1/flights", json=FLIGHT_HKG_SIN, headers=headers)
+    pinned = client.post(
+        "/api/v1/hotels",
+        json={
+            "hotel": "Marina Bay Sands",
+            "check_in": "2026-04-29",
+            "lat": 1.2834,
+            "lon": 103.8607,
+        },
+        headers=headers,
+    ).json()
+    client.post(
+        "/api/v1/hotels",
+        json={"hotel": "No Pin Hotel", "check_in": "2026-05-01"},
+        headers=headers,
+    )
+
+    body = client.get("/api/v1/map/routes", headers=headers).json()
+    assert body["total"] == 1
+    assert len(body["hotels"]) == 1
+    pin = body["hotels"][0]
+    assert pin["id"] == pinned["id"]
+    assert pin["name"] == "Marina Bay Sands"
+    assert pin["lat"] == 1.2834
+    assert pin["lon"] == 103.8607

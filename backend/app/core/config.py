@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     search_api_key: str = ""
     searxng_base_url: str = ""
 
+    # Geocoding for hotel map coordinates (spec #66, Map provider). Nominatim is
+    # keyless; point this at a self-hosted instance to avoid the public rate limit.
+    geocode_base_url: str = "https://nominatim.openstreetmap.org"
+
     # Object storage (spec #44/#75). Works with MinIO, AWS S3, R2 and OSS.
     # Empty endpoint means the AWS default endpoint.
     s3_endpoint: str = ""

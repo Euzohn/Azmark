@@ -20,6 +20,7 @@ import app.providers as providers
 from app.core.timezones import normalize_timezone
 from app.providers.base import FlightLookupResult
 from app.schemas.flight_lookup import FlightLookupResponse
+from app.schemas.status import canonical_record_status
 from app.services import reference
 from app.services.data_source import DataSourceService
 from app.services.provider_keys import ProviderKeyStore
@@ -101,35 +102,13 @@ class ProviderNotFoundError(Exception):
     """Requested provider name is not registered (spec #66)."""
 
 
-_STATUS_ALIASES = {
-    "scheduled": "scheduled",
-    "planned": "scheduled",
-    "active": "scheduled",
-    "departed": "scheduled",
-    "en-route": "scheduled",
-    "enroute": "scheduled",
-    "delayed": "scheduled",
-    "boarding": "scheduled",
-    "计划": "scheduled",
-    "起飞": "scheduled",
-    "completed": "completed",
-    "landed": "completed",
-    "arrived": "completed",
-    "arrival": "completed",
-    "到达": "completed",
-    "落地": "completed",
-    "cancelled": "cancelled",
-    "canceled": "cancelled",
-    "cancel": "cancelled",
-    "取消": "cancelled",
-}
-
-
 def _normalize_status(raw: str | None) -> str | None:
-    """Map provider-specific states onto the record's status vocabulary."""
-    if not raw:
-        return None
-    return _STATUS_ALIASES.get(str(raw).strip().lower())
+    """Map provider-specific states onto the record's status vocabulary.
+
+    The alias table lives in :mod:`app.schemas.status` so imports and provider
+    merges can never drift apart.
+    """
+    return canonical_record_status(raw)
 
 
 def _merge(local: dict, remote: FlightLookupResult | None) -> FlightLookupResponse:

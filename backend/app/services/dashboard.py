@@ -22,6 +22,7 @@ from app.schemas.dashboard import (
     BreakdownItem,
     DashboardRead,
     DashboardStats,
+    MapHotel,
     MapPoint,
     MapRoute,
     MapRoutesRead,
@@ -324,4 +325,26 @@ class DashboardService:
             for record in all_records
             if record.type == "flight"
         ]
-        return MapRoutesRead(items=items, total=len(items))
+        # Only stays with coordinates can be pinned; the rest stay list-only
+        # until the user runs the explicit geocode action (spec #10).
+        hotels = [
+            MapHotel(
+                id=hotel.id,
+                name=hotel.hotel,
+                lat=hotel.lat,
+                lon=hotel.lon,
+                check_in=hotel.check_in,
+                check_out=hotel.check_out,
+                status=hotel.status,
+            )
+            for hotel in self.db.scalars(
+                select(Hotel)
+                .where(
+                    Hotel.user_id == user_id,
+                    Hotel.lat.isnot(None),
+                    Hotel.lon.isnot(None),
+                )
+                .order_by(Hotel.check_in)
+            )
+        ]
+        return MapRoutesRead(items=items, total=len(items), hotels=hotels)

@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { api, ApiError } from "@/lib/api";
+import { buildChatHistory } from "@/lib/ai-history";
 import { useAuth } from "@/lib/auth-store";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
 import { formatZonedDateTime } from "@/lib/datetime";
@@ -301,6 +302,10 @@ export default function AiChatPage() {
 
       const finalText = messageText || t("ai.defaultImagePrompt");
 
+      // Prior turns (with proposal outcomes) give the stateless backend enough
+      // context to follow up without re-proposing what the user already saved.
+      const history = buildChatHistory(messages);
+
       const userMsg: ChatMessage = {
         id: nextId(),
         role: "user",
@@ -326,7 +331,7 @@ export default function AiChatPage() {
       try {
         let proposals: AiProposal[] = [];
 
-        for await (const event of api.chatAiStream(finalText, imagePreview)) {
+        for await (const event of api.chatAiStream(finalText, imagePreview, history)) {
           if (event.type === "text" && event.content) {
             setMessages((prev) =>
               prev.map((m) =>
@@ -404,7 +409,7 @@ export default function AiChatPage() {
         setStreaming(false);
       }
     },
-    [input, imagePreview, streaming, t],
+    [input, imagePreview, messages, streaming, t],
   );
 
   const invalidateAll = () => {

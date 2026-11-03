@@ -80,6 +80,7 @@ export default function MapPage() {
   const themeRef = useRef(theme);
   const [ready, setReady] = useState(false);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
+  const [selectedHotelId, setSelectedHotelId] = useState<string | null>(null);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["map-routes"],
@@ -95,7 +96,14 @@ export default function MapPage() {
       ),
     [data],
   );
-  const showMap = !isLoading && !isError && routes.length > 0;
+  const hotels = useMemo(
+    () =>
+      (data?.hotels ?? []).filter(
+        (hotel) => Number.isFinite(hotel.lat) && Number.isFinite(hotel.lon),
+      ),
+    [data],
+  );
+  const showMap = !isLoading && !isError && (routes.length > 0 || hotels.length > 0);
 
   const summary = useMemo(() => {
     const airports = new Set<string>();
@@ -258,12 +266,32 @@ export default function MapPage() {
       const lineData = { type: "FeatureCollection" as const, features: lineFeatures };
       const pointData = { type: "FeatureCollection" as const, features: pointFeatures };
 
+      // Geocoded stays render as pins beside the flight arcs (spec #10). Their
+      // popup data rides in the feature properties so the click handler never
+      // captures a stale `hotels` array.
+      const hotelFeatures = hotels.map((hotel) => ({
+        type: "Feature" as const,
+        properties: {
+          id: hotel.id,
+          name: hotel.name,
+          check_in: hotel.check_in,
+          check_out: hotel.check_out ?? "",
+        },
+        geometry: {
+          type: "Point" as const,
+          coordinates: [hotel.lon, hotel.lat] as LonLat,
+        },
+      }));
+      const hotelData = { type: "FeatureCollection" as const, features: hotelFeatures };
+
       const dark = isDarkTheme(themeRef.current);
       const accent = dark ? "#e0a737" : "#b45309";
+      const hotelColor = dark ? "#d98a70" : "#c66b4e";
 
       if (!map.getSource("routes")) {
         map.addSource("routes", { type: "geojson", data: lineData, tolerance: 0 });
         map.addSource("airports", { type: "geojson", data: pointData });
+        map.addSource("hotels", { type: "geojson", data: hotelData });
         map.addLayer({
           id: "routes-line",
           type: "line",
@@ -279,6 +307,17 @@ export default function MapPage() {
             "circle-radius": 3.5,
             "circle-color": accent,
              "circle-stroke-color": dark ? "#12161b" : "#f6f7f8",
+            "circle-stroke-width": 1.5,
+          },
+        });
+        map.addLayer({
+          id: "hotels-point",
+          type: "circle",
+          source: "hotels",
+          paint: {
+            "circle-radius": 5,
+            "circle-color": hotelColor,
+            "circle-stroke-color": dark ? "#12161b" : "#f6f7f8",
             "circle-stroke-width": 1.5,
           },
         });
@@ -317,10 +356,45 @@ export default function MapPage() {
           map.on("mouseleave", "routes-line", () => {
             map.getCanvas().style.cursor = "";
           });
+
+          map.on("click", "hotels-point", (event) => {
+            const feature = event.features?.[0];
+            if (!feature) return;
+            const props = feature.properties as Record<string, string>;
+            if (window.matchMedia("(max-width: 767px)").matches) {
+              setSelectedHotelId(props.id);
+              return;
+            }
+            const node = document.createElement("div");
+            node.className = "text-xs leading-relaxed";
+            const title = document.createElement("a");
+            title.className = "font-semibold underline-offset-2 hover:underline";
+            title.href = `/hotels/${props.id}`;
+            title.textContent = props.name;
+            node.appendChild(title);
+            const dates = [props.check_in, props.check_out].filter(Boolean).join(" → ");
+            if (dates) {
+              const subNode = document.createElement("div");
+              subNode.textContent = dates;
+              node.appendChild(subNode);
+            }
+            popupRef.current?.remove();
+            popupRef.current = new maplibregl.Popup({ closeButton: false, offset: 8 })
+              .setLngLat(event.lngLat)
+              .setDOMContent(node)
+              .addTo(map);
+          });
+          map.on("mouseenter", "hotels-point", () => {
+            map.getCanvas().style.cursor = "pointer";
+          });
+          map.on("mouseleave", "hotels-point", () => {
+            map.getCanvas().style.cursor = "";
+          });
         }
       } else {
         (map.getSource("routes") as GeoJSONSource).setData(lineData);
         (map.getSource("airports") as GeoJSONSource).setData(pointData);
+        (map.getSource("hotels") as GeoJSONSource).setData(hotelData);
       }
 
       // airport code labels
@@ -337,16 +411,17 @@ export default function MapPage() {
         markersRef.current.push(marker);
       }
 
-      // fit view to the drawn routes
-      if (lineFeatures.length > 0) {
-        const coords: LonLat[] = lineFeatures.flatMap(
-          (feature) => feature.geometry.coordinates as LonLat[],
-        );
+      // fit view to the drawn routes and pinned stays
+      const boundsCoords: LonLat[] = [
+        ...lineFeatures.flatMap((feature) => feature.geometry.coordinates as LonLat[]),
+        ...hotels.map((hotel) => [hotel.lon, hotel.lat] as LonLat),
+      ];
+      if (boundsCoords.length > 0) {
         let minLon = Infinity;
         let minLat = Infinity;
         let maxLon = -Infinity;
         let maxLat = -Infinity;
-        for (const [lon, lat] of coords) {
+        for (const [lon, lat] of boundsCoords) {
           minLon = Math.min(minLon, lon);
           maxLon = Math.max(maxLon, lon);
           minLat = Math.min(minLat, lat);
@@ -357,7 +432,11 @@ export default function MapPage() {
             [minLon, minLat],
             [maxLon, maxLat],
           ],
-          { padding: 64, maxZoom: 6, duration: 600 },
+          {
+            padding: 64,
+            maxZoom: lineFeatures.length > 0 ? 6 : 10,
+            duration: 600,
+          },
         );
       }
     };
@@ -367,39 +446,48 @@ export default function MapPage() {
     return () => {
       map.off("style.load", draw);
     };
-  }, [routes, ready]);
+  }, [routes, hotels, ready]);
 
   const routeHref = (route: (typeof routes)[number]) => route.type === "train" ? `/trains/${route.id}` : route.type === "other" ? `/transports/${route.id}` : `/flights/${route.id}`;
   const selectedRoute = routes.find((route) => route.id === selectedRouteId);
+  const selectedHotel = hotels.find((hotel) => hotel.id === selectedHotelId);
+  const subtitle = !data
+    ? undefined
+    : hotels.length > 0
+      ? t("map.subtitle", { routes: routes.length, hotels: hotels.length })
+      : t("map.routes", { count: routes.length });
 
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader
-        title={t("map.title")}
-        subtitle={data ? t("map.routes", { count: routes.length }) : undefined}
-      />
+      <PageHeader title={t("map.title")} subtitle={subtitle} />
 
       {isLoading ? <Skeleton className="h-[60vh] w-full" /> : null}
 
       {isError ? <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-danger/30 bg-card p-5"><span className="text-sm text-danger">{t("common.error")}</span><Button variant="outline" onClick={() => void refetch()}>{t("common.retry")}</Button></div> : null}
 
-      {!isLoading && !isError && routes.length === 0 ? (
+      {!isLoading && !isError && routes.length === 0 && hotels.length === 0 ? (
         <EmptyState icon={MapIcon} title={t("map.empty")} hint={t("map.emptyHint")} />
       ) : null}
 
       {showMap && !isError ? (
         <>
-          <div className="grid grid-cols-2 gap-4 border-y border-border py-4 sm:grid-cols-4">
-            <Stat label={t("map.stats.routes")} value={routes.length} />
-            <Stat label={t("map.stats.airports")} value={summary.airports} />
-            <Stat label={t("map.stats.countries")} value={summary.countries} />
-            <Stat
-              label={t("map.stats.distance")}
-              value={t("map.km", { value: numberFormat.format(summary.distance) })}
-            />
-          </div>
+          {routes.length > 0 ? (
+            <div className="grid grid-cols-2 gap-4 border-y border-border py-4 sm:grid-cols-4">
+              <Stat label={t("map.stats.routes")} value={routes.length} />
+              <Stat label={t("map.stats.airports")} value={summary.airports} />
+              <Stat label={t("map.stats.countries")} value={summary.countries} />
+              <Stat
+                label={t("map.stats.distance")}
+                value={t("map.km", { value: numberFormat.format(summary.distance) })}
+              />
+            </div>
+          ) : null}
 
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
+          <div
+            className={`grid gap-4 ${
+              longestRoutes.length > 0 ? "xl:grid-cols-[minmax(0,1fr)_20rem]" : ""
+            }`}
+          >
             <Card className="overflow-hidden p-0"><div ref={containerRef} className="h-[55dvh] min-h-[24rem] w-full xl:h-[70dvh]" /></Card>
             {longestRoutes.length > 0 ? <Card className="xl:max-h-[70dvh] xl:overflow-y-auto">
               <CardHeader>
@@ -444,6 +532,24 @@ export default function MapPage() {
               <span>{selectedRoute.origin.code ?? selectedRoute.origin.name} → {selectedRoute.destination.code ?? selectedRoute.destination.name}</span>
               <span className="text-xs text-muted-foreground">{selectedRoute.service_number}</span>
             </Link> : null}
+          </BottomSheet>
+          <BottomSheet
+            open={selectedHotel !== undefined}
+            onClose={() => setSelectedHotelId(null)}
+            title={t("hotels.detail")}
+          >
+            {selectedHotel ? (
+              <Link
+                href={`/hotels/${selectedHotel.id}`}
+                onClick={() => setSelectedHotelId(null)}
+                className="flex items-center justify-between gap-4 rounded-lg border border-border p-4 text-sm font-medium"
+              >
+                <span className="min-w-0 truncate">{selectedHotel.name}</span>
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {[selectedHotel.check_in, selectedHotel.check_out].filter(Boolean).join(" → ")}
+                </span>
+              </Link>
+            ) : null}
           </BottomSheet>
         </>
       ) : null}

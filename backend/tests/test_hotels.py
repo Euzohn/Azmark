@@ -186,3 +186,74 @@ def test_audit_log(client):
     hotel_actions = {e["action"] for e in entries if e["resource_type"] == "hotel"}
     assert "create_record" in hotel_actions
     assert "delete_record" in hotel_actions
+
+
+def test_hotel_coordinates_roundtrip(client):
+    headers = _headers(client, "hotel_coords")
+    resp = client.post(
+        "/api/v1/hotels",
+        json={**HOTEL, "lat": 1.2834, "lon": 103.8607},
+        headers=headers,
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["lat"] == 1.2834
+    assert body["lon"] == 103.8607
+
+    got = client.get(f"/api/v1/hotels/{body['id']}", headers=headers).json()
+    assert got["lat"] == 1.2834
+    assert got["lon"] == 103.8607
+
+    # out-of-range coordinates are rejected
+    bad = client.post(
+        "/api/v1/hotels", json={**HOTEL, "hotel": "Other", "lat": 95.0}, headers=headers
+    )
+    assert bad.status_code == 422
+
+
+def test_geocode_hotel_stores_coordinates(client, monkeypatch):
+    headers = _headers(client, "hotel_geocode")
+    created = client.post("/api/v1/hotels", json=HOTEL, headers=headers).json()
+    assert created["lat"] is None
+
+    from app.providers.geocode import GeocodeProvider, GeocodeResult
+
+    async def fake_search(self, query, *, limit=1):
+        assert query == HOTEL["address"]
+        return GeocodeResult(lat=1.2834, lon=103.8607, display_name="Marina Bay Sands")
+
+    monkeypatch.setattr(GeocodeProvider, "search", fake_search)
+
+    resp = client.post(f"/api/v1/hotels/{created['id']}/geocode", headers=headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["lat"] == 1.2834
+    assert resp.json()["lon"] == 103.8607
+
+
+def test_geocode_hotel_without_result_returns_404(client, monkeypatch):
+    headers = _headers(client, "hotel_geocode_none")
+    created = client.post("/api/v1/hotels", json=HOTEL, headers=headers).json()
+
+    from app.providers.geocode import GeocodeProvider
+
+    async def fake_search(self, query, *, limit=1):
+        return None
+
+    monkeypatch.setattr(GeocodeProvider, "search", fake_search)
+    resp = client.post(f"/api/v1/hotels/{created['id']}/geocode", headers=headers)
+    assert resp.status_code == 404
+
+
+def test_geocode_hotel_is_user_scoped(client, monkeypatch):
+    headers_a = _headers(client, "hotel_geo_a")
+    headers_b = _headers(client, "hotel_geo_b")
+    created = client.post("/api/v1/hotels", json=HOTEL, headers=headers_a).json()
+
+    from app.providers.geocode import GeocodeProvider, GeocodeResult
+
+    async def fake_search(self, query, *, limit=1):
+        return GeocodeResult(lat=0.0, lon=0.0)
+
+    monkeypatch.setattr(GeocodeProvider, "search", fake_search)
+    resp = client.post(f"/api/v1/hotels/{created['id']}/geocode", headers=headers_b)
+    assert resp.status_code == 404

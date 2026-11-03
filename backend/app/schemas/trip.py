@@ -4,6 +4,7 @@ from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.hotel import HotelRead
+from app.schemas.status import TripStatus
 from app.schemas.transport import FlightRead
 
 
@@ -28,7 +29,7 @@ class TripBase(_TripDates):
 
 
 class TripCreate(TripBase):
-    pass
+    status: TripStatus = "planned"
 
 
 class TripUpdate(_TripDates):
@@ -37,7 +38,7 @@ class TripUpdate(_TripDates):
     cover_image: str | None = Field(default=None, max_length=500)
     origin: str | None = Field(default=None, max_length=120)
     destination: str | None = Field(default=None, max_length=120)
-    status: str | None = Field(default=None, max_length=20)
+    status: TripStatus | None = None
 
 
 class TripRead(TripBase):

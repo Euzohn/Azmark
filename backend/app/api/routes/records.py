@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Query
 from app.api.deps import get_current_user, get_record_service
 from app.models.user import User
 from app.schemas.record import RecordList
+from app.schemas.status import RecordStatus
 from app.services.record import RecordService
 
 router = APIRouter(prefix="/records", tags=["records"])
@@ -21,7 +22,7 @@ RecordSort = Literal["newest", "oldest", "departure", "arrival", "created"]
 def list_records(
     search: str | None = None,
     type_filter: RecordType | None = Query(default=None, alias="type"),
-    status_filter: str | None = Query(default=None, alias="status"),
+    status_filter: RecordStatus | None = Query(default=None, alias="status"),
     cabin_class: str | None = None,
     carrier: str | None = None,
     trip_id: uuid.UUID | None = None,

@@ -5,6 +5,7 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.timezones import normalize_timezone
+from app.schemas.status import RecordStatus
 
 
 def _normalize_tz(value: object) -> object:
@@ -55,6 +56,7 @@ class FlightBase(BaseModel):
 class FlightCreate(FlightBase):
     origin: str = Field(min_length=1, max_length=120)
     destination: str = Field(min_length=1, max_length=120)
+    status: RecordStatus = "scheduled"
 
 
 class FlightUpdate(BaseModel):
@@ -63,7 +65,7 @@ class FlightUpdate(BaseModel):
     def _normalize_timezone(cls, value: object) -> object:
         return _normalize_tz(value)
 
-    status: str | None = Field(default=None, max_length=20)
+    status: RecordStatus | None = None
     departure_time: datetime | None = None
     arrival_time: datetime | None = None
     actual_departure_time: datetime | None = None
@@ -154,6 +156,7 @@ class TrainBase(BaseModel):
 class TrainCreate(TrainBase):
     origin: str = Field(min_length=1, max_length=120)
     destination: str = Field(min_length=1, max_length=120)
+    status: RecordStatus = "scheduled"
 
 
 class TrainUpdate(BaseModel):
@@ -162,7 +165,7 @@ class TrainUpdate(BaseModel):
     def _normalize_timezone(cls, value: object) -> object:
         return _normalize_tz(value)
 
-    status: str | None = Field(default=None, max_length=20)
+    status: RecordStatus | None = None
     departure_time: datetime | None = None
     arrival_time: datetime | None = None
     actual_departure_time: datetime | None = None
@@ -245,6 +248,7 @@ class OtherTransportBase(BaseModel):
 class OtherTransportCreate(OtherTransportBase):
     origin: str = Field(min_length=1, max_length=120)
     destination: str = Field(min_length=1, max_length=120)
+    status: RecordStatus = "scheduled"
 
 
 class OtherTransportUpdate(BaseModel):
@@ -253,7 +257,7 @@ class OtherTransportUpdate(BaseModel):
     def _normalize_timezone(cls, value: object) -> object:
         return _normalize_tz(value)
 
-    status: str | None = Field(default=None, max_length=20)
+    status: RecordStatus | None = None
     departure_time: datetime | None = None
     arrival_time: datetime | None = None
     actual_departure_time: datetime | None = None

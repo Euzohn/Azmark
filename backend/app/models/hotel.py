@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, Text, Uuid
+from sqlalchemy import Date, DateTime, Float, ForeignKey, Numeric, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.crypto import decrypt_value
@@ -41,6 +41,11 @@ class Hotel(Base):
 
     address: Mapped[str | None] = mapped_column(String(300))
     notes: Mapped[str | None] = mapped_column(Text)
+
+    # Optional coordinates for the map (spec #10). Filled by the explicit
+    # geocode action (Nominatim) or supplied by the caller; null until known.
+    lat: Mapped[float | None] = mapped_column(Float)
+    lon: Mapped[float | None] = mapped_column(Float)
 
     trip_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("trips.id", ondelete="SET NULL"), nullable=True, index=True
