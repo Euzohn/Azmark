@@ -31,3 +31,6 @@ backups/
 
 # Local scratch / temporary files
 tmp/
+
+# OpenCode local config / skills
+.opencode/

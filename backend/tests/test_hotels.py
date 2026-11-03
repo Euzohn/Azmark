@@ -210,6 +210,21 @@ def test_hotel_coordinates_roundtrip(client):
     )
     assert bad.status_code == 422
 
+    # explicit nulls clear a wrong pin (omitted fields leave it untouched)
+    kept = client.patch(f"/api/v1/hotels/{body['id']}", json={"notes": "keep pin"}, headers=headers)
+    assert kept.status_code == 200, kept.text
+    assert kept.json()["lat"] == 1.2834
+
+    cleared = client.patch(
+        f"/api/v1/hotels/{body['id']}", json={"lat": None, "lon": None}, headers=headers
+    )
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["lat"] is None
+    assert cleared.json()["lon"] is None
+    got = client.get(f"/api/v1/hotels/{body['id']}", headers=headers).json()
+    assert got["lat"] is None
+    assert got["lon"] is None
+
 
 def test_geocode_hotel_stores_coordinates(client, monkeypatch):
     headers = _headers(client, "hotel_geocode")

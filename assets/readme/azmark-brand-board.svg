@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="bt bd">
+<title id="bt">Azmark · Brand Board</title>
+<desc id="bd">Azmark(行迹)品牌概念展示板：主标志组合、图形拆解、应用图标、单色版本与品牌色。核心符号为 AZ Path——峰状字母 A 的右笔顺势接入字母 Z，路径终点为陶土橙圆点。</desc>
+<defs>
+  <radialGradient id="glow" cx="42%" cy="0%" r="70%">
+    <stop offset="0%" stop-color="#C66B4E" stop-opacity="0.06"/>
+    <stop offset="70%" stop-color="#C66B4E" stop-opacity="0"/>
+  </radialGradient>
+</defs>
+<rect width="1600" height="900" fill="#F5F1E8"/>
+<rect width="1600" height="900" fill="url(#glow)"/>
+<rect x="0.5" y="0.5" width="1599" height="899" rx="24" fill="none" stroke="#252822" stroke-opacity="0.12"/>
+<text x="80" y="92" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" letter-spacing="2.5" fill="#78816A">自托管 · AI 原生 · 个人旅行 OS</text>
+<text x="1520" y="92" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" letter-spacing="3" fill="#252822" fill-opacity="0.45">BRAND BOARD · v1</text>
+<line x1="80" y1="116" x2="1520" y2="116" stroke="#252822" stroke-opacity="0.12"/>
+<g transform="translate(80 150)">
+  <g transform="translate(0 0) scale(1.9)">
+    <g fill="none" stroke="#252822" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 78 L43 20 Q47 12 52 21 L66 43"/>
+      <path d="M69 40 H96 L66 72 H94"/>
+    </g>
+    <circle cx="106" cy="72" r="6.5" fill="#C66B4E"/>
+  </g>
+  <text x="252" y="128" font-family="Inter, Avenir, Helvetica, Arial, sans-serif" font-size="84" font-weight="650" letter-spacing="6" fill="#252822">AZMARK</text>
+  <text x="254" y="158" font-family="Inter, Avenir, Helvetica, Arial, sans-serif" font-size="14" font-weight="500" letter-spacing="3.5" fill="#78816A">PERSONAL TRAVEL OS</text>
+</g>
+<text x="1310" y="208" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="38" fill="#252822">Every journey leaves</text>
+<text x="1310" y="260" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="38" fill="#252822">a mark.</text>
+<text x="1310" y="300" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" letter-spacing="3" fill="#78816A">BRAND LINE</text>
+<line x1="80" y1="420" x2="1520" y2="420" stroke="#252822" stroke-opacity="0.10"/>
+<text x="80" y="456" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" letter-spacing="3" fill="#78816A">01 · GRAPHIC BREAKDOWN</text>
+<line x1="80" y1="468" x2="680" y2="468" stroke="#252822" stroke-opacity="0.10"/>
+<g transform="translate(153.5 500) scale(0.85)">
+    <g fill="none" stroke="#252822" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 78 L43 20 Q47 12 52 21 L66 43"/>
+    </g>
+</g>
+<g transform="translate(329.0 500) scale(0.85)">
+    <g fill="none" stroke="#252822" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M69 40 H96 L66 72 H94"/>
+    </g>
+</g>
+<g transform="translate(504.5 500) scale(0.85)">
+    <g fill="none" stroke="#252822" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 78 L43 20 Q47 12 52 21 L66 43"/>
+      <path d="M69 40 H96 L66 72 H94"/>
+    </g>
+    <circle cx="106" cy="72" r="6.5" fill="#C66B4E"/>
+</g>
+<text x="204.5" y="608" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" letter-spacing="2" fill="#252822" fill-opacity="0.55">A · peak</text>
+<text x="380.0" y="608" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" letter-spacing="2" fill="#252822" fill-opacity="0.55">Z · path</text>
+<text x="555.5" y="608" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" letter-spacing="2" fill="#252822" fill-opacity="0.55">mark</text>
+<text x="704" y="456" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" letter-spacing="3" fill="#78816A">02 · APP ICON</text>
+<line x1="704" y1="468" x2="1100" y2="468" stroke="#252822" stroke-opacity="0.10"/>
+<rect x="763.5" y="492" width="108.8" height="108.8" rx="23" fill="#F5F1E8" stroke="#252822" stroke-opacity="0.18"/>
+<g transform="translate(787.9 521.4) scale(0.5)">
+    <g fill="none" stroke="#252822" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 78 L43 20 Q47 12 52 21 L66 43"/>
+      <path d="M69 40 H96 L66 72 H94"/>
+    </g>
+    <circle cx="106" cy="72" r="6.5" fill="#C66B4E"/>
+</g>
+<rect x="931.7" y="492" width="108.8" height="108.8" rx="23" fill="#252822"/>
+<g transform="translate(956.1 521.4) scale(0.5)">
+    <g fill="none" stroke="#F5F1E8" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 78 L43 20 Q47 12 52 21 L66 43"/>
+      <path d="M69 40 H96 L66 72 H94"/>
+    </g>
+    <circle cx="106" cy="72" r="6.5" fill="#C66B4E"/>
+</g>
+<text x="817.9" y="624" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" letter-spacing="2" fill="#252822" fill-opacity="0.55">LIGHT</text>
+<text x="986.1" y="624" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" letter-spacing="2" fill="#252822" fill-opacity="0.55">DARK</text>
+<text x="1124" y="456" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" letter-spacing="3" fill="#78816A">03 · MONOCHROME</text>
+<line x1="1124" y1="468" x2="1520" y2="468" stroke="#252822" stroke-opacity="0.10"/>
+<rect x="1156.0" y="482" width="150" height="110" rx="6" fill="#F5F1E8" stroke="#252822" stroke-opacity="0.18"/>
+<g transform="translate(1201.0 512.0) scale(0.5)">
+    <g fill="none" stroke="#252822" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 78 L43 20 Q47 12 52 21 L66 43"/>
+      <path d="M69 40 H96 L66 72 H94"/>
+    </g>
+    <circle cx="106" cy="72" r="6.5" fill="#252822"/>
+</g>
+<rect x="1338.0" y="482" width="150" height="110" rx="6" fill="#252822"/>
+<g transform="translate(1383.0 512.0) scale(0.5)">
+    <g fill="none" stroke="#F5F1E8" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 78 L43 20 Q47 12 52 21 L66 43"/>
+      <path d="M69 40 H96 L66 72 H94"/>
+    </g>
+    <circle cx="106" cy="72" r="6.5" fill="#F5F1E8"/>
+</g>
+<text x="1231.0" y="614" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" letter-spacing="2" fill="#252822" fill-opacity="0.55">ON LIGHT</text>
+<text x="1413.0" y="614" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" letter-spacing="2" fill="#252822" fill-opacity="0.55">ON DARK</text>
+<line x1="80" y1="688" x2="1520" y2="688" stroke="#252822" stroke-opacity="0.10"/>
+<text x="80" y="724" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" letter-spacing="3" fill="#78816A">04 · COLOUR</text>
+<rect x="80" y="744" width="56" height="56" rx="4" fill="#252822"/>
+<text x="108" y="822" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10" letter-spacing="1.5" fill="#252822">GRAPHITE</text>
+<text x="108" y="838" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9" fill="#252822" fill-opacity="0.55">#252822</text>
+<rect x="164" y="744" width="56" height="56" rx="4" fill="#F5F1E8" stroke="#252822" stroke-opacity="0.18"/>
+<text x="192" y="822" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10" letter-spacing="1.5" fill="#252822">PAPER</text>
+<text x="192" y="838" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9" fill="#252822" fill-opacity="0.55">#F5F1E8</text>
+<rect x="248" y="744" width="56" height="56" rx="4" fill="#C66B4E"/>
+<text x="276" y="822" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10" letter-spacing="1.5" fill="#252822">TERRACOTTA</text>
+<text x="276" y="838" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9" fill="#252822" fill-opacity="0.55">#C66B4E</text>
+<rect x="332" y="744" width="56" height="56" rx="4" fill="#78816A"/>
+<text x="360" y="822" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10" letter-spacing="1.5" fill="#252822">MOSS</text>
+<text x="360" y="838" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9" fill="#252822" fill-opacity="0.55">#78816A</text>
+<text x="1520" y="800" text-anchor="end" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="18" fill="#252822" fill-opacity="0.7">Every journey leaves a mark.</text>
+<text x="1520" y="828" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10" letter-spacing="2" fill="#78816A">AZMARK · PERSONAL TRAVEL OS</text>
+</svg>

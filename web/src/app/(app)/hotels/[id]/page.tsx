@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MoreHorizontal, MapPin, Pencil, Trash2 } from "lucide-react";
+import { MoreHorizontal, MapPin, MapPinOff, Pencil, Trash2 } from "lucide-react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
@@ -56,11 +56,22 @@ function HotelDetail() {
     },
   });
 
+  const clearLocation = useMutation({
+    // Explicit nulls (not omitted fields) tell the API to drop the pin.
+    mutationFn: () => api.updateHotel(id, { lat: null, lon: null }),
+    onSuccess: async (hotel) => {
+      queryClient.setQueryData(["hotel", id], hotel);
+      setGeocodedAddress(null);
+      await refresh();
+    },
+  });
+
   const geocode = useMutation({
     mutationFn: () => api.geocodeHotel(id),
     onSuccess: async (result) => {
       queryClient.setQueryData(["hotel", id], result.hotel);
       setGeocodedAddress(result.matched_address);
+      clearLocation.reset();
       await refresh();
     },
   });
@@ -106,6 +117,7 @@ function HotelDetail() {
                 variant="outline"
                 onClick={() => {
                   setGeocodedAddress(null);
+                  clearLocation.reset();
                   geocode.mutate();
                 }}
                 disabled={geocode.isPending}
@@ -156,6 +168,16 @@ function HotelDetail() {
           )}
         </p>
       ) : null}
+      {clearLocation.isSuccess && !editing ? (
+        <p role="status" className="text-sm text-success">
+          {t("hotels.locationCleared")}
+        </p>
+      ) : null}
+      {clearLocation.isError && !editing ? (
+        <p role="alert" className="text-sm text-danger">
+          {t("common.error")}
+        </p>
+      ) : null}
       {editing ? (
         <>
           {update.isError ? (
@@ -183,6 +205,20 @@ function HotelDetail() {
         title={t("common.actions")}
         variant="responsive"
       >
+        {data.lat != null || data.lon != null ? (
+          <Button
+            variant="ghost"
+            className="w-full justify-start"
+            disabled={clearLocation.isPending}
+            onClick={() => {
+              setMoreOpen(false);
+              clearLocation.mutate();
+            }}
+          >
+            <MapPinOff className="h-4 w-4" />
+            {t("hotels.clearLocation")}
+          </Button>
+        ) : null}
         <Button
           variant="ghost"
           className="w-full justify-start text-danger"
