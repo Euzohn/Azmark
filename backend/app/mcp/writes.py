@@ -25,15 +25,29 @@ from app.services.pending_action import (
 
 _RECORD_TYPE = {
     "type": "string",
-    "enum": ["flight", "train", "other", "hotel"],
-    "description": "Which record type this proposal targets (hotel = accommodation)",
+    "enum": [
+        "flight",
+        "train",
+        "other",
+        "hotel",
+        "trip",
+        "expense",
+        "note",
+        "place",
+        "activity",
+    ],
+    "description": (
+        "Which record type this proposal targets (hotel = accommodation; place = "
+        "a geo reference entity, which has no trip_id — joining a trip is done "
+        "in the app)"
+    ),
 }
 
 WRITE_TOOL_DEFINITIONS: list[Tool] = [
     Tool(
         name="create_record",
         description=(
-            "Propose creating a transport record. Nothing is saved: the call "
+            "Propose creating a record of any type. Nothing is saved: the call "
             "returns a pending_action_id and the owner must approve it in the "
             "Azmark web UI (Pending actions). Use get_pending_action to check "
             "whether it was confirmed."
@@ -45,13 +59,18 @@ WRITE_TOOL_DEFINITIONS: list[Tool] = [
                 "data": {
                     "type": "object",
                     "description": (
-                        "Record fields. For transport (flight/train/other): "
-                        "origin, destination, departure_time, arrival_time, "
-                        "carrier, service_number, seat, notes, trip_id. For "
-                        "hotel: hotel, check_in, check_out, room_type, "
-                        "room_number, booking_reference, price, currency, "
-                        "address, notes, trip_id. Same shape as POST "
-                        "/api/v1/<type>."
+                        "Record fields (same shape as POST /api/v1/<type>). "
+                        "flight/train/other: origin, destination, departure_time, "
+                        "arrival_time, carrier, service_number, seat, notes, trip_id. "
+                        "hotel: hotel, check_in, check_out, room_type, room_number, "
+                        "booking_reference, price, currency, address, notes, trip_id. "
+                        "trip: name (required), start_date, end_date, description, "
+                        "origin, destination. expense: amount, currency (required), "
+                        "category, occurred_at, description, trip_id. note: title "
+                        "(required), content, trip_id. place: name (required), type, "
+                        "localized_name, country, region, city, district, lat, lon, "
+                        "timezone. activity: name (required), type, place_id, "
+                        "start_at, end_at, price, currency, notes, trip_id."
                     ),
                 },
             },

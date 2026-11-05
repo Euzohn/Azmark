@@ -115,7 +115,7 @@ curl http://<服务器IP>:3000/api/v1/auth/me \
 }
 ```
 
-只读工具：`search_records` / `get_record` / `list_trips` / `get_trip` / `get_statistics`。`write` scope 令牌还能用 `create_record` / `update_record`，但**它们不会直接写库**——而是生成一个「待确认操作」，由用户在网页「待确认」页面批准后才生效（spec #69）；agent 无法自己确认。完整配置、curl 验证与排错见 [`docs/mcp.md`](./docs/mcp.md)。
+只读工具：`search_records` / `get_record` / `search_hotels` / `get_hotel` / `list_trips` / `get_trip` / `get_statistics` / `search_expenses` / `search_notes` / `search_places` / `search_activities`。`write` scope 令牌还能用 `create_record` / `update_record` 提议新建或修改**任意类型**的记录（航班 / 火车 / 其他交通 / 住宿 / 行程 / 开销 / 笔记 / 地点 / 活动），但**它们不会直接写库**——而是生成一个「待确认操作」，由用户在网页「待确认」页面批准后才生效（spec #69）；agent 无法自己确认，删除也不通过 MCP 暴露。完整配置、curl 验证与排错见 [`docs/mcp.md`](./docs/mcp.md)。
 
 ## 快速部署（服务器）
 

@@ -115,7 +115,7 @@ The same tool layer is exposed to Claude, Cursor and other clients through an MC
 }
 ```
 
-Read-only tools: `search_records` / `get_record` / `list_trips` / `get_trip` / `get_statistics`. A `write`-scope token additionally unlocks `create_record` / `update_record`, but **they never write to the database directly** — they produce a "pending action" that only takes effect after a user approves it on the web "Pending" page (spec #69); an agent cannot approve its own proposal. Full configuration, curl verification and troubleshooting: [`docs/mcp.md`](./docs/mcp.md).
+Read-only tools: `search_records` / `get_record` / `search_hotels` / `get_hotel` / `list_trips` / `get_trip` / `get_statistics` / `search_expenses` / `search_notes` / `search_places` / `search_activities`. A `write`-scope token additionally unlocks `create_record` / `update_record` to propose creating or changing a record of **any type** (flight / train / other transport / hotel / trip / expense / note / place / activity), but **they never write to the database directly** — they produce a "pending action" that only takes effect after a user approves it on the web "Pending" page (spec #69); an agent cannot approve its own proposal, and deletion is not exposed through MCP. Full configuration, curl verification and troubleshooting: [`docs/mcp.md`](./docs/mcp.md).
 
 ## Quick deploy (server)
 

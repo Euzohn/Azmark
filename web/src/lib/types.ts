@@ -788,7 +788,16 @@ export type PendingActionStatus = "pending" | "confirmed" | "rejected" | "failed
 export interface PendingAction {
   id: string;
   action: "create" | "update";
-  record_type: "flight" | "train" | "other";
+  record_type:
+    | "flight"
+    | "train"
+    | "other"
+    | "hotel"
+    | "trip"
+    | "expense"
+    | "note"
+    | "place"
+    | "activity";
   summary: string;
   payload: Record<string, unknown>;
   status: PendingActionStatus;

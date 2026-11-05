@@ -6,9 +6,30 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
+from app.models.activity import Activity
+from app.models.expense import Expense
+from app.models.note import Note
 from app.models.pending_action import PendingAction, PendingActionStatus
+from app.models.place import Place
 from app.models.transport_record import TransportRecord
+from app.models.trip import Trip
 from tests.conftest import auth_headers, register_and_login
+
+
+def _propose(client, secret, record_type, data, *, name="create_record", record_id=None) -> dict:
+    """Generic MCP write proposal for any record type."""
+    payload = {"record_type": record_type, "data": data}
+    if record_id is not None:
+        payload["record_id"] = record_id
+    return _mcp_call(client, secret, name, payload)
+
+
+def _confirm(client, headers, action_id) -> dict:
+    resp = client.post(f"/api/v1/pending-actions/{action_id}/confirm", json={}, headers=headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["status"] == "confirmed", body
+    return body
 
 
 def _make_write_token(client, username) -> tuple[str, dict[str, str]]:
@@ -163,9 +184,7 @@ def test_pending_action_user_isolation(client):
     action_id = proposal["pending_action_id"]
 
     headers_b = auth_headers(register_and_login(client, "pa_iso_b")["access_token"])
-    assert (
-        client.get(f"/api/v1/pending-actions/{action_id}", headers=headers_b).status_code == 404
-    )
+    assert client.get(f"/api/v1/pending-actions/{action_id}", headers=headers_b).status_code == 404
     assert (
         client.post(
             f"/api/v1/pending-actions/{action_id}/confirm", json={}, headers=headers_b
@@ -282,3 +301,177 @@ def test_audit_trail_attributes_token(client):
     create_entry = next(e for e in entries if e["action"] == "create_pending_action")
     assert create_entry["meta"]["actor"]["name"] == "agent"
     assert create_entry["meta"]["record_type"] == "flight"
+
+
+# -- new entity types (trip/expense/note/place/activity) ----------------------
+# The same "propose, then a human confirms" rule covers every record type, not
+# just transport and hotel.
+
+
+def test_trip_write_round_trip(client, db):
+    secret, headers = _make_write_token(client, "pa_trip")
+    proposal = _propose(
+        client,
+        secret,
+        "trip",
+        {"name": "Kyushu 2026", "start_date": "2026-05-01", "end_date": "2026-05-08"},
+    )
+    assert proposal["status"] == "pending_confirmation"
+    assert "Kyushu 2026" in proposal["summary"]
+    assert db.scalar(select(Trip)) is None  # not written yet
+
+    body = _confirm(client, headers, proposal["pending_action_id"])
+    assert body["result"]["record_type"] == "trip"
+    trip = db.scalar(select(Trip))
+    assert trip is not None and trip.name == "Kyushu 2026"
+
+
+def test_expense_write_round_trip(client, db):
+    secret, headers = _make_write_token(client, "pa_expense")
+    proposal = _propose(
+        client,
+        secret,
+        "expense",
+        {"amount": 18.5, "currency": "jpy", "category": "food", "description": "Ramen"},
+    )
+    assert proposal["status"] == "pending_confirmation"
+    assert db.scalar(select(Expense)) is None
+
+    body = _confirm(client, headers, proposal["pending_action_id"])
+    assert body["result"]["record_type"] == "expense"
+    expense = db.scalar(select(Expense))
+    assert expense is not None
+    assert str(expense.amount) == "18.50"
+    assert expense.currency == "JPY"  # schema normalizes to upper case
+
+
+def test_note_write_round_trip(client, db):
+    secret, headers = _make_write_token(client, "pa_note")
+    proposal = _propose(client, secret, "note", {"title": "Packing list", "content": "adapter"})
+    assert db.scalar(select(Note)) is None
+
+    body = _confirm(client, headers, proposal["pending_action_id"])
+    assert body["result"]["record_type"] == "note"
+    note = db.scalar(select(Note))
+    assert note is not None and note.title == "Packing list"
+
+
+def test_place_write_round_trip(client, db):
+    secret, headers = _make_write_token(client, "pa_place")
+    proposal = _propose(
+        client,
+        secret,
+        "place",
+        {"name": "Dotonbori", "type": "attraction", "city": "Osaka", "lat": 34.6687},
+    )
+    assert db.scalar(select(Place)) is None
+
+    body = _confirm(client, headers, proposal["pending_action_id"])
+    assert body["result"]["record_type"] == "place"
+    place = db.scalar(select(Place))
+    assert place is not None
+    assert place.name == "Dotonbori"
+    assert place.type == "attraction"
+
+
+def test_activity_write_round_trip(client, db):
+    secret, headers = _make_write_token(client, "pa_activity")
+    proposal = _propose(
+        client,
+        secret,
+        "activity",
+        {
+            "name": "TeamLab",
+            "type": "sightseeing",
+            "start_at": "2026-05-02T10:00:00Z",
+            "end_at": "2026-05-02T12:00:00Z",
+            "price": 30,
+            "currency": "JPY",
+        },
+    )
+    assert db.scalar(select(Activity)) is None
+
+    body = _confirm(client, headers, proposal["pending_action_id"])
+    assert body["result"]["record_type"] == "activity"
+    activity = db.scalar(select(Activity))
+    assert activity is not None
+    assert activity.name == "TeamLab"
+    assert activity.currency == "JPY"
+
+
+def test_new_types_support_update_and_propose_only(client, db):
+    """An update proposal for a new type changes nothing until confirmed."""
+    secret, headers = _make_write_token(client, "pa_new_upd")
+    created = client.post("/api/v1/notes", json={"title": "Old"}, headers=headers).json()
+
+    proposal = _propose(
+        client,
+        secret,
+        "note",
+        {"title": "New"},
+        name="update_record",
+        record_id=created["id"],
+    )
+    action_id = proposal["pending_action_id"]
+    assert db.scalar(select(Note)).title == "Old"  # untouched before confirm
+
+    _confirm(client, headers, action_id)
+    assert db.scalar(select(Note)).title == "New"
+
+
+def test_new_type_invalid_args_return_field_errors(client):
+    """Validation errors come back to the agent while it can still fix the call."""
+    secret, _ = _make_write_token(client, "pa_new_invalid")
+    # expense needs amount + currency
+    payload = _propose(client, secret, "expense", {"description": "no amount"})
+    assert payload["error"] == "invalid proposal"
+    fields = {f["field"] for f in payload["fields"]}
+    assert "amount" in fields
+    assert "currency" in fields
+
+    # unknown record type is rejected
+    payload = _propose(client, secret, "souvenir", {"name": "Magnet"})
+    assert payload["error"] == "invalid proposal"
+    assert any(f["field"] == "record_type" for f in payload["fields"])
+
+
+def test_activity_bad_window_rejected_at_proposal(client, db):
+    """end_at before start_at is rejected up front, so nothing becomes pending."""
+    secret, _ = _make_write_token(client, "pa_act_win")
+    proposal = _propose(
+        client,
+        secret,
+        "activity",
+        {
+            "name": "Backwards",
+            "start_at": "2026-05-02T12:00:00Z",
+            "end_at": "2026-05-02T10:00:00Z",  # end before start
+        },
+    )
+    assert proposal["error"] == "invalid proposal"
+    # A model-level validator reports an empty field, with the key in the message.
+    assert any("end_at" in f["field"] or "end_at" in f["message"] for f in proposal["fields"])
+    assert db.scalar(select(Activity)) is None
+    assert db.scalar(select(PendingAction)) is None
+
+
+def test_activity_unknown_place_fails_at_confirm(client, db):
+    """A proposal that validates but cannot be written flips to FAILED at confirm."""
+    secret, headers = _make_write_token(client, "pa_act_place")
+    ghost_place = str(uuid.uuid4())
+    proposal = _propose(
+        client,
+        secret,
+        "activity",
+        {"name": "Ghost visit", "type": "sightseeing", "place_id": ghost_place},
+    )
+    assert proposal["status"] == "pending_confirmation"
+    action_id = proposal["pending_action_id"]
+
+    # The pending action is stored, but confirming cannot write the activity
+    # because the referenced place does not exist (or belongs to someone else).
+    resp = client.post(f"/api/v1/pending-actions/{action_id}/confirm", json={}, headers=headers)
+    assert resp.status_code == 400  # PendingActionInvalidError -> 400
+    action = db.scalar(select(PendingAction).where(PendingAction.id == uuid.UUID(action_id)))
+    assert action.status == PendingActionStatus.FAILED
+    assert db.scalar(select(Activity)) is None  # never a silent partial write

@@ -18,7 +18,11 @@ from sqlalchemy.orm import Session
 
 from app.models.pending_action import PendingAction, PendingActionKind, PendingActionStatus
 from app.models.user import utcnow
+from app.schemas.activity import ActivityCreate, ActivityUpdate
+from app.schemas.expense import ExpenseCreate, ExpenseUpdate
 from app.schemas.hotel import HotelCreate, HotelUpdate
+from app.schemas.note import NoteCreate, NoteUpdate
+from app.schemas.place import PlaceCreate, PlaceUpdate
 from app.schemas.transport import (
     FlightCreate,
     FlightUpdate,
@@ -27,7 +31,12 @@ from app.schemas.transport import (
     TrainCreate,
     TrainUpdate,
 )
+from app.schemas.trip import TripCreate, TripUpdate
+from app.services.activity import ActivityNotFoundError, ActivityService, InvalidActivityWindowError
+from app.services.expense import ExpenseNotFoundError, ExpenseService
 from app.services.hotel import DuplicateHotelError, HotelService
+from app.services.note import NoteNotFoundError, NoteService
+from app.services.place import PlaceNotFoundError, PlaceService
 from app.services.transport import (
     DuplicateRecordError,
     FlightService,
@@ -35,18 +44,34 @@ from app.services.transport import (
     RecordNotFoundError,
     TrainService,
 )
+from app.services.trip import TripNotFoundError, TripService
 
 #: How long an agent's proposal stays actionable. Agents can be slow, humans
 #: slower, but an unbounded queue of stale writes is a liability.
 DEFAULT_TTL = timedelta(days=7)
 
-RECORD_TYPES = ("flight", "train", "other", "hotel")
+RECORD_TYPES = (
+    "flight",
+    "train",
+    "other",
+    "hotel",
+    "trip",
+    "expense",
+    "note",
+    "place",
+    "activity",
+)
 
 _CREATE_SCHEMAS = {
     "flight": FlightCreate,
     "train": TrainCreate,
     "other": OtherTransportCreate,
     "hotel": HotelCreate,
+    "trip": TripCreate,
+    "expense": ExpenseCreate,
+    "note": NoteCreate,
+    "place": PlaceCreate,
+    "activity": ActivityCreate,
 }
 
 _UPDATE_SCHEMAS = {
@@ -54,6 +79,11 @@ _UPDATE_SCHEMAS = {
     "train": TrainUpdate,
     "other": OtherTransportUpdate,
     "hotel": HotelUpdate,
+    "trip": TripUpdate,
+    "expense": ExpenseUpdate,
+    "note": NoteUpdate,
+    "place": PlaceUpdate,
+    "activity": ActivityUpdate,
 }
 
 _SERVICES = {
@@ -61,7 +91,49 @@ _SERVICES = {
     "train": TrainService,
     "other": OtherTransportService,
     "hotel": HotelService,
+    "trip": TripService,
+    "expense": ExpenseService,
+    "note": NoteService,
+    "place": PlaceService,
+    "activity": ActivityService,
 }
+
+#: record types whose services expose a uniform ``create_record`` / ``update_record``
+#: with duplicate detection (``force``). The other entities have no duplicate
+#: concept, so they are called via their ``create_<type>`` / ``update_<type>``
+#: and ignore ``force``.
+_DUPLICATE_TYPES = frozenset({"flight", "train", "other", "hotel"})
+
+#: Human-readable labels for proposal summaries / the approval inbox.
+_LABELS = {
+    "flight": "Flight",
+    "train": "Train",
+    "other": "Transport",
+    "hotel": "Hotel",
+    "trip": "Trip",
+    "expense": "Expense",
+    "note": "Note",
+    "place": "Place",
+    "activity": "Activity",
+}
+
+
+def _service_create(record_type: str, service, *, user_id, payload, force: bool):
+    """Dispatch a confirmed create to the entity's own service method."""
+    if record_type in _DUPLICATE_TYPES:
+        return service.create_record(user_id=user_id, payload=payload, force=force)
+    return getattr(service, f"create_{record_type}")(user_id=user_id, payload=payload)
+
+
+def _service_update(record_type: str, service, *, user_id, record_id, payload):
+    """Dispatch a confirmed update; the id kwarg name varies per entity."""
+    if record_type in _DUPLICATE_TYPES:
+        return service.update_record(user_id=user_id, record_id=record_id, payload=payload)
+    if record_type == "trip":
+        return service.update_trip(user_id=user_id, trip_id=record_id, payload=payload)
+    return getattr(service, f"update_{record_type}")(
+        user_id=user_id, **{f"{record_type}_id": record_id}, payload=payload
+    )
 
 
 class PendingActionNotFoundError(Exception):
@@ -138,29 +210,50 @@ def validate_update(record_type: str, record_id: str, data: dict[str, Any]) -> d
 
 def describe(action: str, record_type: str, payload: dict[str, Any]) -> str:
     """One-line summary for the approval inbox and the agent's tool result."""
-    if record_type == "hotel":
-        label = "Hotel"
-        if action == PendingActionKind.CREATE:
+    label = _LABELS.get(record_type, record_type)
+    if action == PendingActionKind.CREATE:
+        if record_type == "hotel":
             parts = [f"Create {label}", payload.get("hotel") or "—"]
             if payload.get("check_in"):
                 parts.append(str(payload["check_in"]))
             if payload.get("check_out"):
                 parts.append(f"→ {payload['check_out']}")
             return " · ".join(parts)
-        data = payload.get("data") or {}
-        changed = ", ".join(sorted(data))
-        return f"Update {label} {payload.get('record_id', '')} · {changed}"
 
-    label = {"flight": "Flight", "train": "Train", "other": "Transport"}.get(
-        record_type, record_type
-    )
-    if action == PendingActionKind.CREATE:
-        route = f"{payload.get('origin') or '—'} → {payload.get('destination') or '—'}"
-        parts = [f"Create {label}", route]
-        if payload.get("service_number"):
-            parts.append(str(payload["service_number"]))
-        if payload.get("departure_time"):
-            parts.append(str(payload["departure_time"]))
+        if record_type in ("flight", "train", "other"):
+            route = f"{payload.get('origin') or '—'} → {payload.get('destination') or '—'}"
+            parts = [f"Create {label}", route]
+            if payload.get("service_number"):
+                parts.append(str(payload["service_number"]))
+            if payload.get("departure_time"):
+                parts.append(str(payload["departure_time"]))
+            return " · ".join(parts)
+
+        parts = [f"Create {label}"]
+        if record_type == "trip":
+            parts.append(payload.get("name") or "—")
+            if payload.get("start_date"):
+                parts.append(str(payload["start_date"]))
+        elif record_type == "expense":
+            if payload.get("category"):
+                parts.append(str(payload["category"]))
+            amount = payload.get("amount")
+            if amount is not None:
+                parts.append(f"{amount} {payload.get('currency') or ''}".strip())
+            if payload.get("description"):
+                parts.append(str(payload["description"]))
+        elif record_type == "place":
+            parts.append(payload.get("name") or "—")
+            if payload.get("type"):
+                parts.append(str(payload["type"]))
+        elif record_type == "activity":
+            parts.append(payload.get("name") or "—")
+            if payload.get("type"):
+                parts.append(str(payload["type"]))
+            if payload.get("start_at"):
+                parts.append(str(payload["start_at"]))
+        elif record_type == "note":
+            parts.append(payload.get("title") or "—")
         return " · ".join(parts)
 
     data = payload.get("data") or {}
@@ -302,12 +395,18 @@ class PendingActionService:
         try:
             if record.action == PendingActionKind.CREATE:
                 schema = _CREATE_SCHEMAS[record.record_type]
-                written = service.create_record(
-                    user_id=user_id, payload=schema.model_validate(payload), force=force
+                written = _service_create(
+                    record.record_type,
+                    service,
+                    user_id=user_id,
+                    payload=schema.model_validate(payload),
+                    force=force,
                 )
             elif record.action == PendingActionKind.UPDATE:
                 schema = _UPDATE_SCHEMAS[record.record_type]
-                written = service.update_record(
+                written = _service_update(
+                    record.record_type,
+                    service,
                     user_id=user_id,
                     record_id=uuid.UUID(payload["record_id"]),
                     payload=schema.model_validate(payload.get("data") or {}),
@@ -316,7 +415,18 @@ class PendingActionService:
                 raise PendingActionInvalidError(record.action)
         except (DuplicateRecordError, DuplicateHotelError):
             raise
-        except (RecordNotFoundError, PendingActionInvalidError, ValueError, KeyError) as exc:
+        except (
+            RecordNotFoundError,
+            TripNotFoundError,
+            ExpenseNotFoundError,
+            NoteNotFoundError,
+            PlaceNotFoundError,
+            ActivityNotFoundError,
+            InvalidActivityWindowError,
+            PendingActionInvalidError,
+            ValueError,
+            KeyError,
+        ) as exc:
             record.status = PendingActionStatus.FAILED
             record.error = str(exc)[:500]
             record.resolved_at = utcnow()

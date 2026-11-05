@@ -14,7 +14,7 @@ Azmark 内置一个**只读** MCP Server（spec #85）。Claude、Cursor 等 MCP
 
 - 只接受个人访问令牌。浏览器 JWT 不接受：它会过期，且不应被写进 agent 配置。
 - 令牌可随时吊销/删除，吊销后下一个请求立即 401。
-- `read` 与 `write` 令牌当前都能连 MCP，但暴露的工具全为只读；写入能力（A3）在后续版本提供，仍需走两步确认（spec #69）。
+- `read` 与 `write` 令牌都能连 MCP：`read` 只暴露只读工具；`write` 额外解锁 `create_record` / `update_record`（写提案，仍需网页两步确认，spec #69）。删除（DESTRUCTIVE）一律不通过 MCP。
 
 ## 工具
 
@@ -22,9 +22,11 @@ Azmark 内置一个**只读** MCP Server（spec #85）。Claude、Cursor 等 MCP
 | --- | --- |
 | `search_records` | 按关键词（城市、航班/车次、航司、运营方）搜索交通记录，最多 50 条 |
 | `get_record` | 按 id 取单条记录（含 notes） |
+| `search_hotels` / `get_hotel` | 搜索 / 读取住宿记录 |
 | `list_trips` | 最近的行程列表，用于拿 `trip_id` |
-| `get_trip` | 单个行程 + 其中的交通记录（按出发时间排序） |
+| `get_trip` | 单个行程 + 其中的成员记录（按出发时间排序） |
 | `get_statistics` | 汇总统计：国家/城市/旅程/里程，按年/月/航司/机场/舱位/铁路运营方拆分 |
+| `search_expenses` / `search_notes` / `search_places` / `search_activities` | 按关键词、类别或类型检索开销 / 笔记 / 地点 / 活动，用于先拿到 id 再改/删（删除在网页操作） |
 
 所有结果都不含 PNR、票号、证件号等敏感字段（spec #45、#75、#96），并且只包含令牌所属用户的数据；别人的 id 一律返回 `not found`（spec #57）。
 
@@ -34,13 +36,15 @@ Azmark 内置一个**只读** MCP Server（spec #85）。Claude、Cursor 等 MCP
 
 | 工具 | 说明 |
 | --- | --- |
-| `create_record` | 提议新建一条航班 / 火车 / 其他交通记录。**不会立即写入**，返回 `pending_action_id`，需用户在网页「待确认」里批准 |
-| `update_record` | 提议修改已有记录的字段。同样只生成提案，等待批准 |
+| `create_record` | 提议新建一条记录，`record_type` 支持 `flight` / `train` / `other` / `hotel` / `trip` / `expense` / `note` / `place` / `activity`。**不会立即写入**，返回 `pending_action_id`，需用户在网页「待确认」里批准 |
+| `update_record` | 提议修改已有记录的字段，`record_type` 覆盖同样 9 类。同样只生成提案，等待批准 |
 | `get_pending_action` | 查询某个提案的状态（pending / confirmed / rejected / failed / expired）。任何 scope 的令牌都能用 |
 
 写入流程（spec #69）：agent 调 `create_record` → Azmark 落一条 `pending_action`（**不碰业务数据**）→ agent 拿到 id 并提示用户去网页确认 → 用户在「待确认」页面点 Confirm → 记录才真正写入，审计日志记录是哪个令牌发起的。
 
 > 删除（DESTRUCTIVE）**不通过 MCP 暴露**。要删记录，请用户在网页操作。这是故意的：destructive 操作的确认必须发生在 agent 无法触及的地方。
+>
+> 地点（place）是地理参照实体，没有自己的 `trip_id`；把它排进行程时间线（`trip_items`）也不通过 MCP，请在网页操作。
 
 > 为什么 agent 不能自己确认？因为 MCP 客户端由模型驱动，提示注入可能让 agent "替用户确认"。确认接口 `/api/v1/pending-actions/*` **只接受浏览器会话（JWT），个人访问令牌一律 403**——这是整个设计的安全支点。
 
