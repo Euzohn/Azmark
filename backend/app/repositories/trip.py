@@ -3,6 +3,8 @@ import uuid
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
+from app.models.activity import Activity
+from app.models.hotel import Hotel
 from app.models.transport_record import TransportRecord
 from app.models.trip import Trip
 from app.models.trip_item import TripItem
@@ -69,6 +71,18 @@ class TripRepository:
                 TransportRecord.user_id == user_id,
                 TransportRecord.trip_id == trip_id,
             )
+            .values(trip_id=None)
+        )
+        # Mirror the DB-level ON DELETE SET NULL so SQLite (tests) behaves the
+        # same as Postgres: trips detach without deleting hotels/activities.
+        self.db.execute(
+            update(Hotel)
+            .where(Hotel.user_id == user_id, Hotel.trip_id == trip_id)
+            .values(trip_id=None)
+        )
+        self.db.execute(
+            update(Activity)
+            .where(Activity.user_id == user_id, Activity.trip_id == trip_id)
             .values(trip_id=None)
         )
         self.db.commit()

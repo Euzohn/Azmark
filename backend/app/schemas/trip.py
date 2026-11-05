@@ -1,9 +1,12 @@
 import uuid
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.schemas.activity import ActivityRead
 from app.schemas.hotel import HotelRead
+from app.schemas.place import PlaceRead
 from app.schemas.status import TripStatus
 from app.schemas.transport import FlightRead
 
@@ -53,8 +56,9 @@ class TripRead(TripBase):
 class TripItemRead(BaseModel):
     """Ordered trip member (spec #16).
 
-    ``record`` is populated for transport items, ``hotel`` for accommodation;
-    exactly one is set per item.
+    ``record`` is populated for transport items, ``hotel`` for accommodation,
+    ``place`` for a bare place visit and ``activity`` for activities; exactly
+    one payload is set per item.
     """
 
     id: uuid.UUID
@@ -65,6 +69,23 @@ class TripItemRead(BaseModel):
     end_at: datetime | None = None
     record: FlightRead | None = None
     hotel: HotelRead | None = None
+    place: PlaceRead | None = None
+    activity: ActivityRead | None = None
+
+
+class TripItemCreate(BaseModel):
+    """Add a place to a trip as an explicit timeline item (spec #16)."""
+
+    item_type: Literal["place"]
+    item_id: uuid.UUID
+    start_at: datetime | None = None
+    end_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def _check_window(self) -> "TripItemCreate":
+        if self.start_at and self.end_at and self.end_at < self.start_at:
+            raise ValueError("end_at must not be before start_at")
+        return self
 
 
 class TripItemUpdate(BaseModel):

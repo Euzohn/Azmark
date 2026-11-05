@@ -8,6 +8,8 @@ import {
   ArrowUp,
   BedDouble,
   Bus,
+  CalendarDays,
+  MapPin,
   Plane,
   Plus,
   Trash2,
@@ -29,7 +31,6 @@ import { api } from "@/lib/api";
 import { formatZonedDateTime } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 import type {
-  Hotel,
   OtherTransport,
   TimelineRecord,
   Train,
@@ -97,6 +98,11 @@ export default function TripDetailPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["trip", id] }),
   });
 
+  const removeItem = useMutation({
+    mutationFn: (itemId: string) => api.deleteTripItem(id, itemId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["trip", id] }),
+  });
+
   if (isLoading) {
     return (
       <div className="flex flex-col gap-4">
@@ -126,10 +132,15 @@ export default function TripDetailPage() {
           end_at: record.arrival_time,
           record,
           hotel: null,
+          place: null,
+          activity: null,
         }));
   const displayItems = items.filter(
-    (item): item is TripItem & { record: TimelineRecord | null; hotel: Hotel | null } =>
-      item.record !== null || item.hotel !== null,
+    (item) =>
+      item.record !== null ||
+      item.hotel !== null ||
+      item.place !== null ||
+      item.activity !== null,
   );
   const canReorder = Boolean(data.items && data.items.length > 1);
 
@@ -215,6 +226,117 @@ export default function TripDetailPage() {
           ) : (
             displayItems.map((item, index) => {
               const itemIndex = items.findIndex((entry) => entry.id === item.id);
+              const orderControls = canReorder ? (
+                <div className="flex shrink-0 flex-col">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    disabled={itemIndex <= 0 || reorder.isPending}
+                    onClick={() => moveItem(item.id, -1)}
+                    title={t("trips.moveUp")}
+                    aria-label={t("trips.moveUp")}
+                  >
+                    <ArrowUp className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    disabled={itemIndex >= items.length - 1 || reorder.isPending}
+                    onClick={() => moveItem(item.id, 1)}
+                    title={t("trips.moveDown")}
+                    aria-label={t("trips.moveDown")}
+                  >
+                    <ArrowDown className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ) : null;
+              if (item.place) {
+                const place = item.place;
+                return (
+                  <Card
+                    key={item.id}
+                    interactive
+                    className="group animate-fade-in-up"
+                    style={{ animationDelay: `${index * 40}ms` }}
+                  >
+                    <CardContent className="flex items-center gap-4 p-4">
+                      <Link
+                        href={`/places/${place.id}`}
+                        className="flex min-w-0 flex-1 items-center gap-4"
+                      >
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                          <MapPin className="h-4 w-4" strokeWidth={1.75} />
+                        </span>
+                        <div className="min-w-0">
+                          <div className="font-display text-base font-semibold tracking-tight">
+                            {place.name}
+                          </div>
+                          <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                            {[place.localized_name, place.city].filter(Boolean).join(" · ") ||
+                              t(`places.type.${place.type}`)}
+                            {item.start_at ? ` · ${formatDate(item.start_at, locale)}` : ""}
+                          </div>
+                        </div>
+                      </Link>
+                      {orderControls}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0 text-muted-foreground hover:text-danger"
+                        disabled={removeItem.isPending}
+                        title={t("places.removeFromTrip")}
+                        aria-label={t("places.removeFromTrip")}
+                        onClick={() => {
+                          if (window.confirm(t("places.removeFromTrip"))) {
+                            removeItem.mutate(item.id);
+                          }
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </CardContent>
+                  </Card>
+                );
+              }
+              if (item.activity) {
+                const activity = item.activity;
+                return (
+                  <Card
+                    key={item.id}
+                    interactive
+                    className="group animate-fade-in-up"
+                    style={{ animationDelay: `${index * 40}ms` }}
+                  >
+                    <CardContent className="flex items-center gap-4 p-4">
+                      <Link
+                        href={`/activities/${activity.id}`}
+                        className="flex min-w-0 flex-1 items-center gap-4"
+                      >
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-warning/10 text-warning">
+                          <CalendarDays className="h-4 w-4" strokeWidth={1.75} />
+                        </span>
+                        <div className="min-w-0">
+                          <div className="font-display text-base font-semibold tracking-tight">
+                            {activity.name}
+                          </div>
+                          <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                            {t(`activities.type.${activity.type}`)}
+                            {activity.start_at
+                              ? ` · ${formatDate(activity.start_at, locale)}`
+                              : ""}
+                          </div>
+                        </div>
+                      </Link>
+                      {orderControls}
+                    </CardContent>
+                  </Card>
+                );
+              }
               if (item.hotel) {
                 const hotel = item.hotel;
                 return (

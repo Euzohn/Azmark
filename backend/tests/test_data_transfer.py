@@ -277,3 +277,40 @@ def test_export_json_includes_expenses_and_notes(client):
     assert len(bundle["notes"]) == 1
     assert bundle["notes"][0]["title"] == "Osaka plan"
     assert bundle["notes"][0]["trip_name"] == "Osaka 2026"
+
+
+def test_export_json_includes_places_and_activities(client):
+    token = register_and_login(client, "export_place_activity")["access_token"]
+    headers = auth_headers(token)
+    trip = client.post("/api/v1/trips", json={"name": "Osaka 2026"}, headers=headers).json()
+    place = client.post(
+        "/api/v1/places",
+        json={"name": "Dotonbori", "type": "attraction", "city": "Osaka", "lat": 34.6687},
+        headers=headers,
+    )
+    assert place.status_code == 201, place.text
+    activity = client.post(
+        "/api/v1/activities",
+        json={
+            "name": "Street food crawl",
+            "type": "dining",
+            "place_id": place.json()["id"],
+            "trip_id": trip["id"],
+            "start_at": "2026-04-02T18:00:00Z",
+            "price": "4200",
+            "currency": "jpy",
+        },
+        headers=headers,
+    )
+    assert activity.status_code == 201, activity.text
+
+    bundle = client.get("/api/v1/export?format=json", headers=headers).json()
+    assert len(bundle["places"]) == 1
+    assert bundle["places"][0]["name"] == "Dotonbori"
+    assert bundle["places"][0]["lat"] == 34.6687
+    assert len(bundle["activities"]) == 1
+    exported = bundle["activities"][0]
+    assert exported["name"] == "Street food crawl"
+    assert exported["currency"] == "JPY"
+    assert exported["place_id"] == place.json()["id"]
+    assert exported["trip_name"] == "Osaka 2026"

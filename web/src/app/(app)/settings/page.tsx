@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CurrencySelect } from "@/components/ui/currency-select";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -311,12 +312,10 @@ export function SettingsPanel({
               </div>
               <div>
                 <Label className="mb-1.5 block">{t("settings.currency")}</Label>
-                <Input
-                  maxLength={3}
+                <CurrencySelect
                   value={profile.currency}
-                  onChange={(e) =>
-                    setProfile({ ...profile, currency: e.target.value.toUpperCase() })
-                  }
+                  onChange={(currency) => setProfile({ ...profile, currency })}
+                  allowEmpty={false}
                 />
               </div>
               <div className="flex items-center gap-3 md:col-span-2">

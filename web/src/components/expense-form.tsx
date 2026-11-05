@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { CurrencySelect } from "@/components/ui/currency-select";
 import { DateInput, DateTimeLocalInput } from "@/components/ui/date-input";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -155,11 +156,10 @@ export function ExpenseForm({
             />
           </Field>
           <Field label={t("expenses.currency")}>
-            <Input
+            <CurrencySelect
               required
               value={form.currency}
-              maxLength={3}
-              onChange={(e) => set("currency", e.target.value.toUpperCase())}
+              onChange={(value) => set("currency", value)}
             />
           </Field>
           <Field label={t("expenses.occurredAt")}>
@@ -195,10 +195,9 @@ export function ExpenseForm({
             />
           </Field>
           <Field label={t("expenses.convertedCurrency")}>
-            <Input
+            <CurrencySelect
               value={form.converted_currency}
-              maxLength={3}
-              onChange={(e) => set("converted_currency", e.target.value.toUpperCase())}
+              onChange={(value) => set("converted_currency", value)}
             />
           </Field>
           <Field label={t("expenses.exchangeRate")}>

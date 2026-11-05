@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
+import { CurrencySelect } from "@/components/ui/currency-select";
 import { DateInput } from "@/components/ui/date-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -890,10 +891,9 @@ export function FlightForm({ initial, submitting, onSubmit, onCancel, onDirtyCha
             />
           </Field>
           <Field label={t("flights.currency")} marked={isChanged("currency")}>
-            <Input
+            <CurrencySelect
               value={form.currency}
-              maxLength={3}
-              onChange={(e) => set("currency", e.target.value.toUpperCase())}
+              onChange={(value) => set("currency", value)}
             />
           </Field>
           <Field label={t("flights.distance")} marked={isChanged("distance")}>

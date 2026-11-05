@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { CurrencySelect } from "@/components/ui/currency-select";
 import { DateInput } from "@/components/ui/date-input";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -187,10 +188,9 @@ export function HotelForm({
             />
           </Field>
           <Field label={t("hotels.currency")}>
-            <Input
+            <CurrencySelect
               value={form.currency}
-              maxLength={3}
-              onChange={(e) => set("currency", e.target.value.toUpperCase())}
+              onChange={(value) => set("currency", value)}
             />
           </Field>
           <div className="sm:col-span-2">

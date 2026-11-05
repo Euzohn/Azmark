@@ -10,9 +10,9 @@ from app.core.db import Base
 class TripItem(Base):
     """Ordered member of a Trip (spec #16).
 
-    ``item_type``/``item_id`` are polymorphic so hotels, places and activities
-    can join later. Today only ``transport`` items exist and mirror
-    ``TransportRecord.trip_id`` (the canonical membership column).
+    ``item_type``/``item_id`` are polymorphic so transport, hotels, places and
+    activities share one ordered timeline. Transport, hotel and activity items
+    mirror their entity's ``trip_id``; place items are explicit additions.
     """
 
     __tablename__ = "trip_items"

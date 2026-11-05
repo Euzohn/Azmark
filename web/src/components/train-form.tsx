@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CurrencySelect } from "@/components/ui/currency-select";
 import { DateTimeLocalInput } from "@/components/ui/date-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -489,10 +490,9 @@ export function TrainForm({
             />
           </Field>
           <Field label={t("trains.currency")} marked={isChanged("currency")}>
-            <Input
+            <CurrencySelect
               value={form.currency}
-              maxLength={3}
-              onChange={(e) => set("currency", e.target.value.toUpperCase())}
+              onChange={(value) => set("currency", value)}
             />
           </Field>
           <Field label={t("trains.distance")} marked={isChanged("distance")}>

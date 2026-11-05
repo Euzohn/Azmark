@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.routes import (
+    activities,
     admin,
     ai,
     attachments,
@@ -15,6 +16,7 @@ from app.api.routes import (
     hotels,
     notes,
     pending_actions,
+    places,
     records,
     reference,
     settings,
@@ -32,6 +34,8 @@ api_router.include_router(flights.router)
 api_router.include_router(trains.router)
 api_router.include_router(transports.router)
 api_router.include_router(hotels.router)
+api_router.include_router(places.router)
+api_router.include_router(activities.router)
 api_router.include_router(expenses.router)
 api_router.include_router(notes.router)
 api_router.include_router(records.router)

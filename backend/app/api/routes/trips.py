@@ -8,7 +8,9 @@ from app.models.user import User
 from app.schemas.trip import (
     TripCreate,
     TripDetail,
+    TripItemCreate,
     TripItemOrder,
+    TripItemRead,
     TripItemUpdate,
     TripList,
     TripRead,
@@ -16,7 +18,9 @@ from app.schemas.trip import (
 )
 from app.services.audit import AuditService
 from app.services.trip import (
+    InvalidTripItemTypeError,
     InvalidTripOrderError,
+    TripItemExistsError,
     TripItemNotFoundError,
     TripNotFoundError,
     TripService,
@@ -151,6 +155,74 @@ def update_trip_item(
         resource_type="trip",
         resource_id=str(trip_id),
         meta={"fields": sorted(payload.model_dump(exclude_unset=True).keys())},
+        request=request,
+    )
+
+
+@router.post("/{trip_id}/items", response_model=TripItemRead, status_code=status.HTTP_201_CREATED)
+def add_trip_item(
+    trip_id: uuid.UUID,
+    payload: TripItemCreate,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    service: TripService = Depends(get_trip_service),
+    audit: AuditService = Depends(get_audit_service),
+) -> TripItemRead:
+    """Add a place to a trip as an explicit timeline item (spec #16)."""
+    try:
+        item = service.add_item(user_id=current_user.id, trip_id=trip_id, payload=payload)
+    except TripNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
+    except TripItemNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Place not found"
+        ) from None
+    except TripItemExistsError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Place already in trip"
+        ) from None
+    except InvalidTripItemTypeError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Only places can be added"
+        ) from None
+    audit.log(
+        action=AuditAction.UPDATE_RECORD,
+        user_id=current_user.id,
+        resource_type="trip",
+        resource_id=str(trip_id),
+        meta={"added_item": str(item.id), "item_type": item.item_type},
+        request=request,
+    )
+    return item
+
+
+@router.delete("/{trip_id}/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_trip_item(
+    trip_id: uuid.UUID,
+    item_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    service: TripService = Depends(get_trip_service),
+    audit: AuditService = Depends(get_audit_service),
+) -> None:
+    """Remove an explicit place item; mirrored items use their own endpoint."""
+    try:
+        service.remove_item(user_id=current_user.id, trip_id=trip_id, item_id=item_id)
+    except TripNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
+    except TripItemNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
+    except InvalidTripItemTypeError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only place items can be removed here",
+        ) from None
+    audit.log(
+        action=AuditAction.UPDATE_RECORD,
+        user_id=current_user.id,
+        resource_type="trip",
+        resource_id=str(trip_id),
+        meta={"removed_item": str(item_id)},
         request=request,
     )
 

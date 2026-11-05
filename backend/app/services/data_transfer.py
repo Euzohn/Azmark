@@ -15,9 +15,11 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.models.activity import Activity
 from app.models.expense import Expense
 from app.models.hotel import Hotel
 from app.models.note import Note
+from app.models.place import Place
 from app.models.transport_record import TransportRecord
 from app.models.trip import Trip
 from app.models.user import User
@@ -319,6 +321,10 @@ class DataTransferService:
             ],
             "expenses": [self._export_expense(e, trip_names) for e in self._all_expenses(user_id)],
             "notes": [self._export_note(n, trip_names) for n in self._all_notes(user_id)],
+            "places": [self._export_place(p) for p in self._all_places(user_id)],
+            "activities": [
+                self._export_activity(a, trip_names) for a in self._all_activities(user_id)
+            ],
         }
         return json.dumps(bundle, ensure_ascii=False, indent=2)
 
@@ -550,6 +556,54 @@ class DataTransferService:
             else:
                 data[field] = getattr(note, field, None)
         return data
+
+    def _all_places(self, user_id: uuid.UUID) -> list[Place]:
+        return list(
+            self.db.scalars(
+                select(Place).where(Place.user_id == user_id).order_by(Place.name.asc(), Place.id)
+            )
+        )
+
+    def _export_place(self, place: Place) -> dict[str, Any]:
+        return {
+            "id": str(place.id),
+            "type": place.type,
+            "country": place.country,
+            "region": place.region,
+            "city": place.city,
+            "district": place.district,
+            "name": place.name,
+            "localized_name": place.localized_name,
+            "lat": place.lat,
+            "lon": place.lon,
+            "timezone": place.timezone,
+            "external_ids": place.external_ids,
+        }
+
+    def _all_activities(self, user_id: uuid.UUID) -> list[Activity]:
+        return list(
+            self.db.scalars(
+                select(Activity)
+                .where(Activity.user_id == user_id)
+                .order_by(Activity.start_at.asc().nullslast(), Activity.id)
+            )
+        )
+
+    def _export_activity(
+        self, activity: Activity, trip_names: dict[uuid.UUID, str]
+    ) -> dict[str, Any]:
+        return {
+            "id": str(activity.id),
+            "name": activity.name,
+            "type": activity.type,
+            "place_id": str(activity.place_id) if activity.place_id else None,
+            "trip_name": trip_names.get(activity.trip_id) if activity.trip_id else None,
+            "start_at": iso_full(activity.start_at),
+            "end_at": iso_full(activity.end_at),
+            "price": float(activity.price) if activity.price is not None else None,
+            "currency": activity.currency,
+            "notes": activity.notes,
+        }
 
     def _export_trip(self, trip: Trip) -> dict[str, Any]:
         return {

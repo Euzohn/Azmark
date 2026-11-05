@@ -62,6 +62,16 @@ import type {
   NoteFilters,
   NoteInput,
   NoteList,
+  Activity,
+  ActivityFilters,
+  ActivityInput,
+  ActivityList,
+  Place,
+  PlaceFilters,
+  PlaceInput,
+  PlaceList,
+  TripItem,
+  TripItemCreate,
 } from "@/lib/types";
 
 // Empty by default → requests go to the same origin (/api/v1/...), and the
@@ -289,6 +299,41 @@ export const api = {
     request<Note>(`/notes/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteNote: (id: string) => request<void>(`/notes/${id}`, { method: "DELETE" }),
 
+  listPlaces: (params: PlaceFilters = {}) => {
+    const query = new URLSearchParams();
+    if (params.search) query.set("search", params.search);
+    if (params.type) query.set("type", params.type);
+    if (params.page) query.set("page", String(params.page));
+    if (params.page_size) query.set("page_size", String(params.page_size));
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return request<PlaceList>(`/places${suffix}`);
+  },
+  createPlace: (data: PlaceInput) =>
+    request<Place>("/places", { method: "POST", body: JSON.stringify(data) }),
+  getPlace: (id: string) => request<Place>(`/places/${id}`),
+  updatePlace: (id: string, data: PlaceInput) =>
+    request<Place>(`/places/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deletePlace: (id: string) => request<void>(`/places/${id}`, { method: "DELETE" }),
+
+  listActivities: (params: ActivityFilters = {}) => {
+    const query = new URLSearchParams();
+    if (params.search) query.set("search", params.search);
+    if (params.type) query.set("type", params.type);
+    if (params.trip_id) query.set("trip_id", params.trip_id);
+    if (params.place_id) query.set("place_id", params.place_id);
+    if (params.sort) query.set("sort", params.sort);
+    if (params.page) query.set("page", String(params.page));
+    if (params.page_size) query.set("page_size", String(params.page_size));
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return request<ActivityList>(`/activities${suffix}`);
+  },
+  createActivity: (data: ActivityInput) =>
+    request<Activity>("/activities", { method: "POST", body: JSON.stringify(data) }),
+  getActivity: (id: string) => request<Activity>(`/activities/${id}`),
+  updateActivity: (id: string, data: ActivityInput) =>
+    request<Activity>(`/activities/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteActivity: (id: string) => request<void>(`/activities/${id}`, { method: "DELETE" }),
+
   listTrains: (params: FlightFilters = {}) => {
     const query = new URLSearchParams();
     if (params.search) query.set("search", params.search);
@@ -364,6 +409,13 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
+  addTripItem: (tripId: string, data: TripItemCreate) =>
+    request<TripItem>(`/trips/${tripId}/items`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  deleteTripItem: (tripId: string, itemId: string) =>
+    request<void>(`/trips/${tripId}/items/${itemId}`, { method: "DELETE" }),
   deleteTrip: (id: string) => request<void>(`/trips/${id}`, { method: "DELETE" }),
 
   searchAirports: (query: string) =>

@@ -144,6 +144,18 @@ def get_note_service(db: Session = Depends(get_db)):
     return NoteService(db)
 
 
+def get_place_service(db: Session = Depends(get_db)):
+    from app.services.place import PlaceService
+
+    return PlaceService(db)
+
+
+def get_activity_service(db: Session = Depends(get_db)):
+    from app.services.activity import ActivityService
+
+    return ActivityService(db)
+
+
 def get_auth_service(db: Session = Depends(get_db)):
     from app.services.auth import AuthService
 

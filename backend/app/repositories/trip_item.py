@@ -4,12 +4,15 @@ from datetime import UTC, date, datetime, time
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.models.activity import Activity
 from app.models.hotel import Hotel
 from app.models.transport_record import TransportRecord
 from app.models.trip_item import TripItem
 
 TRANSPORT_ITEM = "transport"
 HOTEL_ITEM = "hotel"
+PLACE_ITEM = "place"
+ACTIVITY_ITEM = "activity"
 
 
 def _as_utc(value: datetime | None) -> datetime | None:
@@ -160,6 +163,117 @@ class TripItemRepository:
         if item is not None:
             self.db.delete(item)
             self.db.commit()
+
+    def get_for_activity(self, *, user_id: uuid.UUID, activity_id: uuid.UUID) -> TripItem | None:
+        return self.db.scalar(
+            select(TripItem).where(
+                TripItem.user_id == user_id,
+                TripItem.item_type == ACTIVITY_ITEM,
+                TripItem.item_id == activity_id,
+            )
+        )
+
+    def sync_activity(self, activity: Activity) -> None:
+        """Mirror ``activity.trip_id`` into TripItem, keeping times in sync."""
+        item = self.get_for_activity(user_id=activity.user_id, activity_id=activity.id)
+
+        if activity.trip_id is None:
+            if item is not None:
+                self.db.delete(item)
+                self.db.commit()
+            return
+
+        if item is None:
+            item = TripItem(
+                user_id=activity.user_id,
+                trip_id=activity.trip_id,
+                item_type=ACTIVITY_ITEM,
+                item_id=activity.id,
+                sort_order=self._chronological_sort_order(
+                    user_id=activity.user_id,
+                    trip_id=activity.trip_id,
+                    start_at=activity.start_at,
+                ),
+                start_at=activity.start_at,
+                end_at=activity.end_at,
+            )
+            self.db.add(item)
+        else:
+            if item.trip_id != activity.trip_id:
+                item.sort_order = self._chronological_sort_order(
+                    user_id=activity.user_id,
+                    trip_id=activity.trip_id,
+                    start_at=activity.start_at,
+                )
+                item.trip_id = activity.trip_id
+            item.start_at = activity.start_at
+            item.end_at = activity.end_at
+
+        self.db.commit()
+
+    def delete_activity(self, *, user_id: uuid.UUID, activity_id: uuid.UUID) -> None:
+        item = self.get_for_activity(user_id=user_id, activity_id=activity_id)
+        if item is not None:
+            self.db.delete(item)
+            self.db.commit()
+
+    def get_place_item(
+        self, *, user_id: uuid.UUID, trip_id: uuid.UUID, place_id: uuid.UUID
+    ) -> TripItem | None:
+        return self.db.scalar(
+            select(TripItem).where(
+                TripItem.user_id == user_id,
+                TripItem.trip_id == trip_id,
+                TripItem.item_type == PLACE_ITEM,
+                TripItem.item_id == place_id,
+            )
+        )
+
+    def add_place(
+        self,
+        *,
+        user_id: uuid.UUID,
+        trip_id: uuid.UUID,
+        place_id: uuid.UUID,
+        start_at: datetime | None,
+        end_at: datetime | None,
+    ) -> TripItem:
+        """Create an explicit place item, slotted at its visit time (spec #16)."""
+        item = TripItem(
+            user_id=user_id,
+            trip_id=trip_id,
+            item_type=PLACE_ITEM,
+            item_id=place_id,
+            sort_order=self._chronological_sort_order(
+                user_id=user_id, trip_id=trip_id, start_at=start_at
+            ),
+            start_at=start_at,
+            end_at=end_at,
+        )
+        self.db.add(item)
+        self.db.commit()
+        self.db.refresh(item)
+        return item
+
+    def delete_place_items(self, *, user_id: uuid.UUID, place_id: uuid.UUID) -> None:
+        """Drop every trip item pointing at a place (used when the place is deleted)."""
+        items = list(
+            self.db.scalars(
+                select(TripItem).where(
+                    TripItem.user_id == user_id,
+                    TripItem.item_type == PLACE_ITEM,
+                    TripItem.item_id == place_id,
+                )
+            )
+        )
+        for item in items:
+            self.db.delete(item)
+        if items:
+            self.db.commit()
+
+    def delete_item(self, item: TripItem) -> None:
+        self.db.delete(item)
+        self.db.commit()
 
     def list_for_trip(self, *, user_id: uuid.UUID, trip_id: uuid.UUID) -> list[TripItem]:
         stmt = (

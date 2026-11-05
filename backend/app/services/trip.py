@@ -4,12 +4,28 @@ from sqlalchemy.orm import Session
 
 from app.models.transport_record import TransportRecord
 from app.models.trip import Trip
+from app.repositories.activity import ActivityRepository
 from app.repositories.hotel import HotelRepository
+from app.repositories.place import PlaceRepository
 from app.repositories.trip import TripRepository
-from app.repositories.trip_item import HOTEL_ITEM, TRANSPORT_ITEM, TripItemRepository
+from app.repositories.trip_item import (
+    ACTIVITY_ITEM,
+    HOTEL_ITEM,
+    PLACE_ITEM,
+    TRANSPORT_ITEM,
+    TripItemRepository,
+)
+from app.schemas.activity import ActivityRead
 from app.schemas.hotel import HotelRead
+from app.schemas.place import PlaceRead
 from app.schemas.transport import FlightRead
-from app.schemas.trip import TripCreate, TripItemRead, TripItemUpdate, TripUpdate
+from app.schemas.trip import (
+    TripCreate,
+    TripItemCreate,
+    TripItemRead,
+    TripItemUpdate,
+    TripUpdate,
+)
 
 
 class TripNotFoundError(Exception):
@@ -18,6 +34,14 @@ class TripNotFoundError(Exception):
 
 class TripItemNotFoundError(Exception):
     pass
+
+
+class TripItemExistsError(Exception):
+    """The place is already in this trip as an item (spec #16)."""
+
+
+class InvalidTripItemTypeError(Exception):
+    """Only places can be added/removed as explicit trip items."""
 
 
 class InvalidTripOrderError(Exception):
@@ -29,6 +53,8 @@ class TripService:
         self.trips = TripRepository(db)
         self.items = TripItemRepository(db)
         self.hotels = HotelRepository(db)
+        self.places = PlaceRepository(db)
+        self.activities = ActivityRepository(db)
 
     def list_trips(
         self,
@@ -49,7 +75,7 @@ class TripService:
         return self.trips.list_records(user_id=user_id, trip_id=trip_id)
 
     def list_items(self, *, user_id: uuid.UUID, trip_id: uuid.UUID) -> list[TripItemRead]:
-        """Return trip items in display order with their transport/hotel payload (#16)."""
+        """Return trip items in display order with their entity payload (#16)."""
         self.items.ensure_transport_items(user_id=user_id, trip_id=trip_id)
         records = {
             record.id: record for record in self.list_records(user_id=user_id, trip_id=trip_id)
@@ -69,6 +95,16 @@ class TripService:
                 if item.item_type == HOTEL_ITEM and item.item_id in hotels
                 else None
             )
+            place: PlaceRead | None = None
+            if item.item_type == PLACE_ITEM:
+                found = self.places.get(user_id=user_id, place_id=item.item_id)
+                if found is not None:
+                    place = PlaceRead.model_validate(found, from_attributes=True)
+            activity: ActivityRead | None = None
+            if item.item_type == ACTIVITY_ITEM:
+                found = self.activities.get(user_id=user_id, activity_id=item.item_id)
+                if found is not None:
+                    activity = ActivityRead.model_validate(found, from_attributes=True)
             items.append(
                 TripItemRead(
                     id=item.id,
@@ -79,9 +115,55 @@ class TripService:
                     end_at=item.end_at,
                     record=record,
                     hotel=hotel,
+                    place=place,
+                    activity=activity,
                 )
             )
         return items
+
+    def add_item(
+        self, *, user_id: uuid.UUID, trip_id: uuid.UUID, payload: TripItemCreate
+    ) -> TripItemRead:
+        """Add a place to a trip as an explicit timeline item (spec #16)."""
+        self.get_trip(user_id=user_id, trip_id=trip_id)
+        if payload.item_type != PLACE_ITEM:
+            raise InvalidTripItemTypeError
+        place = self.places.get(user_id=user_id, place_id=payload.item_id)
+        if place is None:
+            raise TripItemNotFoundError
+        existing = self.items.get_place_item(user_id=user_id, trip_id=trip_id, place_id=place.id)
+        if existing is not None:
+            raise TripItemExistsError
+        item = self.items.add_place(
+            user_id=user_id,
+            trip_id=trip_id,
+            place_id=place.id,
+            start_at=payload.start_at,
+            end_at=payload.end_at,
+        )
+        return TripItemRead(
+            id=item.id,
+            item_type=item.item_type,
+            item_id=item.item_id,
+            sort_order=item.sort_order,
+            start_at=item.start_at,
+            end_at=item.end_at,
+            place=PlaceRead.model_validate(place, from_attributes=True),
+        )
+
+    def remove_item(self, *, user_id: uuid.UUID, trip_id: uuid.UUID, item_id: uuid.UUID) -> None:
+        """Remove an explicit place item from a trip's timeline (spec #16).
+
+        Transport/hotel/activity items are mirrored from their own ``trip_id``
+        and are rebuilt by self-heal logic, so they are not removed here.
+        """
+        self.get_trip(user_id=user_id, trip_id=trip_id)
+        item = self.items.get(user_id=user_id, trip_id=trip_id, item_id=item_id)
+        if item is None:
+            raise TripItemNotFoundError
+        if item.item_type != PLACE_ITEM:
+            raise InvalidTripItemTypeError
+        self.items.delete_item(item)
 
     def reorder_items(
         self, *, user_id: uuid.UUID, trip_id: uuid.UUID, item_ids: list[uuid.UUID]

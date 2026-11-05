@@ -395,6 +395,126 @@ export interface NoteList {
   page_size: number;
 }
 
+export type PlaceType =
+  | "airport"
+  | "train_station"
+  | "bus_station"
+  | "port"
+  | "hotel"
+  | "restaurant"
+  | "attraction"
+  | "city"
+  | "place"
+  | "other";
+
+export interface Place {
+  id: string;
+  user_id: string;
+  type: PlaceType;
+  country: string | null;
+  region: string | null;
+  city: string | null;
+  district: string | null;
+  name: string;
+  localized_name: string | null;
+  lat: number | null;
+  lon: number | null;
+  timezone: string | null;
+  external_ids: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PlaceInput {
+  type?: PlaceType;
+  country?: string | null;
+  region?: string | null;
+  city?: string | null;
+  district?: string | null;
+  name?: string;
+  localized_name?: string | null;
+  lat?: number | null;
+  lon?: number | null;
+  timezone?: string | null;
+  external_ids?: Record<string, unknown> | null;
+}
+
+export interface PlaceFilters {
+  search?: string;
+  type?: PlaceType;
+  page?: number;
+  page_size?: number;
+}
+
+export interface PlaceList {
+  items: Place[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export type ActivityType =
+  | "sightseeing"
+  | "dining"
+  | "shopping"
+  | "culture"
+  | "outdoor"
+  | "event"
+  | "other";
+
+export interface Activity {
+  id: string;
+  user_id: string;
+  name: string;
+  type: ActivityType;
+  place_id: string | null;
+  start_at: string | null;
+  end_at: string | null;
+  // Decimal fields are serialized as strings by the API.
+  price: string | null;
+  currency: string | null;
+  notes: string | null;
+  trip_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ActivityInput {
+  name?: string;
+  type?: ActivityType;
+  place_id?: string | null;
+  start_at?: string | null;
+  end_at?: string | null;
+  price?: number | null;
+  currency?: string | null;
+  notes?: string | null;
+  trip_id?: string | null;
+}
+
+export interface ActivityFilters {
+  search?: string;
+  type?: ActivityType;
+  trip_id?: string;
+  place_id?: string;
+  sort?: "newest" | "oldest" | "created";
+  page?: number;
+  page_size?: number;
+}
+
+export interface ActivityList {
+  items: Activity[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface TripItemCreate {
+  item_type: "place";
+  item_id: string;
+  start_at?: string | null;
+  end_at?: string | null;
+}
+
 export type RecordType = "flight" | "train" | "other";
 export type RecordSort = "newest" | "oldest" | "departure" | "arrival" | "created";
 
@@ -453,6 +573,8 @@ export interface TripItem {
   end_at: string | null;
   record: TimelineRecord | null;
   hotel: Hotel | null;
+  place: Place | null;
+  activity: Activity | null;
 }
 
 export interface TripDetail extends Trip {
