@@ -144,6 +144,10 @@ def test_only_read_tools_are_exposed(client):
         "list_trips",
         "get_trip",
         "get_statistics",
+        "search_expenses",
+        "search_notes",
+        "search_places",
+        "search_activities",
         "get_pending_action",
     }
 
@@ -281,6 +285,10 @@ async def test_official_client_round_trip(db, monkeypatch):
                         "list_trips",
                         "get_trip",
                         "get_statistics",
+                        "search_expenses",
+                        "search_notes",
+                        "search_places",
+                        "search_activities",
                         "get_pending_action",
                     }
                     result = await session.call_tool("search_records", {"query": ""})

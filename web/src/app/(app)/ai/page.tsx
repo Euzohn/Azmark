@@ -26,10 +26,14 @@ import { useAuth } from "@/lib/auth-store";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
 import { formatZonedDateTime } from "@/lib/datetime";
 import type {
+  ActivityInput,
   AiProposal,
+  ExpenseInput,
   FlightInput,
   HotelInput,
+  NoteInput,
   OtherTransportInput,
+  PlaceInput,
   TrainInput,
   TripInput,
 } from "@/lib/types";
@@ -102,43 +106,59 @@ function validateImageFile(file: File): string | null {
 }
 
 function formatProposalData(
-  data: Record<string, unknown>,
+  proposal: AiProposal,
   t: (key: TranslationKey) => string,
   locale: string,
 ): string[] {
+  const data = proposal.data as Record<string, unknown>;
   const lines: string[] = [];
-  // Trip proposals carry a `name` field (spec #12).
-  if (data.name) {
-    lines.push(data.name as string);
-    if (data.start_date) {
-      const range = data.end_date
-        ? `${data.start_date} → ${data.end_date}`
-        : String(data.start_date);
-      lines.push(`${t("ai.proposal.tripDates")}: ${range}`);
-    }
-    if (data.origin && data.destination) {
-      lines.push(`${data.origin} → ${data.destination}`);
-    } else if (data.destination) {
-      lines.push(data.destination as string);
-    }
-    if (data.description) lines.push(data.description as string);
-    if (data.status) lines.push(String(data.status));
-    return lines;
-  }
-  // Hotel proposals carry a `hotel` name and date-based fields (spec #17).
-  if (data.hotel) {
-    lines.push(data.hotel as string);
-    if (data.check_in) {
-      const range = data.check_out
-        ? `${data.check_in} → ${data.check_out}`
-        : String(data.check_in);
-      lines.push(`${t("ai.proposal.hotelDates")}: ${range}`);
+
+  // Transport proposals (flight/train/other) carry origin/destination times etc.
+  if (!["trip", "hotel", "expense", "note", "place", "activity"].includes(proposal.record_type)) {
+    if (data.origin || data.destination) {
+      lines.push(`${data.origin ?? "?"} → ${data.destination ?? "?"}`);
     }
     if (data.status === "completed") lines.push(t("ai.proposal.statusCompleted"));
     else if (data.status === "scheduled") lines.push(t("ai.proposal.statusScheduled"));
-    if (data.room_type) lines.push(`${t("ai.proposal.roomType")}: ${data.room_type}`);
-    if (data.room_number) lines.push(`${t("ai.proposal.roomNumber")}: ${data.room_number}`);
-    if (data.address) lines.push(`${t("ai.proposal.hotelAddress")}: ${data.address}`);
+    if (data.service_number) lines.push(data.service_number as string);
+    if (data.train_type) {
+      lines.push(`${t("ai.proposal.trainType")}: ${data.train_type}`);
+    }
+    if (data.departure_time) {
+      lines.push(
+        `${t("ai.proposal.departure")}: ${formatZonedDateTime(
+          String(data.departure_time),
+          locale,
+          data.departure_timezone as string | null,
+        )}`,
+      );
+    }
+    if (data.arrival_time) {
+      lines.push(
+        `${t("ai.proposal.arrival")}: ${formatZonedDateTime(
+          String(data.arrival_time),
+          locale,
+          data.arrival_timezone as string | null,
+        )}`,
+      );
+    }
+    if (data.carrier) lines.push(data.carrier as string);
+    if (data.cabin_class) {
+      lines.push(`${t("ai.proposal.cabinClass")}: ${data.cabin_class}`);
+    }
+    if (data.seat) lines.push(`${t("ai.proposal.seat")}: ${data.seat}`);
+    if (data.departure_terminal) {
+      lines.push(`${t("ai.proposal.terminal")}: ${data.departure_terminal}`);
+    }
+    if (data.departure_gate) {
+      lines.push(`${t("ai.proposal.gate")}: ${data.departure_gate}`);
+    }
+    if (data.aircraft_model) {
+      lines.push(`${t("ai.proposal.aircraft")}: ${data.aircraft_model}`);
+    }
+    if (data.distance) {
+      lines.push(`${t("ai.proposal.distance")}: ${data.distance} km`);
+    }
     if (data.price !== undefined && data.price !== null) {
       const currency = data.currency ? ` ${data.currency}` : "";
       lines.push(`${t("ai.proposal.price")}: ${data.price}${currency}`);
@@ -147,46 +167,106 @@ function formatProposalData(
     return lines;
   }
 
-  if (data.origin || data.destination) {
-    lines.push(`${data.origin ?? "?"} → ${data.destination ?? "?"}`);
+  if (proposal.action === "add_place_to_trip") {
+    // The summary already names the trip and place; nothing extra to show.
+    return lines;
   }
 
-  if (data.status === "completed") lines.push(t("ai.proposal.statusCompleted"));
-  else if (data.status === "scheduled") lines.push(t("ai.proposal.statusScheduled"));
-
-  if (data.service_number) lines.push(data.service_number as string);
-  if (data.train_type) {
-    lines.push(`${t("ai.proposal.trainType")}: ${data.train_type}`);
+  switch (proposal.record_type) {
+    case "trip": {
+      if (data.name) lines.push(data.name as string);
+      if (data.start_date) {
+        const range = data.end_date
+          ? `${data.start_date} → ${data.end_date}`
+          : String(data.start_date);
+        lines.push(`${t("ai.proposal.tripDates")}: ${range}`);
+      }
+      if (data.origin && data.destination) {
+        lines.push(`${data.origin} → ${data.destination}`);
+      } else if (data.destination) {
+        lines.push(data.destination as string);
+      }
+      if (data.description) lines.push(data.description as string);
+      if (data.status) lines.push(String(data.status));
+      return lines;
+    }
+    case "hotel": {
+      if (data.hotel) lines.push(data.hotel as string);
+      if (data.check_in) {
+        const range = data.check_out
+          ? `${data.check_in} → ${data.check_out}`
+          : String(data.check_in);
+        lines.push(`${t("ai.proposal.hotelDates")}: ${range}`);
+      }
+      if (data.status === "completed") lines.push(t("ai.proposal.statusCompleted"));
+      else if (data.status === "scheduled") lines.push(t("ai.proposal.statusScheduled"));
+      if (data.room_type) lines.push(`${t("ai.proposal.roomType")}: ${data.room_type}`);
+      if (data.room_number) lines.push(`${t("ai.proposal.roomNumber")}: ${data.room_number}`);
+      if (data.address) lines.push(`${t("ai.proposal.hotelAddress")}: ${data.address}`);
+      if (data.price !== undefined && data.price !== null) {
+        const currency = data.currency ? ` ${data.currency}` : "";
+        lines.push(`${t("ai.proposal.price")}: ${data.price}${currency}`);
+      }
+      if (data.notes) lines.push(data.notes as string);
+      return lines;
+    }
+    case "expense": {
+      if (data.category) lines.push(`${t("ai.proposal.category")}: ${data.category}`);
+      if (data.amount !== undefined && data.amount !== null) {
+        const currency = data.currency ? ` ${data.currency}` : "";
+        lines.push(`${t("ai.proposal.amount")}: ${data.amount}${currency}`);
+      }
+      if (data.occurred_at) {
+        lines.push(
+          `${t("expenses.occurredAt")}: ${formatZonedDateTime(
+            String(data.occurred_at),
+            locale,
+            null,
+          )}`,
+        );
+      }
+      if (data.description) lines.push(data.description as string);
+      return lines;
+    }
+    case "note": {
+      if (data.title) lines.push(`${t("notes.noteTitle")}: ${data.title}`);
+      if (data.content) lines.push(`${t("notes.content")}: ${data.content}`);
+      return lines;
+    }
+    case "place": {
+      if (data.name) lines.push(data.name as string);
+      if (data.localized_name) lines.push(data.localized_name as string);
+      if (data.type) lines.push(`${t("places.type")}: ${data.type}`);
+      const location = [data.city, data.region, data.country].filter(Boolean).join(" · ");
+      if (location) lines.push(`${t("ai.proposal.location")}: ${location}`);
+      if (data.lat !== undefined && data.lat !== null && data.lon !== undefined && data.lon !== null) {
+        lines.push(`${t("ai.proposal.coordinates")}: ${data.lat}, ${data.lon}`);
+      }
+      return lines;
+    }
+    case "activity": {
+      if (data.name) lines.push(data.name as string);
+      if (data.type) lines.push(`${t("activities.type")}: ${data.type}`);
+      if (data.start_at) {
+        lines.push(
+          `${t("activities.startAt")}: ${formatZonedDateTime(String(data.start_at), locale, null)}`,
+        );
+      }
+      if (data.end_at) {
+        lines.push(
+          `${t("activities.endAt")}: ${formatZonedDateTime(String(data.end_at), locale, null)}`,
+        );
+      }
+      if (data.price !== undefined && data.price !== null) {
+        const currency = data.currency ? ` ${data.currency}` : "";
+        lines.push(`${t("ai.proposal.price")}: ${data.price}${currency}`);
+      }
+      if (data.notes) lines.push(data.notes as string);
+      return lines;
+    }
+    default:
+      return lines;
   }
-  if (data.departure_time) {
-    lines.push(`${t("ai.proposal.departure")}: ${formatZonedDateTime(String(data.departure_time), locale, data.departure_timezone as string | null)}`);
-  }
-  if (data.arrival_time) {
-    lines.push(`${t("ai.proposal.arrival")}: ${formatZonedDateTime(String(data.arrival_time), locale, data.arrival_timezone as string | null)}`);
-  }
-  if (data.carrier) lines.push(data.carrier as string);
-  if (data.cabin_class) {
-    lines.push(`${t("ai.proposal.cabinClass")}: ${data.cabin_class}`);
-  }
-  if (data.seat) lines.push(`${t("ai.proposal.seat")}: ${data.seat}`);
-  if (data.departure_terminal) {
-    lines.push(`${t("ai.proposal.terminal")}: ${data.departure_terminal}`);
-  }
-  if (data.departure_gate) {
-    lines.push(`${t("ai.proposal.gate")}: ${data.departure_gate}`);
-  }
-  if (data.aircraft_model) {
-    lines.push(`${t("ai.proposal.aircraft")}: ${data.aircraft_model}`);
-  }
-  if (data.distance) {
-    lines.push(`${t("ai.proposal.distance")}: ${data.distance} km`);
-  }
-  if (data.price !== undefined && data.price !== null) {
-    const currency = data.currency ? ` ${data.currency}` : "";
-    lines.push(`${t("ai.proposal.price")}: ${data.price}${currency}`);
-  }
-  if (data.notes) lines.push(data.notes as string);
-  return lines;
 }
 
 function loadHistory(): ChatMessage[] {
@@ -418,6 +498,10 @@ export default function AiChatPage() {
     queryClient.invalidateQueries({ queryKey: ["transports"] });
     queryClient.invalidateQueries({ queryKey: ["hotels"] });
     queryClient.invalidateQueries({ queryKey: ["trips"] });
+    queryClient.invalidateQueries({ queryKey: ["expenses"] });
+    queryClient.invalidateQueries({ queryKey: ["notes"] });
+    queryClient.invalidateQueries({ queryKey: ["places"] });
+    queryClient.invalidateQueries({ queryKey: ["activities"] });
     queryClient.invalidateQueries({ queryKey: ["timeline"] });
     queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     queryClient.invalidateQueries({ queryKey: ["statistics"] });
@@ -451,10 +535,32 @@ export default function AiChatPage() {
         if (proposal.record_type === "trip") {
           return api.updateTrip(id, fields as unknown as Partial<TripInput>);
         }
+        if (proposal.record_type === "expense") {
+          return api.updateExpense(id, fields as unknown as ExpenseInput);
+        }
+        if (proposal.record_type === "note") {
+          return api.updateNote(id, fields as unknown as NoteInput);
+        }
+        if (proposal.record_type === "place") {
+          return api.updatePlace(id, fields as unknown as PlaceInput);
+        }
+        if (proposal.record_type === "activity") {
+          return api.updateActivity(id, fields as unknown as ActivityInput);
+        }
         return api.updateOtherTransport(
           id,
           fields as unknown as OtherTransportInput,
         );
+      }
+
+      // A place has no trip_id of its own; joining a trip is a separate call.
+      if (proposal.action === "add_place_to_trip") {
+        return api.addTripItem(String(data.trip_id), {
+          item_type: "place",
+          item_id: String(data.place_id),
+          start_at: (data.start_at as string | null) ?? null,
+          end_at: (data.end_at as string | null) ?? null,
+        });
       }
 
       if (proposal.record_type === "flight") {
@@ -469,6 +575,18 @@ export default function AiChatPage() {
       if (proposal.record_type === "trip") {
         return api.createTrip(data as unknown as TripInput);
       }
+      if (proposal.record_type === "expense") {
+        return api.createExpense(data as unknown as ExpenseInput);
+      }
+      if (proposal.record_type === "note") {
+        return api.createNote(data as unknown as NoteInput);
+      }
+      if (proposal.record_type === "place") {
+        return api.createPlace(data as unknown as PlaceInput);
+      }
+      if (proposal.record_type === "activity") {
+        return api.createActivity(data as unknown as ActivityInput);
+      }
       return api.createOtherTransport(data, force);
     },
     onSuccess: () => invalidateAll(),
@@ -481,6 +599,10 @@ export default function AiChatPage() {
       if (proposal.record_type === "hotel") return api.deleteHotel(id);
       if (proposal.record_type === "flight") return api.deleteFlight(id);
       if (proposal.record_type === "train") return api.deleteTrain(id);
+      if (proposal.record_type === "expense") return api.deleteExpense(id);
+      if (proposal.record_type === "note") return api.deleteNote(id);
+      if (proposal.record_type === "place") return api.deletePlace(id);
+      if (proposal.record_type === "activity") return api.deleteActivity(id);
       return api.deleteOtherTransport(id);
     },
     onSuccess: () => invalidateAll(),
@@ -789,10 +911,18 @@ function ProposalCard({
   const { t, locale } = useI18n();
   const isDelete = proposal.action.startsWith("delete");
   const isUpdate = proposal.action.startsWith("update");
+  const isAddToTrip = proposal.action === "add_place_to_trip";
+  const verb = isDelete
+    ? t("ai.proposal.delete")
+    : isUpdate
+      ? t("ai.proposal.update")
+      : isAddToTrip
+        ? t("ai.proposal.addToTrip")
+        : t("ai.proposal.create");
   const saved = proposal.status === "saved";
   const cancelled = proposal.status === "cancelled";
   const duplicate = proposal.status === "duplicate";
-  const dataLines = isDelete ? [] : formatProposalData(proposal.data, t, locale);
+  const dataLines = isDelete ? [] : formatProposalData(proposal, t, locale);
 
   if (duplicate) {
     const base =
@@ -804,7 +934,15 @@ function ProposalCard({
             ? "hotels"
             : proposal.record_type === "trip"
               ? "trips"
-              : "transports";
+              : proposal.record_type === "expense"
+                ? "expenses"
+                : proposal.record_type === "note"
+                  ? "notes"
+                  : proposal.record_type === "place"
+                    ? "places"
+                    : proposal.record_type === "activity"
+                      ? "activities"
+                      : "transports";
     return (
       <div className="rounded-lg border border-warning/40 bg-warning/5 px-3 py-2.5">
         <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-warning">
@@ -853,12 +991,7 @@ function ProposalCard({
           <Sparkles className="h-3.5 w-3.5 text-primary" />
         )}
         <span>
-          {isDelete
-            ? t("ai.proposal.delete")
-            : isUpdate
-              ? t("ai.proposal.update")
-              : t("ai.proposal.create")}{" "}
-          {proposal.record_type}
+          {verb} {proposal.record_type}
         </span>
       </div>
       <p className="mb-1 text-sm text-muted-foreground">{proposal.summary}</p>

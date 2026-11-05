@@ -685,6 +685,362 @@ def _delete_trip_proposal(args: dict) -> AiProposal:
     return _delete_proposal(args, action="delete_trip", record_type="trip", label="trip")
 
 
+# ---------------------------------------------------------------------------
+#  Expenses, notes, places and activities (spec #14, #18, #19, #21)
+# ---------------------------------------------------------------------------
+#
+# These mirror the hotel/trip tools: READ tools return compact rows with ids so
+# the model can find a record, and WRITE/DESTRUCTIVE tools only build proposals.
+# Enum arguments come from an LLM, so they are normalized before they reach the
+# REST schema — an unknown value collapses to the schema default instead of
+# producing a 422 at confirmation time.
+
+_EXPENSE_CATEGORIES = frozenset(
+    {"transport", "accommodation", "food", "shopping", "entertainment", "other"}
+)
+_PLACE_TYPES = frozenset(
+    {
+        "airport",
+        "train_station",
+        "bus_station",
+        "port",
+        "hotel",
+        "restaurant",
+        "attraction",
+        "city",
+        "place",
+        "other",
+    }
+)
+_ACTIVITY_TYPES = frozenset(
+    {"sightseeing", "dining", "shopping", "culture", "outdoor", "event", "other"}
+)
+
+
+def _normalize_choice(value: object, allowed: frozenset[str], default: str) -> str:
+    text = str(value or "").strip().lower()
+    return text if text in allowed else default
+
+
+def _upper_currency(value: object) -> object:
+    return value.strip().upper() if isinstance(value, str) else value
+
+
+def _proposal_data(
+    args: dict,
+    *,
+    choices: dict[str, tuple[frozenset[str], str]] | None = None,
+    currency_fields: tuple[str, ...] = (),
+) -> dict:
+    """Copy model-provided ``data`` and normalize enums/currency defensively."""
+    data = dict(args.get("data", {}) or {})
+    for field, (allowed, default) in (choices or {}).items():
+        if field in data and data[field] is not None:
+            data[field] = _normalize_choice(data[field], allowed, default)
+    for field in currency_fields:
+        if field in data:
+            data[field] = _upper_currency(data[field])
+    return data
+
+
+def _proposal(action: str, record_type: str, parts: list[str], data: dict) -> AiProposal:
+    return AiProposal(
+        id=uuid.uuid4().hex,
+        action=action,
+        record_type=record_type,
+        summary=" · ".join(part for part in parts if part),
+        data=data,
+    )
+
+
+def _update_record_proposal(
+    args: dict,
+    *,
+    action: str,
+    record_type: str,
+    label: str,
+    choices: dict[str, tuple[frozenset[str], str]] | None = None,
+    currency_fields: tuple[str, ...] = (),
+) -> AiProposal:
+    data = _proposal_data(args, choices=choices, currency_fields=currency_fields)
+    return _update_proposal(
+        {**args, "data": data}, action=action, record_type=record_type, label=label
+    )
+
+
+# -- compact serializers -----------------------------------------------------
+
+
+def _compact_expense(expense) -> dict:
+    return {
+        "id": str(expense.id),
+        "category": expense.category,
+        "amount": float(expense.amount) if expense.amount is not None else None,
+        "currency": expense.currency,
+        "converted_amount": (
+            float(expense.converted_amount) if expense.converted_amount is not None else None
+        ),
+        "converted_currency": expense.converted_currency,
+        "occurred_at": expense.occurred_at.isoformat() if expense.occurred_at else None,
+        "description": expense.description,
+        "trip_id": str(expense.trip_id) if expense.trip_id else None,
+    }
+
+
+def _compact_note(note) -> dict:
+    return {
+        "id": str(note.id),
+        "title": note.title,
+        "content": note.content,
+        "trip_id": str(note.trip_id) if note.trip_id else None,
+        "updated_at": note.updated_at.isoformat() if note.updated_at else None,
+    }
+
+
+def _compact_place(place) -> dict:
+    return {
+        "id": str(place.id),
+        "name": place.name,
+        "localized_name": place.localized_name,
+        "type": place.type,
+        "country": place.country,
+        "region": place.region,
+        "city": place.city,
+        "district": place.district,
+        "lat": place.lat,
+        "lon": place.lon,
+        "timezone": place.timezone,
+    }
+
+
+def _compact_activity(activity) -> dict:
+    return {
+        "id": str(activity.id),
+        "name": activity.name,
+        "type": activity.type,
+        "place_id": str(activity.place_id) if activity.place_id else None,
+        "trip_id": str(activity.trip_id) if activity.trip_id else None,
+        "start_at": activity.start_at.isoformat() if activity.start_at else None,
+        "end_at": activity.end_at.isoformat() if activity.end_at else None,
+        "price": float(activity.price) if activity.price is not None else None,
+        "currency": activity.currency,
+        "notes": activity.notes,
+    }
+
+
+# -- read tools --------------------------------------------------------------
+
+
+async def _search_expenses(db: Session, user_id: uuid.UUID, args: dict) -> dict:
+    from app.services.expense import ExpenseService
+
+    query = str(args.get("query") or "").strip()
+    raw_category = str(args.get("category") or "").strip().lower()
+    category = raw_category if raw_category in _EXPENSE_CATEGORIES else None
+    limit = _clamp_limit(args.get("limit"), 20)
+    expenses, total = ExpenseService(db).list_expenses(
+        user_id=user_id,
+        search=query or None,
+        category=category,
+        page=1,
+        page_size=limit,
+    )
+    return {
+        "count": len(expenses),
+        "total": total,
+        "items": [_compact_expense(expense) for expense in expenses],
+    }
+
+
+async def _search_notes(db: Session, user_id: uuid.UUID, args: dict) -> dict:
+    from app.services.note import NoteService
+
+    query = str(args.get("query") or "").strip()
+    limit = _clamp_limit(args.get("limit"), 20)
+    notes, total = NoteService(db).list_notes(
+        user_id=user_id,
+        search=query or None,
+        page=1,
+        page_size=limit,
+    )
+    return {"count": len(notes), "total": total, "items": [_compact_note(n) for n in notes]}
+
+
+async def _search_places(db: Session, user_id: uuid.UUID, args: dict) -> dict:
+    from app.services.place import PlaceService
+
+    query = str(args.get("query") or "").strip()
+    raw_type = str(args.get("type") or "").strip().lower()
+    place_type = raw_type if raw_type in _PLACE_TYPES else None
+    limit = _clamp_limit(args.get("limit"), 20)
+    places, total = PlaceService(db).list_places(
+        user_id=user_id,
+        search=query or None,
+        type=place_type,
+        page=1,
+        page_size=limit,
+    )
+    return {
+        "count": len(places),
+        "total": total,
+        "items": [_compact_place(place) for place in places],
+    }
+
+
+async def _search_activities(db: Session, user_id: uuid.UUID, args: dict) -> dict:
+    from app.services.activity import ActivityService
+
+    query = str(args.get("query") or "").strip()
+    raw_type = str(args.get("type") or "").strip().lower()
+    activity_type = raw_type if raw_type in _ACTIVITY_TYPES else None
+    trip_id = args.get("trip_id")
+    place_id = args.get("place_id")
+
+    def _uuid_or_none(value: object) -> uuid.UUID | None:
+        if not value:
+            return None
+        try:
+            return uuid.UUID(str(value))
+        except (ValueError, TypeError):
+            return None
+
+    limit = _clamp_limit(args.get("limit"), 20)
+    activities, total = ActivityService(db).list_activities(
+        user_id=user_id,
+        search=query or None,
+        type=activity_type,
+        trip_id=_uuid_or_none(trip_id),
+        place_id=_uuid_or_none(place_id),
+        page=1,
+        page_size=limit,
+    )
+    return {
+        "count": len(activities),
+        "total": total,
+        "items": [_compact_activity(activity) for activity in activities],
+    }
+
+
+# -- proposal builders -------------------------------------------------------
+
+
+def _create_expense_proposal(args: dict) -> AiProposal:
+    data = _proposal_data(
+        args,
+        choices={"category": (_EXPENSE_CATEGORIES, "other")},
+        currency_fields=("currency", "converted_currency"),
+    )
+    parts = ["Create expense", str(data.get("category") or "other")]
+    if data.get("amount") is not None:
+        parts.append(f"{data['amount']} {data.get('currency') or ''}".strip())
+    if data.get("description"):
+        parts.append(str(data["description"]))
+    return _proposal("create_expense", "expense", parts, data)
+
+
+def _update_expense_proposal(args: dict) -> AiProposal:
+    return _update_record_proposal(
+        args,
+        action="update_expense",
+        record_type="expense",
+        label="expense",
+        choices={"category": (_EXPENSE_CATEGORIES, "other")},
+        currency_fields=("currency", "converted_currency"),
+    )
+
+
+def _delete_expense_proposal(args: dict) -> AiProposal:
+    return _delete_proposal(args, action="delete_expense", record_type="expense", label="expense")
+
+
+def _create_note_proposal(args: dict) -> AiProposal:
+    data = dict(args.get("data", {}) or {})
+    parts = ["Create note", str(data.get("title") or "—")]
+    return _proposal("create_note", "note", parts, data)
+
+
+def _update_note_proposal(args: dict) -> AiProposal:
+    return _update_record_proposal(args, action="update_note", record_type="note", label="note")
+
+
+def _delete_note_proposal(args: dict) -> AiProposal:
+    return _delete_proposal(args, action="delete_note", record_type="note", label="note")
+
+
+def _create_place_proposal(args: dict) -> AiProposal:
+    data = _proposal_data(args, choices={"type": (_PLACE_TYPES, "place")})
+    parts = ["Create place", str(data.get("name") or "—")]
+    if data.get("type"):
+        parts.append(str(data["type"]))
+    location = " · ".join(str(data[key]) for key in ("city", "country") if data.get(key))
+    if location:
+        parts.append(location)
+    return _proposal("create_place", "place", parts, data)
+
+
+def _update_place_proposal(args: dict) -> AiProposal:
+    return _update_record_proposal(
+        args,
+        action="update_place",
+        record_type="place",
+        label="place",
+        choices={"type": (_PLACE_TYPES, "place")},
+    )
+
+
+def _delete_place_proposal(args: dict) -> AiProposal:
+    return _delete_proposal(args, action="delete_place", record_type="place", label="place")
+
+
+def _create_activity_proposal(args: dict) -> AiProposal:
+    data = _proposal_data(
+        args,
+        choices={"type": (_ACTIVITY_TYPES, "other")},
+        currency_fields=("currency",),
+    )
+    parts = ["Create activity", str(data.get("name") or "—")]
+    if data.get("type"):
+        parts.append(str(data["type"]))
+    if data.get("start_at"):
+        parts.append(str(data["start_at"]))
+    return _proposal("create_activity", "activity", parts, data)
+
+
+def _update_activity_proposal(args: dict) -> AiProposal:
+    return _update_record_proposal(
+        args,
+        action="update_activity",
+        record_type="activity",
+        label="activity",
+        choices={"type": (_ACTIVITY_TYPES, "other")},
+        currency_fields=("currency",),
+    )
+
+
+def _delete_activity_proposal(args: dict) -> AiProposal:
+    return _delete_proposal(
+        args, action="delete_activity", record_type="activity", label="activity"
+    )
+
+
+def _add_place_to_trip_proposal(args: dict) -> AiProposal:
+    """Propose putting an existing place on a trip timeline (spec #16).
+
+    A place has no ``trip_id`` of its own; membership is an explicit
+    ``trip_items`` row, so this maps to ``POST /trips/{id}/items``.
+    """
+    data = dict(args.get("data", {}) or {})
+    trip_id = str(data.get("trip_id") or "")
+    place_id = str(data.get("place_id") or "")
+    return AiProposal(
+        id=uuid.uuid4().hex,
+        action="add_place_to_trip",
+        record_type="place",
+        summary=f"Add place {place_id or '—'} to trip {trip_id or '—'}",
+        data=data,
+    )
+
+
 TOOLS: dict[str, ToolDef] = {
     "search_records": ToolDef(
         name="search_records",
@@ -1436,6 +1792,458 @@ TOOLS: dict[str, ToolDef] = {
         permission=ToolPermission.DESTRUCTIVE,
         proposal=_delete_trip_proposal,
     ),
+    "search_expenses": ToolDef(
+        name="search_expenses",
+        description=(
+            "Search the user's expenses by keyword (description) or category. "
+            "Returns compact records with ids; use it to find an id before "
+            "update_expense / delete_expense."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Keyword from the description"},
+                "category": {
+                    "type": "string",
+                    "enum": sorted(_EXPENSE_CATEGORIES),
+                    "description": "Filter by category, or omit to search all",
+                },
+                "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+            },
+        },
+        permission=ToolPermission.READ,
+        read=_search_expenses,
+    ),
+    "search_notes": ToolDef(
+        name="search_notes",
+        description=(
+            "Search the user's notes by keyword in the title or content. Returns "
+            "compact records with ids; use it to find an id before update_note / "
+            "delete_note."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Keyword from the title or content"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+            },
+        },
+        permission=ToolPermission.READ,
+        read=_search_notes,
+    ),
+    "search_places": ToolDef(
+        name="search_places",
+        description=(
+            "Search the user's places (geo reference entities) by keyword (name or "
+            "city) or by type. Returns compact records with ids; use it to find a "
+            "place_id before update_place / delete_place / add_place_to_trip."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Keyword: place name or city"},
+                "type": {
+                    "type": "string",
+                    "enum": sorted(_PLACE_TYPES),
+                    "description": "Filter by type, or omit to search all",
+                },
+                "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+            },
+        },
+        permission=ToolPermission.READ,
+        read=_search_places,
+    ),
+    "search_activities": ToolDef(
+        name="search_activities",
+        description=(
+            "Search the user's activities by keyword (name or notes), type, trip or "
+            "place. Returns compact records with ids; use it to find an id before "
+            "update_activity / delete_activity."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Keyword from the name or notes"},
+                "type": {
+                    "type": "string",
+                    "enum": sorted(_ACTIVITY_TYPES),
+                    "description": "Filter by type, or omit to search all",
+                },
+                "trip_id": {"type": "string", "description": "Only activities in this trip"},
+                "place_id": {"type": "string", "description": "Only activities at this place"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+            },
+        },
+        permission=ToolPermission.READ,
+        read=_search_activities,
+    ),
+    "create_expense": ToolDef(
+        name="create_expense",
+        description=(
+            "Propose recording an expense. Nothing is saved until the user "
+            "confirms. Pass amount and currency (ISO 4217); optionally category, "
+            "occurred_at (ISO 8601 with offset), description, and a conversion "
+            "(converted_amount / converted_currency / exchange_rate) when the user "
+            "gives one, and trip_id when it belongs to a trip. Infer the category "
+            "from the description (default other) and the currency from the "
+            "user's locale or destination when the amount has none."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "amount": {"type": "number", "description": "Spend amount (required)"},
+                        "currency": {
+                            "type": "string",
+                            "description": "ISO 4217 code, e.g. CNY, USD, JPY (required)",
+                        },
+                        "category": {
+                            "type": "string",
+                            "enum": sorted(_EXPENSE_CATEGORIES),
+                            "description": "Spend bucket; infer from the description",
+                        },
+                        "occurred_at": {
+                            "type": "string",
+                            "description": "ISO 8601 datetime with offset; defaults to now",
+                        },
+                        "description": {"type": "string"},
+                        "converted_amount": {"type": "number"},
+                        "converted_currency": {"type": "string"},
+                        "exchange_rate": {"type": "number"},
+                        "trip_id": {"type": "string", "description": "Trip UUID to attach it to"},
+                    },
+                    "required": ["amount", "currency"],
+                },
+            },
+            "required": ["data"],
+        },
+        permission=ToolPermission.WRITE,
+        proposal=_create_expense_proposal,
+    ),
+    "update_expense": ToolDef(
+        name="update_expense",
+        description=(
+            "Propose changing fields on an existing expense. Nothing is saved "
+            "until the user confirms. Find the id with search_expenses first, then "
+            "pass record_id and ONLY the fields that change."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "record_id": {"type": "string", "description": "The expense UUID"},
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "amount": {"type": "number"},
+                        "currency": {"type": "string"},
+                        "category": {"type": "string", "enum": sorted(_EXPENSE_CATEGORIES)},
+                        "occurred_at": {"type": "string"},
+                        "description": {"type": "string"},
+                        "converted_amount": {"type": "number"},
+                        "converted_currency": {"type": "string"},
+                        "exchange_rate": {"type": "number"},
+                        "trip_id": {"type": "string"},
+                    },
+                },
+            },
+            "required": ["record_id", "data"],
+        },
+        permission=ToolPermission.WRITE,
+        proposal=_update_expense_proposal,
+    ),
+    "delete_expense": ToolDef(
+        name="delete_expense",
+        description=(
+            "Propose deleting an expense. This is DESTRUCTIVE: the user must "
+            "explicitly confirm before anything is removed."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "record_id": {"type": "string", "description": "The expense UUID to delete"},
+            },
+            "required": ["record_id"],
+        },
+        permission=ToolPermission.DESTRUCTIVE,
+        proposal=_delete_expense_proposal,
+    ),
+    "create_note": ToolDef(
+        name="create_note",
+        description=(
+            "Propose saving a free-form note. Nothing is saved until the user "
+            "confirms. Pass title (required) and content, plus trip_id when the "
+            "note belongs to a trip."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string", "description": "Note title (required)"},
+                        "content": {"type": "string", "description": "Note body"},
+                        "trip_id": {"type": "string", "description": "Trip UUID to attach it to"},
+                    },
+                    "required": ["title"],
+                },
+            },
+            "required": ["data"],
+        },
+        permission=ToolPermission.WRITE,
+        proposal=_create_note_proposal,
+    ),
+    "update_note": ToolDef(
+        name="update_note",
+        description=(
+            "Propose changing the title, content or trip of an existing note. "
+            "Nothing is saved until the user confirms. Find the id with "
+            "search_notes first, then pass record_id and ONLY the fields that "
+            "change."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "record_id": {"type": "string", "description": "The note UUID"},
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string"},
+                        "content": {"type": "string"},
+                        "trip_id": {"type": "string"},
+                    },
+                },
+            },
+            "required": ["record_id", "data"],
+        },
+        permission=ToolPermission.WRITE,
+        proposal=_update_note_proposal,
+    ),
+    "delete_note": ToolDef(
+        name="delete_note",
+        description=(
+            "Propose deleting a note. This is DESTRUCTIVE: the user must "
+            "explicitly confirm before anything is removed."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "record_id": {"type": "string", "description": "The note UUID to delete"},
+            },
+            "required": ["record_id"],
+        },
+        permission=ToolPermission.DESTRUCTIVE,
+        proposal=_delete_note_proposal,
+    ),
+    "create_place": ToolDef(
+        name="create_place",
+        description=(
+            "Propose adding a place (a geographic reference entity). Nothing is "
+            "saved until the user confirms. Pass name (required) and type; "
+            "optionally localized_name, country, region, city, district, lat, lon, "
+            "timezone and external_ids. A place has no trip of its own — to put it "
+            "on a trip timeline call add_place_to_trip afterwards."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "Place name (required)"},
+                        "type": {
+                            "type": "string",
+                            "enum": sorted(_PLACE_TYPES),
+                            "description": "Kind of place (default place)",
+                        },
+                        "localized_name": {"type": "string"},
+                        "country": {"type": "string"},
+                        "region": {"type": "string"},
+                        "city": {"type": "string"},
+                        "district": {"type": "string"},
+                        "lat": {"type": "number", "minimum": -90, "maximum": 90},
+                        "lon": {"type": "number", "minimum": -180, "maximum": 180},
+                        "timezone": {
+                            "type": "string",
+                            "description": "IANA zone, e.g. Asia/Shanghai",
+                        },
+                        "external_ids": {
+                            "type": "object",
+                            "description": 'Optional map, e.g. {"osm": "way/123"}',
+                        },
+                    },
+                    "required": ["name"],
+                },
+            },
+            "required": ["data"],
+        },
+        permission=ToolPermission.WRITE,
+        proposal=_create_place_proposal,
+    ),
+    "update_place": ToolDef(
+        name="update_place",
+        description=(
+            "Propose changing fields on an existing place. Nothing is saved until "
+            "the user confirms. Find the id with search_places first, then pass "
+            "record_id and ONLY the fields that change."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "record_id": {"type": "string", "description": "The place UUID"},
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "type": {"type": "string", "enum": sorted(_PLACE_TYPES)},
+                        "localized_name": {"type": "string"},
+                        "country": {"type": "string"},
+                        "region": {"type": "string"},
+                        "city": {"type": "string"},
+                        "district": {"type": "string"},
+                        "lat": {"type": "number"},
+                        "lon": {"type": "number"},
+                        "timezone": {"type": "string"},
+                    },
+                },
+            },
+            "required": ["record_id", "data"],
+        },
+        permission=ToolPermission.WRITE,
+        proposal=_update_place_proposal,
+    ),
+    "delete_place": ToolDef(
+        name="delete_place",
+        description=(
+            "Propose deleting a place. This is DESTRUCTIVE: its trip items are "
+            "removed and linked activities are detached. The user must explicitly "
+            "confirm."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "record_id": {"type": "string", "description": "The place UUID to delete"},
+            },
+            "required": ["record_id"],
+        },
+        permission=ToolPermission.DESTRUCTIVE,
+        proposal=_delete_place_proposal,
+    ),
+    "add_place_to_trip": ToolDef(
+        name="add_place_to_trip",
+        description=(
+            "Propose putting an existing place on a trip's timeline. Nothing is "
+            "saved until the user confirms. Resolve trip_id with list_trips and "
+            "place_id with search_places first — never guess ids. Optionally pass "
+            "start_at / end_at to order the visit; a place already in the trip "
+            "cannot be added twice."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "trip_id": {"type": "string", "description": "The trip UUID (required)"},
+                        "place_id": {"type": "string", "description": "The place UUID (required)"},
+                        "start_at": {"type": "string", "description": "Visit start, ISO 8601"},
+                        "end_at": {"type": "string", "description": "Visit end, ISO 8601"},
+                    },
+                    "required": ["trip_id", "place_id"],
+                },
+            },
+            "required": ["data"],
+        },
+        permission=ToolPermission.WRITE,
+        proposal=_add_place_to_trip_proposal,
+    ),
+    "create_activity": ToolDef(
+        name="create_activity",
+        description=(
+            "Propose recording an activity (sightseeing, dining, shopping, culture, "
+            "outdoor, event). Nothing is saved until the user confirms. Pass name "
+            "(required) and type; optionally start_at / end_at (ISO 8601 with "
+            "offset), price, currency, notes, place_id (an existing place — resolve "
+            "with search_places) and trip_id (resolve with list_trips). The "
+            "end time must not be before the start time."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "Activity name (required)"},
+                        "type": {
+                            "type": "string",
+                            "enum": sorted(_ACTIVITY_TYPES),
+                            "description": "Kind of activity (default other)",
+                        },
+                        "place_id": {"type": "string", "description": "Place UUID it happens at"},
+                        "start_at": {"type": "string", "description": "ISO 8601 with offset"},
+                        "end_at": {"type": "string", "description": "ISO 8601 with offset"},
+                        "price": {"type": "number"},
+                        "currency": {"type": "string", "description": "ISO 4217 code"},
+                        "notes": {"type": "string"},
+                        "trip_id": {"type": "string", "description": "Trip UUID to attach it to"},
+                    },
+                    "required": ["name"],
+                },
+            },
+            "required": ["data"],
+        },
+        permission=ToolPermission.WRITE,
+        proposal=_create_activity_proposal,
+    ),
+    "update_activity": ToolDef(
+        name="update_activity",
+        description=(
+            "Propose changing fields on an existing activity. Nothing is saved "
+            "until the user confirms. Find the id with search_activities first, "
+            "then pass record_id and ONLY the fields that change. The end time "
+            "must not be before the start time."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "record_id": {"type": "string", "description": "The activity UUID"},
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "type": {"type": "string", "enum": sorted(_ACTIVITY_TYPES)},
+                        "place_id": {"type": "string"},
+                        "start_at": {"type": "string"},
+                        "end_at": {"type": "string"},
+                        "price": {"type": "number"},
+                        "currency": {"type": "string"},
+                        "notes": {"type": "string"},
+                        "trip_id": {"type": "string"},
+                    },
+                },
+            },
+            "required": ["record_id", "data"],
+        },
+        permission=ToolPermission.WRITE,
+        proposal=_update_activity_proposal,
+    ),
+    "delete_activity": ToolDef(
+        name="delete_activity",
+        description=(
+            "Propose deleting an activity. This is DESTRUCTIVE: the user must "
+            "explicitly confirm before anything is removed."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "record_id": {"type": "string", "description": "The activity UUID to delete"},
+            },
+            "required": ["record_id"],
+        },
+        permission=ToolPermission.DESTRUCTIVE,
+        proposal=_delete_activity_proposal,
+    ),
 }
 
 
@@ -1466,4 +2274,8 @@ MCP_READ_TOOL_NAMES: tuple[str, ...] = (
     "list_trips",
     "get_trip",
     "get_statistics",
+    "search_expenses",
+    "search_notes",
+    "search_places",
+    "search_activities",
 )

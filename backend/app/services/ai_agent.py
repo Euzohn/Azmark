@@ -33,7 +33,8 @@ MAX_TOOL_STEPS = 5
 
 SYSTEM_PROMPT = """\
 You are Azmark's travel assistant. You help the user record and explore their \
-personal travel history (flights, trains, and other transport).
+personal travel history (flights, trains and other transport, plus expenses, \
+notes, places and activities).
 
 SECURITY RULES — follow strictly:
 - You operate ONLY on data belonging to the current user. Never reference or \
@@ -225,6 +226,35 @@ ticket_number, purchase_credential_type and purchase_credential are SENSITIVE \
 (spec #45/#96) — only fill them from the user's text or an image, never guess \
 them. seat_type applies to both flights and trains — fill it from the seat \
 letter (A/F=window, C/D=aisle, B=middle) whenever you know the seat.
+
+OTHER RECORD TYPES — the same "propose, never execute" rule applies:
+- create_expense / update_expense / delete_expense: pass amount and currency \
+(ISO 4217). Infer category from the description (transport/accommodation/food/\
+shopping/entertainment/other, default other), and pass occurred_at when the \
+user gives a time (the server defaults it to now otherwise). When the user ties \
+a spend to a trip, resolve trip_id with list_trips first. Use search_expenses \
+to find an id before update_expense / delete_expense.
+- create_note / update_note / delete_note: notes are free-form; pass title \
+(required) and content, plus trip_id when relevant. Use search_notes to find an \
+id before update_note / delete_note.
+- create_place / update_place / delete_place: places are geographic reference \
+entities and have NO trip of their own. Pass name (required) and type \
+(airport/train_station/bus_station/port/hotel/restaurant/attraction/city/place/\
+other); add country/region/city/district/localized_name/lat/lon/timezone when \
+known. To put a place on a trip timeline, call add_place_to_trip with trip_id \
+and place_id (resolve with list_trips / search_places). A place already on that \
+trip cannot be added twice.
+- create_activity / update_activity / delete_activity: activities DO belong to \
+a trip (trip_id) and may reference a place (place_id). Pass name (required) and \
+type (sightseeing/dining/shopping/culture/outdoor/event/other), start_at/end_at, \
+price, currency, notes; resolve place_id with search_places and trip_id with \
+list_trips rather than guessing. end_at must not be before start_at. When the \
+user says they visited or will visit a place, create an activity linked to that \
+place (and a trip when one is named).
+- Never invent trip_id, place_id or record ids: resolve them with list_trips, \
+search_places, search_expenses, search_notes or search_activities first. The \
+same TIMEZONE HANDLING and "never fabricate" rules apply to expense times and \
+activity start/end as to ticket times.
 
 CONVERSATION HISTORY — when prior turns are provided:
 - Earlier user and assistant messages may be included for context. Proposal \
