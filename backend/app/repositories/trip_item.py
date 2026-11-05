@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, date, datetime, time
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.hotel import Hotel
@@ -10,6 +10,15 @@ from app.models.trip_item import TripItem
 
 TRANSPORT_ITEM = "transport"
 HOTEL_ITEM = "hotel"
+
+
+def _as_utc(value: datetime | None) -> datetime | None:
+    """Normalize a stored datetime for comparison (SQLite hands back naive values)."""
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 def _date_at_midnight(value: date | None) -> datetime | None:
@@ -25,14 +34,28 @@ class TripItemRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def _next_sort_order(self, *, user_id: uuid.UUID, trip_id: uuid.UUID) -> int:
-        current = self.db.scalar(
-            select(func.max(TripItem.sort_order)).where(
-                TripItem.user_id == user_id,
-                TripItem.trip_id == trip_id,
-            )
-        )
-        return int(current) + 1 if current is not None else 0
+    def _chronological_sort_order(
+        self, *, user_id: uuid.UUID, trip_id: uuid.UUID, start_at: datetime | None
+    ) -> int:
+        """Pick the sort_order where a new item with ``start_at`` belongs.
+
+        The trip detail page reads as a timeline: a new item slots in before
+        the first existing item that starts later, and items without a time
+        sink to the end. Existing items at/after the slot shift down by one
+        so sort_order stays contiguous. Manual reordering (set_order) still
+        wins — this only decides where *new* items appear.
+        """
+        items = self.list_for_trip(user_id=user_id, trip_id=trip_id)
+        target = _as_utc(start_at)
+        position = len(items)
+        for index, item in enumerate(items):
+            existing = _as_utc(item.start_at)
+            if target is not None and (existing is None or target < existing):
+                position = index
+                break
+        for item in items[position:]:
+            item.sort_order += 1
+        return position
 
     def get_for_record(self, *, user_id: uuid.UUID, record_id: uuid.UUID) -> TripItem | None:
         return self.db.scalar(
@@ -59,16 +82,18 @@ class TripItemRepository:
                 trip_id=record.trip_id,
                 item_type=TRANSPORT_ITEM,
                 item_id=record.id,
-                sort_order=self._next_sort_order(user_id=record.user_id, trip_id=record.trip_id),
+                sort_order=self._chronological_sort_order(
+                    user_id=record.user_id, trip_id=record.trip_id, start_at=record.departure_time
+                ),
                 start_at=record.departure_time,
                 end_at=record.arrival_time,
             )
             self.db.add(item)
         else:
             if item.trip_id != record.trip_id:
-                # Moving between trips appends to the destination trip.
-                item.sort_order = self._next_sort_order(
-                    user_id=record.user_id, trip_id=record.trip_id
+                # Moving between trips slots the record in at its time position.
+                item.sort_order = self._chronological_sort_order(
+                    user_id=record.user_id, trip_id=record.trip_id, start_at=record.departure_time
                 )
                 item.trip_id = record.trip_id
             item.start_at = record.departure_time
@@ -107,16 +132,22 @@ class TripItemRepository:
                 trip_id=hotel.trip_id,
                 item_type=HOTEL_ITEM,
                 item_id=hotel.id,
-                sort_order=self._next_sort_order(user_id=hotel.user_id, trip_id=hotel.trip_id),
+                sort_order=self._chronological_sort_order(
+                    user_id=hotel.user_id,
+                    trip_id=hotel.trip_id,
+                    start_at=_date_at_midnight(hotel.check_in),
+                ),
                 start_at=_date_at_midnight(hotel.check_in),
                 end_at=_date_at_midnight(hotel.check_out),
             )
             self.db.add(item)
         else:
             if item.trip_id != hotel.trip_id:
-                # Moving between trips appends to the destination trip.
-                item.sort_order = self._next_sort_order(
-                    user_id=hotel.user_id, trip_id=hotel.trip_id
+                # Moving between trips slots the hotel in at its time position.
+                item.sort_order = self._chronological_sort_order(
+                    user_id=hotel.user_id,
+                    trip_id=hotel.trip_id,
+                    start_at=_date_at_midnight(hotel.check_in),
                 )
                 item.trip_id = hotel.trip_id
             item.start_at = _date_at_midnight(hotel.check_in)
@@ -154,7 +185,11 @@ class TripItemRepository:
         return item
 
     def ensure_transport_items(self, *, user_id: uuid.UUID, trip_id: uuid.UUID) -> None:
-        """Self-heal legacy/partial data: every grouped record gets an item."""
+        """Self-heal legacy/partial data: every grouped record gets an item.
+
+        Missing records slot in at their chronological position so a mixed
+        transport/hotel trip reads as a proper timeline.
+        """
         records = list(
             self.db.scalars(
                 select(TransportRecord).where(
@@ -165,36 +200,43 @@ class TripItemRepository:
         )
         record_ids = {record.id for record in records}
         items = self.list_for_trip(user_id=user_id, trip_id=trip_id)
-        item_record_ids = {item.item_id for item in items if item.item_type == TRANSPORT_ITEM}
 
         changed = False
         for item in items:
             if item.item_type == TRANSPORT_ITEM and item.item_id not in record_ids:
                 self.db.delete(item)
                 changed = True
+        if changed:
+            self.db.flush()
 
+        survivors = self.list_for_trip(user_id=user_id, trip_id=trip_id)
+        item_record_ids = {item.item_id for item in survivors if item.item_type == TRANSPORT_ITEM}
+        _epoch = datetime.min.replace(tzinfo=UTC)
         missing = [record for record in records if record.id not in item_record_ids]
         missing.sort(
             key=lambda record: (
-                record.departure_time is None,
-                record.departure_time,
+                _as_utc(record.departure_time) is None,
+                _as_utc(record.departure_time) or _epoch,
                 record.created_at,
             )
         )
-        next_order = max((item.sort_order for item in items), default=-1) + 1
-        for offset, record in enumerate(missing):
+        for record in missing:
             self.db.add(
                 TripItem(
                     user_id=user_id,
                     trip_id=trip_id,
                     item_type=TRANSPORT_ITEM,
                     item_id=record.id,
-                    sort_order=next_order + offset,
+                    sort_order=self._chronological_sort_order(
+                        user_id=user_id, trip_id=trip_id, start_at=record.departure_time
+                    ),
                     start_at=record.departure_time,
                     end_at=record.arrival_time,
                 )
             )
             changed = True
+            # Make the row visible to the next slot computation.
+            self.db.flush()
 
         if changed:
             self.db.commit()

@@ -115,6 +115,71 @@ def test_unassigning_and_deleting_records_remove_items(client, db):
     assert db.scalar(select(func.count()).select_from(TripItem)) == 0
 
 
+def test_new_items_slot_in_chronologically(client):
+    """A hotel added after a flight still shows first when it starts earlier."""
+    token = register_and_login(client, "item_chrono")["access_token"]
+    headers = auth_headers(token)
+
+    trip = _trip(client, headers)
+    client.post(
+        "/api/v1/flights",
+        json=_flight(
+            trip["id"],
+            departure_time="2026-04-29T18:00:00Z",
+            arrival_time="2026-04-29T22:00:00Z",
+        ),
+        headers=headers,
+    )
+    hotel = client.post(
+        "/api/v1/hotels",
+        json={
+            "hotel": "Narita Rest",
+            "check_in": "2026-04-28",
+            "check_out": "2026-04-29",
+            "trip_id": trip["id"],
+        },
+        headers=headers,
+    )
+    assert hotel.status_code == 201, hotel.text
+
+    detail = _trip_detail(client, headers, trip["id"])
+    assert [(item["item_type"], item["sort_order"]) for item in detail["items"]] == [
+        ("hotel", 0),
+        ("transport", 1),
+    ]
+
+
+def test_earlier_flight_inserts_before_later_one(client):
+    token = register_and_login(client, "item_chrono_flight")["access_token"]
+    headers = auth_headers(token)
+
+    trip = _trip(client, headers)
+    later = client.post(
+        "/api/v1/flights",
+        json=_flight(
+            trip["id"],
+            departure_time="2026-04-29T20:00:00Z",
+            arrival_time="2026-04-29T23:00:00Z",
+            service_number="CX1",
+        ),
+        headers=headers,
+    ).json()
+    earlier = client.post(
+        "/api/v1/flights",
+        json=_flight(
+            trip["id"],
+            departure_time="2026-04-29T02:00:00Z",
+            arrival_time="2026-04-29T06:00:00Z",
+            service_number="CX2",
+        ),
+        headers=headers,
+    ).json()
+
+    items = _trip_detail(client, headers, trip["id"])["items"]
+    assert [item["item_id"] for item in items] == [earlier["id"], later["id"]]
+    assert [item["sort_order"] for item in items] == [0, 1]
+
+
 def test_reorder_trip_items(client):
     token = register_and_login(client, "item_order")["access_token"]
     headers = auth_headers(token)
