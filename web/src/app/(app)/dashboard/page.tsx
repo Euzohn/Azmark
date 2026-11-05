@@ -209,15 +209,11 @@ export default function DashboardPage() {
   const stats = data?.stats;
   const hasRecords = (stats?.journeys ?? 0) + (stats?.hotels ?? 0) > 0;
 
-  const metrics = [
+  const countMetrics = [
     { label: t("dashboard.stats.countries"), value: stats?.countries ?? 0 },
     { label: t("dashboard.stats.cities"), value: stats?.cities ?? 0 },
     { label: t("dashboard.stats.journeys"), value: stats?.journeys ?? 0 },
     { label: t("dashboard.stats.hotels"), value: stats?.hotels ?? 0 },
-    {
-      label: t("dashboard.stats.distance"),
-      value: `${Math.round(stats?.distance_km ?? 0).toLocaleString(locale)} ${t("stats.km")}`,
-    },
   ];
 
   return (
@@ -284,15 +280,32 @@ export default function DashboardPage() {
             <Link href="/trips" className="flex items-center justify-between rounded-xl border border-border bg-card p-5 text-sm font-medium hover:border-primary/40"><span className="flex items-center gap-3"><Backpack className="h-5 w-5 text-primary" />{t("nav.trips")}</span><ArrowRight className="h-4 w-4 text-muted-foreground" /></Link>
           </div>
 
-          {/* Footprint — analysis and trends live on the statistics page. */}
+          {/* Footprint — analysis and trends live on the statistics page.
+              Distance is the marquee metric; the four counts sit in a 2×2 grid
+              beside it so neither breakpoint leaves an empty cell. */}
           <Card className="animate-fade-in-up" style={{ animationDelay: "120ms" }}>
             <CardContent className="p-0">
-              <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
-                {metrics.map((metric) => (
-                  <div key={metric.label} className="bg-card p-4">
-                    <Stat label={metric.label} value={metric.value} />
+              <div className="grid gap-px bg-border sm:grid-cols-[minmax(0,1.2fr)_minmax(0,2fr)]">
+                <div className="flex flex-col justify-center gap-1.5 bg-card p-5">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="font-display text-3xl font-semibold tracking-tight tabular-nums text-foreground sm:text-4xl">
+                      {Math.round(stats?.distance_km ?? 0).toLocaleString(locale)}
+                    </span>
+                    <span className="text-sm font-medium text-muted-foreground">
+                      {t("stats.km")}
+                    </span>
                   </div>
-                ))}
+                  <div className="text-xs text-muted-foreground">
+                    {t("dashboard.stats.distance")}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-px bg-border">
+                  {countMetrics.map((metric) => (
+                    <div key={metric.label} className="bg-card p-4">
+                      <Stat label={metric.label} value={metric.value} />
+                    </div>
+                  ))}
+                </div>
               </div>
             </CardContent>
           </Card>
