@@ -54,6 +54,14 @@ import type {
   HotelList,
   PendingAction,
   PendingActionList,
+  Expense,
+  ExpenseFilters,
+  ExpenseInput,
+  ExpenseList,
+  Note,
+  NoteFilters,
+  NoteInput,
+  NoteList,
 } from "@/lib/types";
 
 // Empty by default → requests go to the same origin (/api/v1/...), and the
@@ -243,6 +251,43 @@ export const api = {
   deleteHotel: (id: string) => request<void>(`/hotels/${id}`, { method: "DELETE" }),
   geocodeHotel: (id: string) =>
     request<HotelGeocodeRead>(`/hotels/${id}/geocode`, { method: "POST" }),
+
+  listExpenses: (params: ExpenseFilters = {}) => {
+    const query = new URLSearchParams();
+    if (params.search) query.set("search", params.search);
+    if (params.category) query.set("category", params.category);
+    if (params.trip_id) query.set("trip_id", params.trip_id);
+    if (params.date_from) query.set("date_from", params.date_from);
+    if (params.date_to) query.set("date_to", params.date_to);
+    if (params.sort) query.set("sort", params.sort);
+    if (params.page) query.set("page", String(params.page));
+    if (params.page_size) query.set("page_size", String(params.page_size));
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return request<ExpenseList>(`/expenses${suffix}`);
+  },
+  createExpense: (data: ExpenseInput) =>
+    request<Expense>("/expenses", { method: "POST", body: JSON.stringify(data) }),
+  getExpense: (id: string) => request<Expense>(`/expenses/${id}`),
+  updateExpense: (id: string, data: ExpenseInput) =>
+    request<Expense>(`/expenses/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteExpense: (id: string) => request<void>(`/expenses/${id}`, { method: "DELETE" }),
+
+  listNotes: (params: NoteFilters = {}) => {
+    const query = new URLSearchParams();
+    if (params.search) query.set("search", params.search);
+    if (params.trip_id) query.set("trip_id", params.trip_id);
+    if (params.sort) query.set("sort", params.sort);
+    if (params.page) query.set("page", String(params.page));
+    if (params.page_size) query.set("page_size", String(params.page_size));
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return request<NoteList>(`/notes${suffix}`);
+  },
+  createNote: (data: NoteInput) =>
+    request<Note>("/notes", { method: "POST", body: JSON.stringify(data) }),
+  getNote: (id: string) => request<Note>(`/notes/${id}`),
+  updateNote: (id: string, data: NoteInput) =>
+    request<Note>(`/notes/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteNote: (id: string) => request<void>(`/notes/${id}`, { method: "DELETE" }),
 
   listTrains: (params: FlightFilters = {}) => {
     const query = new URLSearchParams();

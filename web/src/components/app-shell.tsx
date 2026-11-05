@@ -12,6 +12,8 @@ import {
   type LucideIcon,
   Map as MapIcon,
   MoreHorizontal,
+  Receipt,
+  StickyNote,
   User,
 } from "lucide-react";
 import Link from "next/link";
@@ -41,6 +43,8 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/trips", key: "nav.trips", icon: Backpack },
   { href: "/records", key: "nav.records", icon: ListIcon },
   { href: "/hotels", key: "nav.hotels", icon: BedDouble },
+  { href: "/expenses", key: "nav.expenses", icon: Receipt },
+  { href: "/notes", key: "nav.notes", icon: StickyNote },
   { href: "/ai", key: "nav.ai", icon: Bot },
   { href: "/pending", key: "nav.pending", icon: ClipboardCheck },
   { href: "/map", key: "nav.map", icon: MapIcon },
@@ -76,6 +80,8 @@ const MOBILE_MAIN: NavItem[] = [
 
 const MOBILE_MORE: NavItem[] = [
   { href: "/hotels", key: "nav.hotels", icon: BedDouble },
+  { href: "/expenses", key: "nav.expenses", icon: Receipt },
+  { href: "/notes", key: "nav.notes", icon: StickyNote },
   { href: "/ai", key: "nav.ai", icon: Bot },
   { href: "/pending", key: "nav.pending", icon: ClipboardCheck },
   { href: "/statistics", key: "nav.stats", icon: BarChart3 },

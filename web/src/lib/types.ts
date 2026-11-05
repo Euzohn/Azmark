@@ -307,6 +307,94 @@ export interface HotelGeocodeRead {
   matched_address: string | null;
 }
 
+export type ExpenseCategory =
+  | "transport"
+  | "accommodation"
+  | "food"
+  | "shopping"
+  | "entertainment"
+  | "other";
+
+export interface Expense {
+  id: string;
+  user_id: string;
+  category: ExpenseCategory;
+  // Decimal fields are serialized as strings by the API.
+  amount: string;
+  currency: string;
+  converted_amount: string | null;
+  converted_currency: string | null;
+  exchange_rate: string | null;
+  exchange_rate_date: string | null;
+  occurred_at: string | null;
+  description: string | null;
+  trip_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ExpenseInput {
+  category?: ExpenseCategory;
+  amount?: number;
+  currency?: string;
+  converted_amount?: number | null;
+  converted_currency?: string | null;
+  exchange_rate?: number | null;
+  exchange_rate_date?: string | null;
+  occurred_at?: string | null;
+  description?: string | null;
+  trip_id?: string | null;
+}
+
+export interface ExpenseFilters {
+  search?: string;
+  category?: ExpenseCategory;
+  trip_id?: string;
+  date_from?: string;
+  date_to?: string;
+  sort?: "newest" | "oldest" | "amount" | "created";
+  page?: number;
+  page_size?: number;
+}
+
+export interface ExpenseList {
+  items: Expense[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface Note {
+  id: string;
+  user_id: string;
+  title: string;
+  content: string | null;
+  trip_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NoteInput {
+  title?: string;
+  content?: string | null;
+  trip_id?: string | null;
+}
+
+export interface NoteFilters {
+  search?: string;
+  trip_id?: string;
+  sort?: "newest" | "oldest" | "updated" | "title";
+  page?: number;
+  page_size?: number;
+}
+
+export interface NoteList {
+  items: Note[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 export type RecordType = "flight" | "train" | "other";
 export type RecordSort = "newest" | "oldest" | "departure" | "arrival" | "created";
 

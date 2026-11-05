@@ -132,6 +132,18 @@ def get_hotel_service(db: Session = Depends(get_db)):
     return HotelService(db)
 
 
+def get_expense_service(db: Session = Depends(get_db)):
+    from app.services.expense import ExpenseService
+
+    return ExpenseService(db)
+
+
+def get_note_service(db: Session = Depends(get_db)):
+    from app.services.note import NoteService
+
+    return NoteService(db)
+
+
 def get_auth_service(db: Session = Depends(get_db)):
     from app.services.auth import AuthService
 

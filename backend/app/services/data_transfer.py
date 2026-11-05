@@ -15,7 +15,9 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.models.expense import Expense
 from app.models.hotel import Hotel
+from app.models.note import Note
 from app.models.transport_record import TransportRecord
 from app.models.trip import Trip
 from app.models.user import User
@@ -95,6 +97,27 @@ HOTEL_FIELDS: tuple[str, ...] = (
 )
 
 HOTEL_SENSITIVE_FIELDS: tuple[str, ...] = ("booking_reference",)
+
+EXPENSE_FIELDS: tuple[str, ...] = (
+    "category",
+    "amount",
+    "currency",
+    "converted_amount",
+    "converted_currency",
+    "exchange_rate",
+    "exchange_rate_date",
+    "occurred_at",
+    "description",
+    "trip_name",
+)
+
+NOTE_FIELDS: tuple[str, ...] = (
+    "title",
+    "content",
+    "trip_name",
+    "created_at",
+    "updated_at",
+)
 
 DATETIME_FIELDS = {
     "departure_time",
@@ -294,6 +317,8 @@ class DataTransferService:
                 self._export_hotel(h, include_sensitive, trip_names)
                 for h in self._all_hotels(user_id)
             ],
+            "expenses": [self._export_expense(e, trip_names) for e in self._all_expenses(user_id)],
+            "notes": [self._export_note(n, trip_names) for n in self._all_notes(user_id)],
         }
         return json.dumps(bundle, ensure_ascii=False, indent=2)
 
@@ -479,6 +504,51 @@ class DataTransferService:
         if include_sensitive:
             for field in HOTEL_SENSITIVE_FIELDS:
                 data[field] = getattr(hotel, field, None)
+        return data
+
+    def _all_expenses(self, user_id: uuid.UUID) -> list[Expense]:
+        return list(
+            self.db.scalars(
+                select(Expense)
+                .where(Expense.user_id == user_id)
+                .order_by(Expense.occurred_at.asc().nullslast(), Expense.id)
+            )
+        )
+
+    def _export_expense(self, expense: Expense, trip_names: dict[uuid.UUID, str]) -> dict[str, Any]:
+        data: dict[str, Any] = {}
+        for field in EXPENSE_FIELDS:
+            value = (
+                trip_names.get(expense.trip_id)
+                if field == "trip_name"
+                else getattr(expense, field, None)
+            )
+            if field == "exchange_rate_date":
+                data[field] = value.isoformat() if value else None
+            elif field == "occurred_at":
+                data[field] = iso_full(value)
+            elif isinstance(value, Decimal):
+                data[field] = float(value)
+            else:
+                data[field] = value
+        return data
+
+    def _all_notes(self, user_id: uuid.UUID) -> list[Note]:
+        return list(
+            self.db.scalars(
+                select(Note).where(Note.user_id == user_id).order_by(Note.created_at.asc(), Note.id)
+            )
+        )
+
+    def _export_note(self, note: Note, trip_names: dict[uuid.UUID, str]) -> dict[str, Any]:
+        data: dict[str, Any] = {}
+        for field in NOTE_FIELDS:
+            if field == "trip_name":
+                data[field] = trip_names.get(note.trip_id)
+            elif field in ("created_at", "updated_at"):
+                data[field] = iso_full(getattr(note, field, None))
+            else:
+                data[field] = getattr(note, field, None)
         return data
 
     def _export_trip(self, trip: Trip) -> dict[str, Any]:

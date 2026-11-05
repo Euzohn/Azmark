@@ -9,9 +9,11 @@ from app.api.routes import (
     dashboard,
     data_sources,
     data_transfer,
+    expenses,
     flights,
     health,
     hotels,
+    notes,
     pending_actions,
     records,
     reference,
@@ -30,6 +32,8 @@ api_router.include_router(flights.router)
 api_router.include_router(trains.router)
 api_router.include_router(transports.router)
 api_router.include_router(hotels.router)
+api_router.include_router(expenses.router)
+api_router.include_router(notes.router)
 api_router.include_router(records.router)
 api_router.include_router(attachments.router)
 api_router.include_router(reference.router)

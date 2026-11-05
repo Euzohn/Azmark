@@ -244,3 +244,36 @@ def test_import_counts_only_new_trips(client):
     body = response.json()
     assert body["imported"] == 1
     assert body["trips_created"] == 0
+
+
+def test_export_json_includes_expenses_and_notes(client):
+    token = register_and_login(client, "export_expense_note")["access_token"]
+    headers = auth_headers(token)
+    trip = client.post("/api/v1/trips", json={"name": "Osaka 2026"}, headers=headers).json()
+    expense = client.post(
+        "/api/v1/expenses",
+        json={
+            "category": "food",
+            "amount": "18.00",
+            "currency": "JPY",
+            "occurred_at": "2026-04-02T12:00:00Z",
+            "trip_id": trip["id"],
+        },
+        headers=headers,
+    )
+    assert expense.status_code == 201, expense.text
+    note = client.post(
+        "/api/v1/notes",
+        json={"title": "Osaka plan", "content": "Dotonbori", "trip_id": trip["id"]},
+        headers=headers,
+    )
+    assert note.status_code == 201, note.text
+
+    bundle = client.get("/api/v1/export?format=json", headers=headers).json()
+    assert len(bundle["expenses"]) == 1
+    assert bundle["expenses"][0]["amount"] == 18.0
+    assert bundle["expenses"][0]["currency"] == "JPY"
+    assert bundle["expenses"][0]["trip_name"] == "Osaka 2026"
+    assert len(bundle["notes"]) == 1
+    assert bundle["notes"][0]["title"] == "Osaka plan"
+    assert bundle["notes"][0]["trip_name"] == "Osaka 2026"
