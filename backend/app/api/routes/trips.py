@@ -1,4 +1,5 @@
 import uuid
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 
@@ -68,6 +69,7 @@ def create_trip(
 @router.get("/{trip_id}", response_model=TripDetail)
 def get_trip(
     trip_id: uuid.UUID,
+    direction: Literal["asc", "desc"] = "asc",
     current_user: User = Depends(get_current_user),
     service: TripService = Depends(get_trip_service),
 ) -> TripDetail:
@@ -75,7 +77,7 @@ def get_trip(
         trip = service.get_trip(user_id=current_user.id, trip_id=trip_id)
     except TripNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
-    items = service.list_items(user_id=current_user.id, trip_id=trip_id)
+    items = service.list_items(user_id=current_user.id, trip_id=trip_id, direction=direction)
     records = [item.record for item in items if item.record is not None]
     expenses = service.list_expenses(user_id=current_user.id, trip_id=trip_id)
     summary = service.expense_summary(user_id=current_user.id, trip_id=trip_id)
@@ -98,13 +100,18 @@ def update_trip(
     trip_id: uuid.UUID,
     payload: TripUpdate,
     request: Request,
+    direction: Literal["asc", "desc"] = "asc",
     current_user: User = Depends(get_current_user),
     service: TripService = Depends(get_trip_service),
     audit: AuditService = Depends(get_audit_service),
 ):
     try:
         trip = service.update_trip(
-            user_id=current_user.id, trip_id=trip_id, payload=payload, commit=False
+            user_id=current_user.id,
+            trip_id=trip_id,
+            payload=payload,
+            commit=False,
+            direction=direction,
         )
     except TripNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None

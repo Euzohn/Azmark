@@ -405,9 +405,10 @@ export const api = {
   },
   createTrip: (data: TripInput) =>
     request<Trip>("/trips", { method: "POST", body: JSON.stringify(data) }),
-  getTrip: (id: string) => request<TripDetail>(`/trips/${id}`),
-  updateTrip: (id: string, data: Partial<TripInput>) =>
-    request<Trip>(`/trips/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  getTrip: (id: string, direction: "asc" | "desc" = "asc") =>
+    request<TripDetail>(`/trips/${id}?direction=${direction}`),
+  updateTrip: (id: string, data: Partial<TripInput>, direction: "asc" | "desc" = "asc") =>
+    request<Trip>(`/trips/${id}?direction=${direction}`, { method: "PATCH", body: JSON.stringify(data) }),
   reorderTripItems: (tripId: string, itemIds: string[]) =>
     request<void>(`/trips/${tripId}/items/order`, {
       method: "PUT",

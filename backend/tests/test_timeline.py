@@ -317,3 +317,52 @@ def test_manual_partition_changes_append_to_destination(client):
     )
     items = _detail(client, headers, trip["id"])["items"]
     assert [item["activity"]["name"] for item in items] == ["B", "C", "A"]
+
+
+def test_chronological_direction_and_switch_to_manual(client):
+    headers = _headers(client, "timeline_descending")
+    trip = _trip(client, headers)
+    trip_id = trip["id"]
+    for name, start in [
+        ("early", "2026-04-30T01:00:00Z"),
+        ("late", "2026-04-30T05:00:00Z"),
+        ("same", "2026-04-30T05:00:00Z"),
+        ("other day", "2026-05-01T01:00:00Z"),
+        ("unscheduled", None),
+    ]:
+        response = client.post(
+            "/api/v1/activities",
+            json={"name": name, "trip_id": trip_id, "start_at": start, "timezone": "UTC"},
+            headers=headers,
+        )
+        assert response.status_code == 201, response.text
+    hotel = client.post(
+        "/api/v1/hotels",
+        json={"hotel": "Hotel", "check_in": "2026-04-30", "trip_id": trip_id},
+        headers=headers,
+    )
+    assert hotel.status_code == 201, hotel.text
+
+    def names(direction):
+        response = client.get(
+            f"/api/v1/trips/{trip_id}", params={"direction": direction}, headers=headers
+        )
+        assert response.status_code == 200, response.text
+        return [
+            i["activity"]["name"] if i["activity"] else i["hotel"]["hotel"]
+            for i in response.json()["items"]
+        ]
+
+    assert names("asc") == ["Hotel", "early", "late", "same", "other day", "unscheduled"]
+    descending = ["other day", "Hotel", "late", "same", "early", "unscheduled"]
+    assert names("desc") == descending
+    assert (
+        client.get(f"/api/v1/trips/{trip_id}?direction=invalid", headers=headers).status_code == 422
+    )
+    response = client.patch(
+        f"/api/v1/trips/{trip_id}?direction=desc",
+        json={"timeline_order_mode": "manual"},
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text
+    assert names("asc") == descending

@@ -34,6 +34,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { formatZonedDateTime } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
+import { useTimelineDirection } from "@/lib/timeline-direction";
 import type {
   OtherTransport,
   TimelineRecord,
@@ -70,22 +71,24 @@ export default function TripDetailPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { t, locale } = useI18n();
+  const [direction, setDirection] = useTimelineDirection();
 
   const { data, isLoading } = useQuery({
-    queryKey: ["trip", id],
-    queryFn: () => api.getTrip(id),
+    queryKey: ["trip", id, direction],
+    queryFn: () => api.getTrip(id, direction),
     enabled: Boolean(id),
   });
 
   const update = useMutation({
-    mutationFn: (input: TripInput) => api.updateTrip(id, input),
+    mutationFn: (input: TripInput) => api.updateTrip(id, input, direction),
     onSuccess: (updated) => {
       // Write the server's answer straight into the cache so the header and the
       // edit-diff markers settle immediately instead of waiting on a refetch.
-      queryClient.setQueryData<TripDetail>(["trip", id], (prev) =>
+      queryClient.setQueryData<TripDetail>(["trip", id, direction], (prev) =>
         prev ? { ...prev, ...updated } : prev,
       );
       queryClient.invalidateQueries({ queryKey: ["trips"] });
+      queryClient.invalidateQueries({ queryKey: ["trip", id] });
     },
   });
 
@@ -233,6 +236,19 @@ export default function TripDetailPage() {
                   ? t("trips.orderMode.manual")
                   : t("trips.orderMode.chronological")}
               </span>
+              {data.timeline_order_mode === "chronological" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={update.isPending}
+                  onClick={() => setDirection(direction === "asc" ? "desc" : "asc")}
+                  aria-label={t("trips.changeTimeDirection")}
+                >
+                  {direction === "asc" ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
+                  {direction === "asc" ? t("trips.timeAscending") : t("trips.timeDescending")}
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 variant="outline"

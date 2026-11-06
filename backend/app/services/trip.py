@@ -1,5 +1,6 @@
 import uuid
 from datetime import UTC, date, datetime
+from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy.orm import Session
@@ -87,11 +88,18 @@ def _local_date(value: datetime, timezone: str | None, fallback: str | None) -> 
     return _as_utc(value).astimezone(zone).date()  # type: ignore[union-attr]
 
 
-def _sort_key(item: TripItemRead, *, local_day: date | None, start: datetime | None) -> tuple:
+def _sort_key(
+    item: TripItemRead,
+    *,
+    local_day: date | None,
+    start: datetime | None,
+    direction: Literal["asc", "desc"] = "asc",
+) -> tuple:
     """Chronological ordering: day, hotels first, then instant time, then order."""
     if item.is_unscheduled:
         return (1, 0, 0, 0.0, item.sort_order, str(item.id or item.item_id))
-    day_value = local_day.toordinal() if local_day else 0
+    multiplier = -1 if direction == "desc" else 1
+    day_value = (local_day.toordinal() if local_day else 0) * multiplier
     if item.time_kind == "date":
         return (0, day_value, 0, 0.0, item.sort_order, str(item.id or item.item_id))
     stamp = _as_utc(start)
@@ -99,7 +107,7 @@ def _sort_key(item: TripItemRead, *, local_day: date | None, start: datetime | N
         0,
         day_value,
         1,
-        stamp.timestamp() if stamp else 0.0,
+        stamp.timestamp() * multiplier if stamp else 0.0,
         item.sort_order,
         str(item.id or item.item_id),
     )
@@ -181,7 +189,11 @@ class TripService:
     # timeline read model
     # ------------------------------------------------------------------
     def _load_timeline(
-        self, *, user_id: uuid.UUID, trip_id: uuid.UUID
+        self,
+        *,
+        user_id: uuid.UUID,
+        trip_id: uuid.UUID,
+        direction: Literal["asc", "desc"] = "asc",
     ) -> tuple[Trip, list[tuple[TripItemRead, tuple]]]:
         trip = self.get_trip(user_id=user_id, trip_id=trip_id)
         user = self.db.get(User, user_id)
@@ -263,6 +275,7 @@ class TripService:
                         else None
                     ),
                     start=entry[0].start_at,
+                    direction=direction,
                 )
             )
 
@@ -274,9 +287,11 @@ class TripService:
             result.append((updated, group))
         return trip, result
 
-    def list_items(self, *, user_id: uuid.UUID, trip_id: uuid.UUID) -> list[TripItemRead]:
+    def list_items(
+        self, *, user_id: uuid.UUID, trip_id: uuid.UUID, direction: Literal["asc", "desc"] = "asc"
+    ) -> list[TripItemRead]:
         """Return the timeline in display order. Read-only: never self-heals."""
-        _, entries = self._load_timeline(user_id=user_id, trip_id=trip_id)
+        _, entries = self._load_timeline(user_id=user_id, trip_id=trip_id, direction=direction)
         return [entry for entry, _ in entries]
 
     def _group_for(self, item: TripItemRead, fallback_tz: str | None) -> tuple:
@@ -556,13 +571,19 @@ class TripService:
         return self.trips.create(self.prepare_trip(user_id=user_id, payload=payload), commit=commit)
 
     def update_trip(
-        self, *, user_id: uuid.UUID, trip_id: uuid.UUID, payload: TripUpdate, commit: bool = True
+        self,
+        *,
+        user_id: uuid.UUID,
+        trip_id: uuid.UUID,
+        payload: TripUpdate,
+        commit: bool = True,
+        direction: Literal["asc", "desc"] = "asc",
     ) -> Trip:
         lock_user_writes(self.db, user_id)
         trip = self.get_trip(user_id=user_id, trip_id=trip_id)
         data = payload.model_dump(exclude_unset=True)
         if data.get("timeline_order_mode") == "manual" and trip.timeline_order_mode != "manual":
-            _, entries = self._load_timeline(user_id=user_id, trip_id=trip_id)
+            _, entries = self._load_timeline(user_id=user_id, trip_id=trip_id, direction=direction)
             if any(entry.id is None for entry, _ in entries):
                 raise TimelineRepairRequiredError
             projections = {
