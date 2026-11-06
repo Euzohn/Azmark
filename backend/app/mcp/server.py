@@ -52,7 +52,9 @@ transport records, plus expenses, notes, places, activities and trips.
   cover every record type but do NOT save anything: they return a
   pending_action_id and the owner must approve the proposal in Azmark ->
   Pending actions. Use get_pending_action to poll the result. Deletion is not
-  available through MCP, and a place cannot be joined to a trip from here.
+  available through MCP, and there is no dedicated tool for joining a place to
+  a trip timeline; an agent can still propose an Activity with type 'visit'
+  (plus place_id and trip_id) to record such a visit.
 """
 
 

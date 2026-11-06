@@ -580,7 +580,8 @@ export default function AiChatPage() {
         return api.createTrip(data as unknown as TripInput);
       }
       if (proposal.record_type === "expense") {
-        return api.createExpense(data as unknown as ExpenseInput);
+        // A retried save must not create a second spend (docs §6.5).
+        return api.createExpense(data as unknown as ExpenseInput, proposal.id);
       }
       if (proposal.record_type === "note") {
         return api.createNote(data as unknown as NoteInput);

@@ -44,7 +44,7 @@ Azmark 内置一个**只读** MCP Server（spec #85）。Claude、Cursor 等 MCP
 
 > 删除（DESTRUCTIVE）**不通过 MCP 暴露**。要删记录，请用户在网页操作。这是故意的：destructive 操作的确认必须发生在 agent 无法触及的地方。
 >
-> 地点（place）是地理参照实体，没有自己的 `trip_id`；把它排进行程时间线（`trip_items`）也不通过 MCP，请在网页操作。
+> 地点（place）是地理参照实体，没有自己的 `trip_id`。没有专用工具把一个地点直接加进行程时间线；要表达"到访某地"，agent 可以用 `create_record`（`record_type: activity`）提案一条 `type: visit` 的活动并带上 `place_id` 和 `trip_id`，行程由源记录的 `trip_id` 派生，地点本身不会写入 `trip_items`。
 
 > 为什么 agent 不能自己确认？因为 MCP 客户端由模型驱动，提示注入可能让 agent "替用户确认"。确认接口 `/api/v1/pending-actions/*` **只接受浏览器会话（JWT），个人访问令牌一律 403**——这是整个设计的安全支点。
 
