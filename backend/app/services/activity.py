@@ -180,7 +180,8 @@ class ActivityService:
 
     def delete_activity(self, *, user_id: uuid.UUID, activity_id: uuid.UUID) -> None:
         activity = self.get_activity(user_id=user_id, activity_id=activity_id)
+        # Delete first to lock the source row before clearing linked expenses.
+        self.activities.delete(activity)
         clear_source(self.db, user_id=user_id, source_type=SOURCE_ACTIVITY, source_id=activity.id)
         self.trip_items.delete_activity(user_id=user_id, activity_id=activity.id)
-        self.activities.delete(activity)
         self.db.commit()

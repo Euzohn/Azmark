@@ -2,14 +2,15 @@ import uuid
 from datetime import date
 from decimal import Decimal
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.models.activity import Activity
 from app.models.expense import Expense
+from app.models.hotel import Hotel
+from app.models.transport_record import TransportRecord
 from app.models.user import utcnow
-from app.repositories.activity import ActivityRepository
 from app.repositories.expense import ExpenseRepository
-from app.repositories.hotel import HotelRepository
-from app.repositories.transport import TransportRepository
 from app.repositories.trip import TripRepository
 from app.schemas.expense import ExpenseCurrencyTotal, ExpenseSummary
 from app.services.expense_source import SOURCE_ACTIVITY, SOURCE_HOTEL, SOURCE_TRANSPORT
@@ -82,9 +83,6 @@ class ExpenseService:
         self.db = db
         self.expenses = ExpenseRepository(db)
         self.trips = TripRepository(db)
-        self.records = TransportRepository(db)
-        self.hotels = HotelRepository(db)
-        self.activities = ActivityRepository(db)
 
     def _check_trip(self, *, user_id: uuid.UUID, trip_id: uuid.UUID | None) -> None:
         if trip_id is not None and self.trips.get(user_id=user_id, trip_id=trip_id) is None:
@@ -93,15 +91,23 @@ class ExpenseService:
     def _resolve_source(
         self, *, user_id: uuid.UUID, source_type: str, source_id: uuid.UUID
     ) -> uuid.UUID | None:
-        """Return the source's current trip, or raise if it is not the user's."""
+        """Return the source's current trip, or raise if it is not the user's.
+
+        ``FOR UPDATE`` serializes binding against a concurrent source move or
+        delete: otherwise the expense could keep the source's old trip (or a
+        source that is being deleted) while the other transaction commits.
+        """
         if source_type == SOURCE_TRANSPORT:
-            entity = self.records.get(user_id=user_id, record_id=source_id)
+            model = TransportRecord
         elif source_type == SOURCE_HOTEL:
-            entity = self.hotels.get(user_id=user_id, hotel_id=source_id)
+            model = Hotel
         elif source_type == SOURCE_ACTIVITY:
-            entity = self.activities.get(user_id=user_id, activity_id=source_id)
+            model = Activity
         else:
             raise ExpenseSourceTypeError
+        entity = self.db.scalar(
+            select(model).where(model.id == source_id, model.user_id == user_id).with_for_update()
+        )
         if entity is None:
             raise ExpenseSourceNotFoundError
         return entity.trip_id

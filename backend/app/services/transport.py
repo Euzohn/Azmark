@@ -163,9 +163,11 @@ class TransportService:
 
     def delete_record(self, *, user_id: uuid.UUID, record_id: uuid.UUID) -> None:
         record = self.get_record(user_id=user_id, record_id=record_id)
+        # Delete the source first so its row lock arbitrates a concurrent
+        # expense bind. The later clear then always sees that expense.
+        self.records.delete(record)
         clear_source(self.db, user_id=user_id, source_type=SOURCE_TRANSPORT, source_id=record.id)
         self.trip_items.delete_transport(user_id=user_id, record_id=record.id)
-        self.records.delete(record)
         self.db.commit()
 
 

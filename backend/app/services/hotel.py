@@ -154,9 +154,10 @@ class HotelService:
 
     def delete_hotel(self, *, user_id: uuid.UUID, hotel_id: uuid.UUID) -> None:
         hotel = self.get_hotel(user_id=user_id, hotel_id=hotel_id)
+        # Delete first to lock the source row before clearing linked expenses.
+        self.hotels.delete(hotel)
         clear_source(self.db, user_id=user_id, source_type=SOURCE_HOTEL, source_id=hotel.id)
         self.trip_items.delete_hotel(user_id=user_id, hotel_id=hotel.id)
-        self.hotels.delete(hotel)
         self.db.commit()
 
     def set_coordinates(
