@@ -4,10 +4,13 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 
 from app.models.activity import Activity
+from app.models.user import User
 from app.repositories.activity import ActivityRepository
 from app.repositories.place import PlaceRepository
 from app.repositories.trip import TripRepository
 from app.repositories.trip_item import TripItemRepository
+from app.services.expense_source import SOURCE_ACTIVITY, clear_source, sync_source_trip
+from app.services.idempotency import IdempotencyResultGoneError, IdempotencyService
 
 
 class ActivityNotFoundError(Exception):
@@ -83,13 +86,63 @@ class ActivityService:
         return activity
 
     def create_activity(self, *, user_id: uuid.UUID, payload) -> Activity:
+        """Create an activity through the generic service dispatch."""
+        activity, _ = self.create_activity_idempotent(user_id=user_id, payload=payload)
+        return activity
+
+    def create_activity_idempotent(
+        self,
+        *,
+        user_id: uuid.UUID,
+        payload,
+        idempotency_key: str | None = None,
+        idempotency_operation: str = "create_activity",
+    ) -> tuple[Activity, bool]:
+        """Create an activity; ``replayed`` is true for an idempotent retry."""
         data = payload.model_dump()
+        idem = IdempotencyService(self.db)
+        replay, record, _ = idem.begin(
+            user_id=user_id,
+            operation=idempotency_operation,
+            key=idempotency_key,
+            payload=payload.model_dump(mode="json"),
+        )
+        if replay is not None:
+            activity = (
+                self.activities.get(user_id=user_id, activity_id=replay.resource_id)
+                if replay.resource_id is not None
+                else None
+            )
+            if activity is None:
+                raise IdempotencyResultGoneError
+            return activity, True
+
+        data = dict(data)
         self._check_trip(user_id=user_id, trip_id=data.get("trip_id"))
         self._check_place(user_id=user_id, place_id=data.get("place_id"))
+        if data.get("timezone") is None:
+            data["timezone"] = self._default_timezone(
+                user_id=user_id, place_id=data.get("place_id")
+            )
         activity = Activity(user_id=user_id, **data)
         activity = self.activities.create(activity)
         self.trip_items.sync_activity(activity)
-        return activity
+        idem.complete(
+            record,
+            resource_id=activity.id,
+            response={"id": str(activity.id), "name": activity.name, "type": activity.type},
+        )
+        self.db.commit()
+        return activity, False
+
+    def _default_timezone(self, *, user_id: uuid.UUID, place_id: uuid.UUID | None) -> str | None:
+        """Explicit value → place timezone → user timezone (docs §5.2)."""
+        if place_id is not None:
+            place = self.places.get(user_id=user_id, place_id=place_id)
+            if place is not None and place.timezone:
+                return place.timezone
+        user = self.db.get(User, user_id)
+        return user.timezone if user is not None else None
 
     def update_activity(self, *, user_id: uuid.UUID, activity_id: uuid.UUID, payload) -> Activity:
         activity = self.get_activity(user_id=user_id, activity_id=activity_id)
@@ -113,11 +166,21 @@ class ActivityService:
         for field, value in data.items():
             setattr(activity, field, value)
 
+        sync_source_trip(
+            self.db,
+            user_id=user_id,
+            source_type=SOURCE_ACTIVITY,
+            source_id=activity.id,
+            trip_id=activity.trip_id,
+        )
         activity = self.activities.save(activity)
         self.trip_items.sync_activity(activity)
+        self.db.commit()
         return activity
 
     def delete_activity(self, *, user_id: uuid.UUID, activity_id: uuid.UUID) -> None:
         activity = self.get_activity(user_id=user_id, activity_id=activity_id)
+        clear_source(self.db, user_id=user_id, source_type=SOURCE_ACTIVITY, source_id=activity.id)
         self.trip_items.delete_activity(user_id=user_id, activity_id=activity.id)
         self.activities.delete(activity)
+        self.db.commit()

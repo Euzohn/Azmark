@@ -1,7 +1,7 @@
 import uuid
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 
 from app.api.deps import (
     get_activity_service,
@@ -25,6 +25,11 @@ from app.services.activity import (
     InvalidActivityWindowError,
 )
 from app.services.audit import AuditService
+from app.services.idempotency import (
+    IdempotencyConflictError,
+    IdempotencyInProgressError,
+    IdempotencyResultGoneError,
+)
 
 router = APIRouter(prefix="/activities", tags=["activities"])
 
@@ -60,12 +65,17 @@ def list_activities(
 def create_activity(
     payload: ActivityCreate,
     request: Request,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", max_length=120),
     current_user: User = Depends(get_current_user),
     service: ActivityService = Depends(get_activity_service),
     audit: AuditService = Depends(get_audit_service),
 ) -> ActivityRead:
     try:
-        activity = service.create_activity(user_id=current_user.id, payload=payload)
+        activity, replayed = service.create_activity_idempotent(
+            user_id=current_user.id,
+            payload=payload,
+            idempotency_key=idempotency_key,
+        )
     except ActivityTripAssignmentError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found"
@@ -74,14 +84,29 @@ def create_activity(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Place not found"
         ) from None
-    audit.log(
-        action=AuditAction.CREATE_RECORD,
-        user_id=current_user.id,
-        resource_type="activity",
-        resource_id=str(activity.id),
-        meta={"name": activity.name},
-        request=request,
-    )
+    except IdempotencyConflictError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Idempotency key reused with a different request",
+        ) from None
+    except IdempotencyInProgressError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Request is still in progress"
+        ) from None
+    except IdempotencyResultGoneError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The result of this key was deleted",
+        ) from None
+    if not replayed:
+        audit.log(
+            action=AuditAction.CREATE_RECORD,
+            user_id=current_user.id,
+            resource_type="activity",
+            resource_id=str(activity.id),
+            meta={"name": activity.name},
+            request=request,
+        )
     return activity
 
 

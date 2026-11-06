@@ -6,12 +6,14 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowUp,
+  ArrowUpDown,
   BedDouble,
   Bus,
   CalendarDays,
   MapPin,
   Plane,
   Plus,
+  RefreshCw,
   Trash2,
   TrainFront,
 } from "lucide-react";
@@ -22,6 +24,7 @@ import { AirlineLogo } from "@/components/airline-logo";
 import { AirlineName } from "@/components/airline-name";
 import { AirportName } from "@/components/airport-name";
 import { FlightStatusBadge, TripStatusBadge } from "@/components/status-badge";
+import { TripExtras } from "@/components/trip-extras";
 import { TripForm } from "@/components/trip-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -98,8 +101,8 @@ export default function TripDetailPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["trip", id] }),
   });
 
-  const removeItem = useMutation({
-    mutationFn: (itemId: string) => api.deleteTripItem(id, itemId),
+  const repairTimeline = useMutation({
+    mutationFn: () => api.repairTripTimeline(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["trip", id] }),
   });
 
@@ -128,29 +131,45 @@ export default function TripDetailPage() {
           item_type: "transport",
           item_id: record.id,
           sort_order: 0,
+          time_kind: "instant",
           start_at: record.departure_time,
           end_at: record.arrival_time,
+          start_date: null,
+          end_date: null,
+          timezone: record.departure_timezone,
+          is_unscheduled: record.departure_time === null,
           record,
           hotel: null,
-          place: null,
           activity: null,
         }));
   const displayItems = items.filter(
-    (item) =>
-      item.record !== null ||
-      item.hotel !== null ||
-      item.place !== null ||
-      item.activity !== null,
+    (item) => item.record !== null || item.hotel !== null || item.activity !== null,
   );
-  const canReorder = Boolean(data.items && data.items.length > 1);
+  // Chronological timelines derive their order from event times; only manual
+  // trips expose move controls. A missing projection must be repaired first.
+  const canReorder =
+    data.timeline_order_mode === "manual" &&
+    Boolean(data.items && data.items.length > 1) &&
+    items.every((item) => item.id !== null);
+  const needsRepair = data.items?.some((item) => item.id === null) ?? false;
 
-  const moveItem = (itemId: string, direction: -1 | 1) => {
+  const moveItem = (itemId: string | null, direction: -1 | 1) => {
+    if (!itemId) return;
     const ids = items.map((item) => item.id);
-    const index = ids.indexOf(itemId);
+    if (ids.some((candidate) => candidate === null)) return;
+    const ordered = ids as string[];
+    const index = ordered.indexOf(itemId);
     const target = index + direction;
-    if (index < 0 || target < 0 || target >= ids.length) return;
-    [ids[index], ids[target]] = [ids[target], ids[index]];
-    reorder.mutate(ids);
+    if (index < 0 || target < 0 || target >= ordered.length) return;
+    [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
+    reorder.mutate(ordered);
+  };
+
+  const toggleOrderMode = () => {
+    update.mutate({
+      timeline_order_mode:
+        data.timeline_order_mode === "manual" ? "chronological" : "manual",
+    });
   };
 
   return (
@@ -203,9 +222,42 @@ export default function TripDetailPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="flex flex-col gap-3">
-          <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            {t("trips.records")} · {displayItems.length}
-          </h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              {t("trips.records")} · {displayItems.length}
+            </h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground">
+                {data.timeline_order_mode === "manual"
+                  ? t("trips.orderMode.manual")
+                  : t("trips.orderMode.chronological")}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={update.isPending}
+                onClick={toggleOrderMode}
+              >
+                <ArrowUpDown className="h-4 w-4" />
+                {data.timeline_order_mode === "manual"
+                  ? t("trips.switchToChronological")
+                  : t("trips.switchToManual")}
+              </Button>
+              {needsRepair ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={repairTimeline.isPending}
+                  onClick={() => repairTimeline.mutate()}
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  {t("trips.repairTimeline")}
+                </Button>
+              ) : null}
+            </div>
+          </div>
           {reorder.isError ? (
             <p className="text-sm text-danger">{t("trips.reorderFailed")}</p>
           ) : null}
@@ -225,8 +277,11 @@ export default function TripDetailPage() {
             />
           ) : (
             displayItems.map((item, index) => {
-              const itemIndex = items.findIndex((entry) => entry.id === item.id);
-              const orderControls = canReorder ? (
+              const itemIndex = item.id
+                ? items.findIndex((entry) => entry.id === item.id)
+                : -1;
+              const orderControls =
+                canReorder && item.id ? (
                 <div className="flex shrink-0 flex-col">
                   <Button
                     type="button"
@@ -254,84 +309,55 @@ export default function TripDetailPage() {
                   </Button>
                 </div>
               ) : null;
-              if (item.place) {
-                const place = item.place;
-                return (
-                  <Card
-                    key={item.id}
-                    interactive
-                    className="group animate-fade-in-up"
-                    style={{ animationDelay: `${index * 40}ms` }}
-                  >
-                    <CardContent className="flex items-center gap-4 p-4">
-                      <Link
-                        href={`/places/${place.id}`}
-                        className="flex min-w-0 flex-1 items-center gap-4"
-                      >
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                          <MapPin className="h-4 w-4" strokeWidth={1.75} />
-                        </span>
-                        <div className="min-w-0">
-                          <div className="font-display text-base font-semibold tracking-tight">
-                            {place.name}
-                          </div>
-                          <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                            {[place.localized_name, place.city].filter(Boolean).join(" · ") ||
-                              t(`places.type.${place.type}`)}
-                            {item.start_at ? ` · ${formatDate(item.start_at, locale)}` : ""}
-                          </div>
-                        </div>
-                      </Link>
-                      {orderControls}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 shrink-0 text-muted-foreground hover:text-danger"
-                        disabled={removeItem.isPending}
-                        title={t("places.removeFromTrip")}
-                        aria-label={t("places.removeFromTrip")}
-                        onClick={() => {
-                          if (window.confirm(t("places.removeFromTrip"))) {
-                            removeItem.mutate(item.id);
-                          }
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </CardContent>
-                  </Card>
-                );
-              }
               if (item.activity) {
                 const activity = item.activity;
                 return (
                   <Card
-                    key={item.id}
+                    key={item.id ?? `${item.item_type}-${item.item_id}`}
                     interactive
                     className="group animate-fade-in-up"
                     style={{ animationDelay: `${index * 40}ms` }}
                   >
                     <CardContent className="flex items-center gap-4 p-4">
-                      <Link
-                        href={`/activities/${activity.id}`}
-                        className="flex min-w-0 flex-1 items-center gap-4"
-                      >
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-warning/10 text-warning">
-                          <CalendarDays className="h-4 w-4" strokeWidth={1.75} />
-                        </span>
-                        <div className="min-w-0">
-                          <div className="font-display text-base font-semibold tracking-tight">
-                            {activity.name}
-                          </div>
-                          <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                            {t(`activities.type.${activity.type}`)}
-                            {activity.start_at
-                              ? ` · ${formatDate(activity.start_at, locale)}`
-                              : ""}
-                          </div>
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-warning/10 text-warning">
+                        <CalendarDays className="h-4 w-4" strokeWidth={1.75} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <Link
+                          href={`/activities/${activity.id}`}
+                          className="font-display text-base font-semibold tracking-tight hover:underline"
+                        >
+                          {activity.name}
+                        </Link>
+                        <div className="mt-0.5 flex min-w-0 items-center truncate text-xs text-muted-foreground">
+                          <span>{t(`activities.type.${activity.type}`)}</span>
+                          {activity.start_at
+                            ? ` · ${formatZonedDateTime(
+                                activity.start_at,
+                                locale,
+                                activity.timezone ?? item.timezone,
+                                {
+                                  month: "short",
+                                  day: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                },
+                              )}`
+                            : ""}
+                          {activity.place ? (
+                            <>
+                              {" · "}
+                              <Link
+                                href={`/places/${activity.place.id}`}
+                                className="inline-flex min-w-0 items-center gap-1 hover:underline"
+                              >
+                                <MapPin className="h-3 w-3 shrink-0" />
+                                <span className="truncate">{activity.place.name}</span>
+                              </Link>
+                            </>
+                          ) : null}
                         </div>
-                      </Link>
+                      </div>
                       {orderControls}
                     </CardContent>
                   </Card>
@@ -365,34 +391,7 @@ export default function TripDetailPage() {
                           </div>
                         </div>
                       </Link>
-                      {canReorder ? (
-                        <div className="flex shrink-0 flex-col">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            disabled={itemIndex <= 0 || reorder.isPending}
-                            onClick={() => moveItem(item.id, -1)}
-                            title={t("trips.moveUp")}
-                            aria-label={t("trips.moveUp")}
-                          >
-                            <ArrowUp className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            disabled={itemIndex >= items.length - 1 || reorder.isPending}
-                            onClick={() => moveItem(item.id, 1)}
-                            title={t("trips.moveDown")}
-                            aria-label={t("trips.moveDown")}
-                          >
-                            <ArrowDown className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      ) : null}
+                      {orderControls}
                     </CardContent>
                   </Card>
                 );
@@ -456,34 +455,7 @@ export default function TripDetailPage() {
                         </div>
                       </div>
                     </Link>
-                    {canReorder ? (
-                      <div className="flex shrink-0 flex-col">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          disabled={itemIndex <= 0 || reorder.isPending}
-                          onClick={() => moveItem(item.id, -1)}
-                          title={t("trips.moveUp")}
-                          aria-label={t("trips.moveUp")}
-                        >
-                          <ArrowUp className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          disabled={itemIndex >= items.length - 1 || reorder.isPending}
-                          onClick={() => moveItem(item.id, 1)}
-                          title={t("trips.moveDown")}
-                          aria-label={t("trips.moveDown")}
-                        >
-                          <ArrowDown className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    ) : null}
+                    {orderControls}
                     <FlightStatusBadge status={record.status} />
                   </CardContent>
                 </Card>
@@ -505,6 +477,8 @@ export default function TripDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      <TripExtras trip={data} />
     </div>
   );
 }

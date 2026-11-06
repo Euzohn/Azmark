@@ -14,6 +14,8 @@ import type { Note, NoteInput, TripList } from "@/lib/types";
 
 interface NoteFormProps {
   initial?: Note;
+  /** Preselect the trip when the form is opened from a trip page. */
+  initialTripId?: string | null;
   submitting?: boolean;
   onDirtyChange?: (dirty: boolean) => void;
   onCancel?: () => void;
@@ -26,11 +28,11 @@ interface FormState {
   trip_id: string;
 }
 
-function toForm(note?: Note): FormState {
+function toForm(note?: Note, initialTripId?: string | null): FormState {
   return {
     title: note?.title ?? "",
     content: note?.content ?? "",
-    trip_id: note?.trip_id ?? "",
+    trip_id: note?.trip_id ?? initialTripId ?? "",
   };
 }
 
@@ -53,13 +55,14 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 export function NoteForm({
   initial,
+  initialTripId,
   submitting,
   onDirtyChange,
   onCancel,
   onSubmit,
 }: NoteFormProps) {
   const { t } = useI18n();
-  const [form, setForm] = useState<FormState>(() => toForm(initial));
+  const [form, setForm] = useState<FormState>(() => toForm(initial, initialTripId));
   const { data: trips } = useQuery<TripList>({
     queryKey: ["trips", { page_size: 100 }],
     queryFn: () => api.listTrips({ page_size: 100 }),

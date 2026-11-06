@@ -96,9 +96,12 @@ async def preview_import(
     content = _decode_file(file)
     fmt = format or _infer_format(file.filename, content)
     mapping_dict = _parse_mapping(mapping)
-    return service.preview(
-        user_id=current_user.id, format=fmt, content=content, mapping=mapping_dict
-    )
+    try:
+        return service.preview(
+            user_id=current_user.id, format=fmt, content=content, mapping=mapping_dict
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
 
 
 @router.post("/import", response_model=ImportResult)
@@ -115,9 +118,12 @@ async def import_data(
     content = _decode_file(file)
     fmt = format or _infer_format(file.filename, content)
     mapping_dict = _parse_mapping(mapping)
-    result = service.import_records(
-        user_id=current_user.id, format=fmt, content=content, mapping=mapping_dict
-    )
+    try:
+        result = service.import_records(
+            user_id=current_user.id, format=fmt, content=content, mapping=mapping_dict
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
     sources.record(
         user_id=current_user.id,
         source_type="import",

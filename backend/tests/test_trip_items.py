@@ -204,6 +204,23 @@ def test_reorder_trip_items(client):
     assert [item["item_id"] for item in items] == flights
 
     reversed_ids = [item["id"] for item in reversed(items)]
+
+    # Chronological timelines may not be dragged out of time order.
+    response = client.put(
+        f"/api/v1/trips/{trip['id']}/items/order",
+        json={"item_ids": reversed_ids},
+        headers=headers,
+    )
+    assert response.status_code == 409, response.text
+
+    # Switching to manual keeps the current order and allows rearranging it.
+    switched = client.patch(
+        f"/api/v1/trips/{trip['id']}",
+        json={"timeline_order_mode": "manual"},
+        headers=headers,
+    )
+    assert switched.status_code == 200, switched.text
+
     response = client.put(
         f"/api/v1/trips/{trip['id']}/items/order",
         json={"item_ids": reversed_ids},
@@ -229,7 +246,7 @@ def test_reorder_rejects_incomplete_or_foreign_items(client):
         json={"item_ids": []},
         headers=headers,
     )
-    assert response.status_code == 400
+    assert response.status_code == 409
 
     other = _trip(client, headers, "Other")
     response = client.put(
@@ -237,11 +254,11 @@ def test_reorder_rejects_incomplete_or_foreign_items(client):
         json={"item_ids": [items[0]["id"], "00000000-0000-0000-0000-000000000000"]},
         headers=headers,
     )
-    assert response.status_code == 400
+    assert response.status_code == 409
     assert other["id"] != trip["id"]
 
 
-def test_update_trip_item_bounds(client):
+def test_trip_item_times_are_source_owned(client):
     token = register_and_login(client, "item_bounds")["access_token"]
     headers = auth_headers(token)
 
@@ -249,16 +266,21 @@ def test_update_trip_item_bounds(client):
     client.post("/api/v1/flights", json=_flight(trip["id"]), headers=headers)
     item = _trip_detail(client, headers, trip["id"])["items"][0]
 
+    # TripItem no longer owns time; stale clients get a validation error.
     response = client.patch(
         f"/api/v1/trips/{trip['id']}/items/{item['id']}",
         json={"start_at": "2026-04-29T00:30:00Z", "end_at": "2026-04-29T07:00:00Z"},
         headers=headers,
     )
-    assert response.status_code == 204, response.text
+    assert response.status_code == 422, response.text
 
-    updated = _trip_detail(client, headers, trip["id"])["items"][0]
-    assert _parse(updated["start_at"]) == _parse("2026-04-29T00:30:00Z")
-    assert _parse(updated["end_at"]) == _parse("2026-04-29T07:00:00Z")
+    # A position update is still accepted.
+    response = client.patch(
+        f"/api/v1/trips/{trip['id']}/items/{item['id']}",
+        json={"sort_order": 0},
+        headers=headers,
+    )
+    assert response.status_code == 204, response.text
 
     response = client.patch(
         f"/api/v1/trips/{trip['id']}/items/00000000-0000-0000-0000-000000000000",

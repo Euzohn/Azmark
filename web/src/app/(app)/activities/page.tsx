@@ -24,6 +24,7 @@ const TYPES: ActivityType[] = [
   "culture",
   "outdoor",
   "event",
+  "visit",
   "other",
 ];
 

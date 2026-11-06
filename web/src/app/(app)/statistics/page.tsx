@@ -301,8 +301,7 @@ export default function StatisticsPage() {
     { label: t("dashboard.stats.trips"), value: totals?.trips ?? 0 },
   ];
 
-  const mix: ChartDatum[] = [
-    { label: t("stats.group.flight"), value: totals?.flights ?? 0 },
+  const mix: ChartDatum[] = [    { label: t("stats.group.flight"), value: totals?.flights ?? 0 },
     { label: t("stats.group.train"), value: totals?.trains ?? 0 },
     { label: t("stats.other"), value: totals?.transports ?? 0 },
   ];
@@ -327,7 +326,9 @@ export default function StatisticsPage() {
     }))
     .filter((group) => group.sections.length > 0);
 
-  const hasRecords = Boolean(data && journeys > 0);
+  const spend = data?.expense_summary;
+  const hasSpend = (spend?.converted_count ?? 0) + (spend?.unconverted_count ?? 0) > 0;
+  const showStats = Boolean(data && (journeys > 0 || hasSpend));
 
   return (
     <div className="flex flex-col gap-6">
@@ -344,11 +345,11 @@ export default function StatisticsPage() {
         </div>
       ) : null}
 
-      {data && !hasRecords ? (
+      {data && !showStats ? (
         <EmptyState icon={BarChart3} title={t("stats.empty")} hint={t("stats.emptyHint")} />
       ) : null}
 
-      {data && hasRecords ? (
+      {data && showStats ? (
         <>
           <Card className="animate-fade-in-up">
             <CardHeader className="flex-row items-center justify-between">
@@ -366,6 +367,59 @@ export default function StatisticsPage() {
                   <Stat key={item.label} label={item.label} value={item.value} />
                 ))}
               </div>
+            </CardContent>
+          </Card>
+
+          <Card className="animate-fade-in-up">
+            <CardHeader className="flex-row items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-primary" />
+                <CardTitle>{t("stats.expenseTitle")}</CardTitle>
+              </div>
+              {spend ? (
+                <span className="text-xs text-muted-foreground">
+                  {t("stats.expenseReportCurrency", { currency: spend.report_currency })}
+                </span>
+              ) : null}
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              {spend && hasSpend ? (
+                <>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3">
+                    <Stat
+                      label={t("stats.expenseTotal")}
+                      value={`${spend.converted_total} ${spend.report_currency}`}
+                    />
+                    <Stat
+                      label={t("stats.expenseConvertedCount")}
+                      value={spend.converted_count}
+                    />
+                    <Stat
+                      label={t("stats.expenseUnconvertedCount")}
+                      value={spend.unconverted_count}
+                    />
+                  </div>
+                  {spend.unconverted.length > 0 ? (
+                    <ul className="flex flex-wrap gap-2">
+                      {spend.unconverted.map((item) => (
+                        <li
+                          key={item.currency}
+                          className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground"
+                        >
+                          {item.currency} {item.amount}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {spend.converted_count === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      {t("stats.expenseAllUnconverted")}
+                    </p>
+                  ) : null}
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">{t("stats.expenseEmpty")}</p>
+              )}
             </CardContent>
           </Card>
 

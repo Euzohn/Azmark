@@ -105,19 +105,19 @@ class HotelRepository:
 
     def create(self, hotel: Hotel) -> Hotel:
         self.db.add(hotel)
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(hotel)
         return hotel
 
     def save(self, hotel: Hotel) -> Hotel:
         self.db.add(hotel)
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(hotel)
         return hotel
 
     def delete(self, hotel: Hotel) -> None:
         self.db.delete(hotel)
-        self.db.commit()
+        self.db.flush()
 
     def find_by_signature(
         self,

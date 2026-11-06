@@ -33,6 +33,8 @@ class ImportPreview(BaseModel):
     duplicates: list[ImportDuplicate]
     rows: list[dict] = []
     truncated: bool = False
+    # Non-fatal notes, e.g. a v1 JSON bundle carrying arrays it cannot restore.
+    warnings: list[str] = Field(default_factory=list)
 
 
 class ImportResult(BaseModel):

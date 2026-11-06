@@ -1,7 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { MoreHorizontal, Link2, Pencil, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
@@ -14,7 +15,13 @@ import { Dialog } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
-import type { Expense, ExpenseInput } from "@/lib/types";
+import type { Expense, ExpenseInput, ExpenseSourceType } from "@/lib/types";
+
+function sourceHref(type: ExpenseSourceType, id: string): string | null {
+  if (type === "hotel") return `/hotels/${id}`;
+  if (type === "activity") return `/activities/${id}`;
+  return null;
+}
 
 function expenseReturnHref(from: string | null): string {
   if (from && from.startsWith("/expenses")) return from;
@@ -157,6 +164,9 @@ function ExpenseDetail() {
           {data.trip_id ? (
             <TripLinkCard tripId={data.trip_id} label={t("expenses.trip")} />
           ) : null}
+          {data.source_type && data.source_id ? (
+            <ExpenseSourceCard sourceType={data.source_type} sourceId={data.source_id} />
+          ) : null}
         </>
       )}
       <Dialog
@@ -208,8 +218,44 @@ function ExpenseDetail() {
   );
 }
 
-function ExpenseSummary({ expense, locale }: { expense: Expense; locale: string }) {
+const SOURCE_LABELS: Record<ExpenseSourceType, TranslationKey> = {
+  transport: "expenses.sourceType.transport",
+  hotel: "expenses.sourceType.hotel",
+  activity: "expenses.sourceType.activity",
+};
+
+function ExpenseSourceCard({
+  sourceType,
+  sourceId,
+}: {
+  sourceType: ExpenseSourceType;
+  sourceId: string;
+}) {
   const { t } = useI18n();
+  const href = sourceHref(sourceType, sourceId);
+  const content = (
+    <>
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+        <Link2 className="h-4 w-4" />
+      </span>
+      <div className="min-w-0">
+        <div className="text-xs text-muted-foreground">{t("expenses.source")}</div>
+        <div className="truncate text-sm font-medium">{t(SOURCE_LABELS[sourceType])}</div>
+      </div>
+    </>
+  );
+  const className =
+    "flex items-center gap-3 rounded-xl border border-border bg-card px-5 py-4 transition-colors";
+  return href ? (
+    <Link href={href} className={`${className} hover:border-primary/40`}>
+      {content}
+    </Link>
+  ) : (
+    <div className={className}>{content}</div>
+  );
+}
+
+function ExpenseSummary({ expense, locale }: { expense: Expense; locale: string }) {  const { t } = useI18n();
   const fields: [TranslationKey, string | null][] = [
     ["expenses.category", t(`expenses.category.${expense.category}`)],
     ["expenses.occurredAt", formatDateTime(expense.occurred_at, locale)],

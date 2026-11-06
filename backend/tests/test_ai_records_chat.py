@@ -240,7 +240,7 @@ def test_add_place_to_trip_proposal(client, monkeypatch):
     detail = client.get(f"/api/v1/trips/{trip['id']}", headers=headers).json()
     assert detail["items"] == []
 
-    # Confirming adds the timeline item (frontend dispatch path).
+    # Confirming adds the timeline item as a visit Activity (frontend dispatch path).
     added = client.post(
         f"/api/v1/trips/{trip['id']}/items",
         json={
@@ -251,9 +251,14 @@ def test_add_place_to_trip_proposal(client, monkeypatch):
         headers=headers,
     )
     assert added.status_code == 201, added.text
+    assert added.json()["item_type"] == "activity"
     detail = client.get(f"/api/v1/trips/{trip['id']}", headers=headers).json()
-    place_items = [i for i in detail["items"] if i["item_type"] == "place"]
-    assert len(place_items) == 1
+    visit_items = [
+        i
+        for i in detail["items"]
+        if i["item_type"] == "activity" and i["activity"]["type"] == "visit"
+    ]
+    assert len(visit_items) == 1
 
 
 # -- activities ---------------------------------------------------------------

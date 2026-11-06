@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 from app.models.place import Place
 from app.repositories.activity import ActivityRepository
 from app.repositories.place import PlaceRepository
-from app.repositories.trip_item import TripItemRepository
 
 
 class PlaceNotFoundError(Exception):
@@ -18,7 +17,6 @@ class PlaceService:
     def __init__(self, db: Session) -> None:
         self.db = db
         self.places = PlaceRepository(db)
-        self.trip_items = TripItemRepository(db)
         self.activities = ActivityRepository(db)
 
     def list_places(
@@ -56,6 +54,7 @@ class PlaceService:
 
     def delete_place(self, *, user_id: uuid.UUID, place_id: uuid.UUID) -> None:
         place = self.get_place(user_id=user_id, place_id=place_id)
-        self.trip_items.delete_place_items(user_id=user_id, place_id=place.id)
+        # Visits keep their name snapshot; only the (now dangling) place link
+        # is cleared (docs §4.2).
         self.activities.clear_place(user_id=user_id, place_id=place.id)
         self.places.delete(place)

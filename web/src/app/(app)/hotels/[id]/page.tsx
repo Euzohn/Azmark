@@ -8,6 +8,7 @@ import { Suspense, useState } from "react";
 import { AttachmentPanel } from "@/components/attachment-panel";
 import { HotelForm } from "@/components/hotel-form";
 import { HotelSummary } from "@/components/hotel-summary";
+import { LinkedExpenses } from "@/components/linked-expenses";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -197,6 +198,7 @@ function HotelDetail() {
         <>
           <HotelSummary hotel={data} />
           <AttachmentPanel resourceType="hotel" resourceId={id} />
+          <LinkedExpenses sourceType="hotel" sourceId={id} />
         </>
       )}
       <Dialog

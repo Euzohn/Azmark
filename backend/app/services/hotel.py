@@ -9,6 +9,7 @@ from app.repositories.hotel import HotelRepository
 from app.repositories.trip import TripRepository
 from app.repositories.trip_item import TripItemRepository
 from app.services.dedup import hotel_signature
+from app.services.expense_source import SOURCE_HOTEL, clear_source, sync_source_trip
 
 
 class HotelNotFoundError(Exception):
@@ -115,6 +116,7 @@ class HotelService:
             hotel.booking_reference_enc = encrypt_value(booking_reference)
         hotel = self.hotels.create(hotel)
         self.trip_items.sync_hotel(hotel)
+        self.db.commit()
         return hotel
 
     def update_hotel(self, *, user_id: uuid.UUID, hotel_id: uuid.UUID, payload) -> Hotel:
@@ -138,14 +140,24 @@ class HotelService:
 
         for field, value in data.items():
             setattr(hotel, field, value)
+        sync_source_trip(
+            self.db,
+            user_id=user_id,
+            source_type=SOURCE_HOTEL,
+            source_id=hotel.id,
+            trip_id=hotel.trip_id,
+        )
         hotel = self.hotels.save(hotel)
         self.trip_items.sync_hotel(hotel)
+        self.db.commit()
         return hotel
 
     def delete_hotel(self, *, user_id: uuid.UUID, hotel_id: uuid.UUID) -> None:
         hotel = self.get_hotel(user_id=user_id, hotel_id=hotel_id)
+        clear_source(self.db, user_id=user_id, source_type=SOURCE_HOTEL, source_id=hotel.id)
         self.trip_items.delete_hotel(user_id=user_id, hotel_id=hotel.id)
         self.hotels.delete(hotel)
+        self.db.commit()
 
     def set_coordinates(
         self, *, user_id: uuid.UUID, hotel_id: uuid.UUID, lat: float, lon: float
@@ -154,7 +166,9 @@ class HotelService:
         hotel = self.get_hotel(user_id=user_id, hotel_id=hotel_id)
         hotel.lat = lat
         hotel.lon = lon
-        return self.hotels.save(hotel)
+        hotel = self.hotels.save(hotel)
+        self.db.commit()
+        return hotel
 
     # -- pending-action surface ------------------------------------------------
     # The approval inbox (spec #69) executes proposals through the same method

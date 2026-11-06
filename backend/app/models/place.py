@@ -12,10 +12,9 @@ class Place(Base):
     """A geographic point the user visited or will visit (spec #14).
 
     A geo reference, not a trip member: it carries no ``trip_id``. It joins a
-    trip only through an explicit ``trip_items`` row (``item_type='place'``)
-    whose ``start_at``/``end_at`` hold the visit window, and activities may
-    reference it via ``place_id``. ``external_ids`` keeps loose links to
-    outside registries (e.g. ``{"osm": "..."}``).
+    trip only through an Activity that references it via ``place_id`` (a visit
+    uses ``type='visit'`` with the place name as a snapshot). ``external_ids``
+    keeps loose links to outside registries (e.g. ``{"osm": "..."}``).
     """
 
     __tablename__ = "places"

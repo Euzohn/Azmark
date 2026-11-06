@@ -90,8 +90,11 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = useAuth.getState().token;
+function idempotencyHeaders(key?: string): Record<string, string> {
+  return key ? { "Idempotency-Key": key } : {};
+}
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {  const token = useAuth.getState().token;
   const isFormData = options.body instanceof FormData;
   const response = await fetch(`${API_BASE}/api/v1${path}`, {
     ...options,
@@ -267,6 +270,8 @@ export const api = {
     if (params.search) query.set("search", params.search);
     if (params.category) query.set("category", params.category);
     if (params.trip_id) query.set("trip_id", params.trip_id);
+    if (params.source_type) query.set("source_type", params.source_type);
+    if (params.source_id) query.set("source_id", params.source_id);
     if (params.date_from) query.set("date_from", params.date_from);
     if (params.date_to) query.set("date_to", params.date_to);
     if (params.sort) query.set("sort", params.sort);
@@ -275,8 +280,12 @@ export const api = {
     const suffix = query.toString() ? `?${query.toString()}` : "";
     return request<ExpenseList>(`/expenses${suffix}`);
   },
-  createExpense: (data: ExpenseInput) =>
-    request<Expense>("/expenses", { method: "POST", body: JSON.stringify(data) }),
+  createExpense: (data: ExpenseInput, idempotencyKey?: string) =>
+    request<Expense>("/expenses", {
+      method: "POST",
+      body: JSON.stringify(data),
+      ...(idempotencyKey ? { headers: { "Idempotency-Key": idempotencyKey } } : {}),
+    }),
   getExpense: (id: string) => request<Expense>(`/expenses/${id}`),
   updateExpense: (id: string, data: ExpenseInput) =>
     request<Expense>(`/expenses/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
@@ -327,8 +336,12 @@ export const api = {
     const suffix = query.toString() ? `?${query.toString()}` : "";
     return request<ActivityList>(`/activities${suffix}`);
   },
-  createActivity: (data: ActivityInput) =>
-    request<Activity>("/activities", { method: "POST", body: JSON.stringify(data) }),
+  createActivity: (data: ActivityInput, idempotencyKey?: string) =>
+    request<Activity>("/activities", {
+      method: "POST",
+      body: JSON.stringify(data),
+      headers: idempotencyHeaders(idempotencyKey),
+    }),
   getActivity: (id: string) => request<Activity>(`/activities/${id}`),
   updateActivity: (id: string, data: ActivityInput) =>
     request<Activity>(`/activities/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
@@ -400,19 +413,21 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ item_ids: itemIds }),
     }),
-  updateTripItem: (
-    tripId: string,
-    itemId: string,
-    data: { sort_order?: number; start_at?: string | null; end_at?: string | null },
-  ) =>
+  updateTripItem: (tripId: string, itemId: string, data: { sort_order: number }) =>
     request<void>(`/trips/${tripId}/items/${itemId}`, {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
-  addTripItem: (tripId: string, data: TripItemCreate) =>
+  repairTripTimeline: (tripId: string) =>
+    request<{ added: number; fixed: number; removed: number }>(
+      `/trips/${tripId}/timeline/repair`,
+      { method: "POST" },
+    ),
+  addTripItem: (tripId: string, data: TripItemCreate, idempotencyKey?: string) =>
     request<TripItem>(`/trips/${tripId}/items`, {
       method: "POST",
       body: JSON.stringify(data),
+      headers: idempotencyHeaders(idempotencyKey),
     }),
   deleteTripItem: (tripId: string, itemId: string) =>
     request<void>(`/trips/${tripId}/items/${itemId}`, { method: "DELETE" }),

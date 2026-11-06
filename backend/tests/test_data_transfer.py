@@ -60,12 +60,16 @@ def test_export_json_bundle(client):
     assert response.status_code == 200
     assert "attachment" in response.headers["content-disposition"]
     bundle = response.json()
-    assert bundle["version"] == 1
+    assert bundle["version"] == 2
+    assert bundle["bundle_id"]
     assert bundle["settings"]["timezone"] == "UTC"
     assert len(bundle["records"]) == 1
-    assert bundle["records"][0]["service_number"] == "CA985"
-    assert bundle["records"][0]["trip_name"] == "Summer 2026"
-    assert "booking_reference" not in bundle["records"][0]
+    record = bundle["records"][0]
+    assert record["service_number"] == "CA985"
+    assert record["id"]
+    assert record["trip_id"] == trip["id"]
+    assert "trip_name" not in record
+    assert "booking_reference" not in record
 
 
 def test_export_csv_and_sensitive_opt_in(client):
@@ -271,12 +275,14 @@ def test_export_json_includes_expenses_and_notes(client):
 
     bundle = client.get("/api/v1/export?format=json", headers=headers).json()
     assert len(bundle["expenses"]) == 1
-    assert bundle["expenses"][0]["amount"] == 18.0
+    assert bundle["expenses"][0]["amount"] == "18.00"
     assert bundle["expenses"][0]["currency"] == "JPY"
-    assert bundle["expenses"][0]["trip_name"] == "Osaka 2026"
+    assert bundle["expenses"][0]["trip_id"] == trip["id"]
+    assert "trip_name" not in bundle["expenses"][0]
     assert len(bundle["notes"]) == 1
     assert bundle["notes"][0]["title"] == "Osaka plan"
-    assert bundle["notes"][0]["trip_name"] == "Osaka 2026"
+    assert bundle["notes"][0]["trip_id"] == trip["id"]
+    assert "trip_name" not in bundle["notes"][0]
 
 
 def test_export_json_includes_places_and_activities(client):
@@ -313,4 +319,272 @@ def test_export_json_includes_places_and_activities(client):
     assert exported["name"] == "Street food crawl"
     assert exported["currency"] == "JPY"
     assert exported["place_id"] == place.json()["id"]
-    assert exported["trip_name"] == "Osaka 2026"
+    assert exported["trip_id"] == trip["id"]
+    assert "trip_name" not in exported
+
+
+def _trip_sequence(detail: dict) -> list[str]:
+    """Orderable labels for a trip timeline, independent of target UUIDs."""
+    labels: list[str] = []
+    for item in detail["items"]:
+        if item["item_type"] == "transport":
+            labels.append(f"transport:{item['record']['service_number']}")
+        elif item["item_type"] == "hotel":
+            labels.append(f"hotel:{item['hotel']['hotel']}")
+        else:
+            labels.append(f"activity:{item['activity']['name']}")
+    return labels
+
+
+def test_v2_roundtrip_restores_relations_order_and_spend(client):
+    token_a = register_and_login(client, "v2_a")["access_token"]
+    token_b = register_and_login(client, "v2_b")["access_token"]
+    headers_a = auth_headers(token_a)
+    headers_b = auth_headers(token_b)
+
+    trip = client.post(
+        "/api/v1/trips",
+        json={"name": "Europe 2026", "timeline_order_mode": "manual"},
+        headers=headers_a,
+    ).json()
+    place = client.post(
+        "/api/v1/places",
+        json={"name": "Dotonbori", "type": "attraction", "city": "Osaka"},
+        headers=headers_a,
+    ).json()
+    client.post("/api/v1/flights", json={**_flight(), "trip_id": trip["id"]}, headers=headers_a)
+    hotel = client.post(
+        "/api/v1/hotels",
+        json={
+            "hotel": "Hotel Osaka",
+            "check_in": "2026-08-02",
+            "check_out": "2026-08-05",
+            "trip_id": trip["id"],
+            "price": "300.00",
+            "currency": "EUR",
+        },
+        headers=headers_a,
+    ).json()
+    client.post(
+        "/api/v1/activities",
+        json={
+            "name": "Street food crawl",
+            "type": "dining",
+            "place_id": place["id"],
+            "trip_id": trip["id"],
+            "start_at": "2026-08-03T18:00:00Z",
+        },
+        headers=headers_a,
+    )
+    detail_a = client.get(f"/api/v1/trips/{trip['id']}", headers=headers_a).json()
+    reversed_ids = [item["id"] for item in reversed(detail_a["items"])]
+    reordered = client.put(
+        f"/api/v1/trips/{trip['id']}/items/order",
+        json={"item_ids": reversed_ids},
+        headers=headers_a,
+    )
+    assert reordered.status_code == 204, reordered.text
+
+    expense = client.post(
+        "/api/v1/expenses",
+        json={
+            "category": "accommodation",
+            "amount": "300.00",
+            "currency": "EUR",
+            "source_type": "hotel",
+            "source_id": hotel["id"],
+        },
+        headers=headers_a,
+    )
+    assert expense.status_code == 201, expense.text
+    note = client.post(
+        "/api/v1/notes",
+        json={"title": "Osaka plan", "content": "Dotonbori at night", "trip_id": trip["id"]},
+        headers=headers_a,
+    )
+    assert note.status_code == 201, note.text
+
+    detail_a = client.get(f"/api/v1/trips/{trip['id']}", headers=headers_a).json()
+    expected_sequence = _trip_sequence(detail_a)
+    exported = client.get("/api/v1/export?format=json", headers=headers_a).text
+
+    response = _commit(client, headers_b, exported, filename="backup.json", fmt="json")
+    assert response.status_code == 200, response.text
+    assert response.json()["trips_created"] == 1
+
+    trips_b = client.get("/api/v1/trips", headers=headers_b).json()
+    assert trips_b["total"] == 1
+    trip_b = trips_b["items"][0]
+    assert trip_b["timeline_order_mode"] == "manual"
+
+    detail_b = client.get(f"/api/v1/trips/{trip_b['id']}", headers=headers_b).json()
+    assert _trip_sequence(detail_b) == expected_sequence
+    assert len(detail_b["expenses"]) == 1
+    assert detail_b["expenses"][0]["source_type"] == "hotel"
+    assert detail_b["notes"][0]["title"] == "Osaka plan"
+
+    hotels_b = client.get("/api/v1/hotels", headers=headers_b).json()["items"]
+    assert len(hotels_b) == 1
+    assert detail_b["expenses"][0]["source_id"] == hotels_b[0]["id"]
+    assert detail_b["expenses"][0]["trip_id"] == trip_b["id"]
+
+    activities_b = client.get("/api/v1/activities", headers=headers_b).json()["items"]
+    places_b = client.get("/api/v1/places", headers=headers_b).json()["items"]
+    assert activities_b[0]["place_id"] == places_b[0]["id"]
+
+    # Same bundle again: every business entity maps to the original target.
+    again = _commit(client, headers_b, exported, filename="backup.json", fmt="json")
+    assert again.status_code == 200, again.text
+    assert again.json()["imported"] == 0
+    assert again.json()["trips_created"] == 0
+    assert client.get("/api/v1/trips", headers=headers_b).json()["total"] == 1
+    assert client.get("/api/v1/expenses", headers=headers_b).json()["total"] == 1
+
+
+def test_v2_import_rejects_changed_content_for_same_bundle(client):
+    token = register_and_login(client, "v2_conflict")["access_token"]
+    headers = auth_headers(token)
+    trip = client.post("/api/v1/trips", json={"name": "Original"}, headers=headers).json()
+    assert trip["id"]
+
+    bundle = client.get("/api/v1/export?format=json", headers=headers).json()
+    first = _commit(client, headers, json.dumps(bundle), filename="b.json", fmt="json")
+    assert first.status_code == 200, first.text
+
+    bundle["trips"][0]["name"] = "Changed"
+    response = _commit(client, headers, json.dumps(bundle), filename="b.json", fmt="json")
+    assert response.status_code == 422
+    assert "changed content" in response.json()["detail"]
+    assert client.get("/api/v1/trips", headers=headers).json()["items"][0]["name"] == "Original"
+
+
+def test_v2_import_rejects_missing_source_and_rolls_back(client):
+    token_a = register_and_login(client, "v2_missing_a")["access_token"]
+    token_b = register_and_login(client, "v2_missing_b")["access_token"]
+    headers_a = auth_headers(token_a)
+    headers_b = auth_headers(token_b)
+
+    trip = client.post("/api/v1/trips", json={"name": "Broken"}, headers=headers_a).json()
+    hotel = client.post(
+        "/api/v1/hotels",
+        json={"hotel": "Hotel", "check_in": "2026-08-02", "trip_id": trip["id"]},
+        headers=headers_a,
+    ).json()
+    expense = client.post(
+        "/api/v1/expenses",
+        json={
+            "category": "accommodation",
+            "amount": "10.00",
+            "currency": "EUR",
+            "source_type": "hotel",
+            "source_id": hotel["id"],
+        },
+        headers=headers_a,
+    )
+    assert expense.status_code == 201, expense.text
+
+    bundle = client.get("/api/v1/export?format=json", headers=headers_a).json()
+    bundle["hotels"] = []
+    response = _commit(client, headers_b, json.dumps(bundle), filename="bad.json", fmt="json")
+    assert response.status_code == 422
+    # The whole bundle is atomic: nothing was created before the failure.
+    assert client.get("/api/v1/trips", headers=headers_b).json()["total"] == 0
+    assert client.get("/api/v1/expenses", headers=headers_b).json()["total"] == 0
+
+
+def test_v2_preview_validates_references_without_writing(client):
+    token_a = register_and_login(client, "v2_preview_a")["access_token"]
+    token_b = register_and_login(client, "v2_preview_b")["access_token"]
+    headers_a = auth_headers(token_a)
+    headers_b = auth_headers(token_b)
+
+    trip = client.post("/api/v1/trips", json={"name": "Preview"}, headers=headers_a).json()
+    client.post(
+        "/api/v1/places",
+        json={"name": "Somewhere", "type": "city"},
+        headers=headers_a,
+    )
+    client.post("/api/v1/flights", json={**_flight(), "trip_id": trip["id"]}, headers=headers_a)
+    export = client.get("/api/v1/export?format=json", headers=headers_a).text
+
+    preview = client.post(
+        "/api/v1/import/preview",
+        files={"file": ("backup.json", export.encode("utf-8"), "application/json")},
+        data={"format": "json"},
+        headers=headers_b,
+    )
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    assert body["error_count"] == 0
+    assert body["valid"] > 0
+    assert body["columns"] == []
+    # Preview never writes.
+    assert client.get("/api/v1/trips", headers=headers_b).json()["total"] == 0
+
+    broken = json.loads(export)
+    broken["trips"] = []
+    bad = client.post(
+        "/api/v1/import/preview",
+        files={"file": ("bad.json", json.dumps(broken).encode("utf-8"), "application/json")},
+        data={"format": "json"},
+        headers=headers_b,
+    )
+    assert bad.status_code == 200, bad.text
+    assert bad.json()["error_count"] >= 1
+
+
+def test_v1_json_still_imports_records(client):
+    token = register_and_login(client, "v1_json")["access_token"]
+    headers = auth_headers(token)
+    legacy = {
+        "version": 1,
+        "trips": [{"name": "Legacy 2026"}],
+        "records": [
+            {
+                "type": "flight",
+                "origin": "PEK",
+                "destination": "SFO",
+                "departure_time": "2026-08-01T08:00:00Z",
+                "service_number": "CA985",
+                "trip_name": "Legacy 2026",
+            }
+        ],
+    }
+    response = _commit(client, headers, json.dumps(legacy), filename="v1.json", fmt="json")
+    assert response.status_code == 200, response.text
+    assert response.json()["imported"] == 1
+    flights = client.get("/api/v1/flights", headers=headers).json()
+    assert flights["total"] == 1
+
+
+def test_v1_json_preview_warns_about_unsupported_arrays(client):
+    token = register_and_login(client, "v1_warn")["access_token"]
+    headers = auth_headers(token)
+    legacy = {
+        "version": 1,
+        "trips": [{"name": "Legacy 2026"}],
+        "records": [
+            {
+                "type": "flight",
+                "origin": "PEK",
+                "destination": "SFO",
+                "departure_time": "2026-08-01T08:00:00Z",
+                "service_number": "CA985",
+                "trip_name": "Legacy 2026",
+            }
+        ],
+        "expenses": [{"amount": "10.00", "currency": "EUR"}],
+        "notes": [{"title": "Ignored"}],
+    }
+    preview = _upload(
+        client,
+        headers,
+        json.dumps(legacy),
+        filename="v1.json",
+        fmt="json",
+    )
+    assert preview.status_code == 200, preview.text
+    warnings = preview.json()["warnings"]
+    assert any("expenses" in warning for warning in warnings)
+    assert any("notes" in warning for warning in warnings)
+    assert all("records" not in warning for warning in warnings)

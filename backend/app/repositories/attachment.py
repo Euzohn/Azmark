@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.models.attachment import Attachment
@@ -46,6 +46,27 @@ class AttachmentRepository:
 
     def list_for_user(self, *, user_id: uuid.UUID) -> list[Attachment]:
         stmt = select(Attachment).where(Attachment.user_id == user_id)
+        return list(self.db.scalars(stmt))
+
+    def list_for_transport_records(
+        self,
+        *,
+        user_id: uuid.UUID,
+        record_ids_by_resource: dict[str, list[uuid.UUID]],
+    ) -> list[Attachment]:
+        """Attachments for several transport records in one query (docs §8.2)."""
+        conditions = [
+            and_(Attachment.resource_type == resource_type, Attachment.resource_id.in_(ids))
+            for resource_type, ids in record_ids_by_resource.items()
+            if ids
+        ]
+        if not conditions:
+            return []
+        stmt = (
+            select(Attachment)
+            .where(Attachment.user_id == user_id, or_(*conditions))
+            .order_by(Attachment.created_at.desc(), Attachment.id)
+        )
         return list(self.db.scalars(stmt))
 
     def delete(self, attachment: Attachment) -> None:

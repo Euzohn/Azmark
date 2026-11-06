@@ -47,13 +47,15 @@ function ExpensesContent() {
     () => (searchParams.get("category") as ExpenseCategory | null) ?? "",
   );
   const [sort, setSort] = useState<ExpenseFilters["sort"]>("newest");
+  const tripId = searchParams.get("trip_id") ?? "";
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["expenses", { search, category, sort }],
+    queryKey: ["expenses", { search, category, sort, tripId }],
     queryFn: () =>
       api.listExpenses({
         search: search || undefined,
         category: category || undefined,
+        trip_id: tripId || undefined,
         sort,
         page_size: 100,
       }),
@@ -64,9 +66,10 @@ function ExpensesContent() {
     const query = new URLSearchParams();
     if (search) query.set("search", search);
     if (category) query.set("category", category);
+    if (tripId) query.set("trip_id", tripId);
     const suffix = query.toString() ? `?${query.toString()}` : "";
     window.history.replaceState(null, "", `/expenses${suffix}`);
-  }, [search, category]);
+  }, [search, category, tripId]);
 
   const scrollRestored = useRef(false);
   useEffect(() => {

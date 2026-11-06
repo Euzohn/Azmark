@@ -5,6 +5,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.core.timezones import normalize_timezone
+from app.schemas.place import PlaceSummary
+
 # Activity type vocabulary (spec #18 lists the field but no values). The DB
 # column stays a permissive String(40) for future/imported values.
 ActivityType = Literal[
@@ -14,6 +17,7 @@ ActivityType = Literal[
     "culture",
     "outdoor",
     "event",
+    "visit",
     "other",
 ]
 
@@ -24,6 +28,7 @@ ACTIVITY_TYPES: tuple[str, ...] = (
     "culture",
     "outdoor",
     "event",
+    "visit",
     "other",
 )
 
@@ -38,6 +43,7 @@ class ActivityBase(BaseModel):
     place_id: uuid.UUID | None = None
     start_at: datetime | None = None
     end_at: datetime | None = None
+    timezone: str | None = Field(default=None, max_length=64)
     price: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     currency: str | None = Field(default=None, min_length=3, max_length=3)
     notes: str | None = None
@@ -47,6 +53,11 @@ class ActivityBase(BaseModel):
     @classmethod
     def _normalize_currency(cls, value: str | None) -> str | None:
         return _upper_currency(value)
+
+    @field_validator("timezone", mode="before")
+    @classmethod
+    def _normalize_timezone(cls, value: object) -> object:
+        return normalize_timezone(value) if isinstance(value, str) else value
 
     @model_validator(mode="after")
     def _check_window(self) -> "ActivityBase":
@@ -65,6 +76,7 @@ class ActivityUpdate(BaseModel):
     place_id: uuid.UUID | None = None
     start_at: datetime | None = None
     end_at: datetime | None = None
+    timezone: str | None = Field(default=None, max_length=64)
     price: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     currency: str | None = Field(default=None, min_length=3, max_length=3)
     notes: str | None = None
@@ -74,6 +86,11 @@ class ActivityUpdate(BaseModel):
     @classmethod
     def _normalize_currency(cls, value: str | None) -> str | None:
         return _upper_currency(value)
+
+    @field_validator("timezone", mode="before")
+    @classmethod
+    def _normalize_timezone(cls, value: object) -> object:
+        return normalize_timezone(value) if isinstance(value, str) else value
 
     @model_validator(mode="after")
     def _check_window(self) -> "ActivityUpdate":
@@ -89,6 +106,8 @@ class ActivityRead(ActivityBase):
     user_id: uuid.UUID
     created_at: datetime
     updated_at: datetime
+    # Read-only summary; not accepted on create/update.
+    place: PlaceSummary | None = None
 
 
 class ActivityList(BaseModel):

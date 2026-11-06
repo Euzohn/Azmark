@@ -315,6 +315,8 @@ export type ExpenseCategory =
   | "entertainment"
   | "other";
 
+export type ExpenseSourceType = "transport" | "hotel" | "activity";
+
 export interface Expense {
   id: string;
   user_id: string;
@@ -329,6 +331,8 @@ export interface Expense {
   occurred_at: string | null;
   description: string | null;
   trip_id: string | null;
+  source_type: ExpenseSourceType | null;
+  source_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -344,17 +348,34 @@ export interface ExpenseInput {
   occurred_at?: string | null;
   description?: string | null;
   trip_id?: string | null;
+  source_type?: ExpenseSourceType | null;
+  source_id?: string | null;
 }
 
 export interface ExpenseFilters {
   search?: string;
   category?: ExpenseCategory;
   trip_id?: string;
+  source_type?: ExpenseSourceType;
+  source_id?: string;
   date_from?: string;
   date_to?: string;
   sort?: "newest" | "oldest" | "amount" | "created";
   page?: number;
   page_size?: number;
+}
+
+export interface ExpenseCurrencyTotal {
+  currency: string;
+  amount: string;
+}
+
+export interface ExpenseSummary {
+  report_currency: string;
+  converted_total: string;
+  converted_count: number;
+  unconverted_count: number;
+  unconverted: ExpenseCurrencyTotal[];
 }
 
 export interface ExpenseList {
@@ -425,6 +446,13 @@ export interface Place {
   updated_at: string;
 }
 
+export interface PlaceSummary {
+  id: string;
+  name: string;
+  localized_name: string | null;
+  city: string | null;
+}
+
 export interface PlaceInput {
   type?: PlaceType;
   country?: string | null;
@@ -460,6 +488,7 @@ export type ActivityType =
   | "culture"
   | "outdoor"
   | "event"
+  | "visit"
   | "other";
 
 export interface Activity {
@@ -468,8 +497,10 @@ export interface Activity {
   name: string;
   type: ActivityType;
   place_id: string | null;
+  place: PlaceSummary | null;
   start_at: string | null;
   end_at: string | null;
+  timezone: string | null;
   // Decimal fields are serialized as strings by the API.
   price: string | null;
   currency: string | null;
@@ -485,6 +516,7 @@ export interface ActivityInput {
   place_id?: string | null;
   start_at?: string | null;
   end_at?: string | null;
+  timezone?: string | null;
   price?: number | null;
   currency?: string | null;
   notes?: string | null;
@@ -538,6 +570,8 @@ export interface RecordList {
   page_size: number;
 }
 
+export type TimelineOrderMode = "chronological" | "manual";
+
 export interface Trip {
   id: string;
   user_id: string;
@@ -549,12 +583,13 @@ export interface Trip {
   origin: string | null;
   destination: string | null;
   status: string;
+  timeline_order_mode: TimelineOrderMode;
   created_at: string;
   updated_at: string;
 }
 
 export interface TripInput {
-  name: string;
+  name?: string;
   description?: string | null;
   start_date?: string | null;
   end_date?: string | null;
@@ -562,24 +597,35 @@ export interface TripInput {
   origin?: string | null;
   destination?: string | null;
   status?: string;
+  timeline_order_mode?: TimelineOrderMode;
 }
 
 export interface TripItem {
-  id: string;
+  // Null only when the source record has no projection yet; run the explicit
+  // timeline repair endpoint before reordering.
+  id: string | null;
   item_type: string;
   item_id: string;
   sort_order: number;
+  time_kind: "instant" | "date";
   start_at: string | null;
   end_at: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  timezone: string | null;
+  is_unscheduled: boolean;
   record: TimelineRecord | null;
   hotel: Hotel | null;
-  place: Place | null;
   activity: Activity | null;
 }
 
 export interface TripDetail extends Trip {
   records: TimelineRecord[];
   items: TripItem[];
+  expenses: Expense[];
+  expense_summary: ExpenseSummary | null;
+  notes: Note[];
+  attachments: Attachment[];
 }
 
 export interface Attachment {
@@ -903,6 +949,7 @@ export interface StatisticsRead {
   by_station: BreakdownItem[];
   by_train_class: BreakdownItem[];
   by_train_seat_type: BreakdownItem[];
+  expense_summary: ExpenseSummary;
 }
 
 export interface MapPoint {
@@ -1005,6 +1052,7 @@ export interface ImportPreview {
   duplicates: ImportDuplicate[];
   rows: Record<string, unknown>[];
   truncated: boolean;
+  warnings: string[];
 }
 
 export interface ImportResult {

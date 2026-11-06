@@ -243,6 +243,17 @@ export default function DataPage({ embedded = false }: { embedded?: boolean } = 
                 ) : null}
               </div>
 
+              {preview.warnings.length > 0 ? (
+                <div className="flex flex-col gap-1 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-xs">
+                  <p className="font-medium">{t("data.warnings")}</p>
+                  <ul className="flex list-disc flex-col gap-1 pl-4 text-muted-foreground">
+                    {preview.warnings.map((warning) => (
+                      <li key={warning}>{warning}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
               <div className="flex flex-col gap-2">
                 <h3 className="text-sm font-semibold">{t("data.mapping")}</h3>
                 <p className="text-xs text-muted-foreground">{t("data.mappingHint")}</p>

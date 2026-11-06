@@ -555,12 +555,16 @@ export default function AiChatPage() {
 
       // A place has no trip_id of its own; joining a trip is a separate call.
       if (proposal.action === "add_place_to_trip") {
-        return api.addTripItem(String(data.trip_id), {
-          item_type: "place",
-          item_id: String(data.place_id),
-          start_at: (data.start_at as string | null) ?? null,
-          end_at: (data.end_at as string | null) ?? null,
-        });
+        return api.addTripItem(
+          String(data.trip_id),
+          {
+            item_type: "place",
+            item_id: String(data.place_id),
+            start_at: (data.start_at as string | null) ?? null,
+            end_at: (data.end_at as string | null) ?? null,
+          },
+          proposal.id,
+        );
       }
 
       if (proposal.record_type === "flight") {
@@ -585,7 +589,7 @@ export default function AiChatPage() {
         return api.createPlace(data as unknown as PlaceInput);
       }
       if (proposal.record_type === "activity") {
-        return api.createActivity(data as unknown as ActivityInput);
+        return api.createActivity(data as unknown as ActivityInput, proposal.id);
       }
       return api.createOtherTransport(data, force);
     },

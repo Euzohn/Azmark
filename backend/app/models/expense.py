@@ -2,7 +2,17 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, Text, Uuid
+from sqlalchemy import (
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Numeric,
+    String,
+    Text,
+    Uuid,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -18,6 +28,19 @@ class Expense(Base):
     """
 
     __tablename__ = "expenses"
+    __table_args__ = (
+        CheckConstraint(
+            "(source_type IS NULL AND source_id IS NULL) "
+            "OR (source_type IS NOT NULL AND source_id IS NOT NULL)",
+            name="ck_expenses_source_pair",
+        ),
+        CheckConstraint(
+            "source_type IS NULL OR source_type IN ('transport', 'hotel', 'activity')",
+            name="ck_expenses_source_type",
+        ),
+        Index("ix_expenses_source", "user_id", "source_type", "source_id"),
+        Index("ix_expenses_user_trip", "user_id", "trip_id"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
@@ -39,6 +62,12 @@ class Expense(Base):
     trip_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("trips.id", ondelete="SET NULL"), nullable=True, index=True
     )
+
+    # Optional link to the record this spend paid for. Type is the entity
+    # vocabulary (transport/hotel/activity); a transport record's own ``type``
+    # tells flight/train/other. The pair is atomic (database check).
+    source_type: Mapped[str | None] = mapped_column(String(20))
+    source_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False

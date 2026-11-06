@@ -69,19 +69,19 @@ class ActivityRepository:
 
     def create(self, activity: Activity) -> Activity:
         self.db.add(activity)
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(activity)
         return activity
 
     def save(self, activity: Activity) -> Activity:
         self.db.add(activity)
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(activity)
         return activity
 
     def delete(self, activity: Activity) -> None:
         self.db.delete(activity)
-        self.db.commit()
+        self.db.flush()
 
     def clear_place(self, *, user_id: uuid.UUID, place_id: uuid.UUID) -> None:
         """Detach activities from a place that is being deleted (spec #14)."""
@@ -90,4 +90,4 @@ class ActivityRepository:
             .where(Activity.user_id == user_id, Activity.place_id == place_id)
             .values(place_id=None)
         )
-        self.db.commit()
+        self.db.flush()

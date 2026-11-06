@@ -9,6 +9,7 @@ from app.repositories.transport import TransportRepository
 from app.repositories.trip import TripRepository
 from app.repositories.trip_item import TripItemRepository
 from app.services.dedup import record_signature
+from app.services.expense_source import SOURCE_TRANSPORT, clear_source, sync_source_trip
 from app.services.seating import infer_train_seat_type
 
 
@@ -131,6 +132,7 @@ class TransportService:
             setattr(record, f"{field}_enc", cipher)
         record = self.records.create(record)
         self.trip_items.sync_transport(record)
+        self.db.commit()
         return record
 
     def update_record(
@@ -147,14 +149,24 @@ class TransportService:
                 setattr(record, f"{field}_enc", encrypt_value(value) if value else None)
         for field, value in data.items():
             setattr(record, field, value)
+        sync_source_trip(
+            self.db,
+            user_id=user_id,
+            source_type=SOURCE_TRANSPORT,
+            source_id=record.id,
+            trip_id=record.trip_id,
+        )
         record = self.records.save(record)
         self.trip_items.sync_transport(record)
+        self.db.commit()
         return record
 
     def delete_record(self, *, user_id: uuid.UUID, record_id: uuid.UUID) -> None:
         record = self.get_record(user_id=user_id, record_id=record_id)
+        clear_source(self.db, user_id=user_id, source_type=SOURCE_TRANSPORT, source_id=record.id)
         self.trip_items.delete_transport(user_id=user_id, record_id=record.id)
         self.records.delete(record)
+        self.db.commit()
 
 
 class FlightService(TransportService):

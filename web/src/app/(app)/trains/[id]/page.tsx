@@ -6,6 +6,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
 import { AttachmentPanel } from "@/components/attachment-panel";
+import { LinkedExpenses } from "@/components/linked-expenses";
 import { PageHeader } from "@/components/page-header";
 import { TrainForm } from "@/components/train-form";
 import { TrainSummary } from "@/components/train-summary";
@@ -132,6 +133,7 @@ function TrainDetail() {
         <>
           <TrainSummary train={data} />
           <AttachmentPanel resourceType="train" resourceId={id} />
+          <LinkedExpenses sourceType="transport" sourceId={id} />
         </>
       )}
       <Dialog

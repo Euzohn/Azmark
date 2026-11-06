@@ -156,13 +156,13 @@ class TransportRepository:
 
     def create(self, record: TransportRecord) -> TransportRecord:
         self.db.add(record)
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(record)
         return record
 
     def save(self, record: TransportRecord) -> TransportRecord:
         self.db.add(record)
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(record)
         return record
 
@@ -205,4 +205,4 @@ class TransportRepository:
 
     def delete(self, record: TransportRecord) -> None:
         self.db.delete(record)
-        self.db.commit()
+        self.db.flush()

@@ -41,21 +41,21 @@ def _compact_record(record) -> dict:
         "destination": record.destination,
         "service_number": record.service_number,
         "carrier": record.carrier,
-        "airline_code": record.airline_code,
+        "airline_code": getattr(record, "airline_code", None),
         "departure_time": record.departure_time.isoformat() if record.departure_time else None,
         "arrival_time": record.arrival_time.isoformat() if record.arrival_time else None,
         "status": record.status,
         "distance_km": float(record.distance) if record.distance else None,
-        "cabin_class": record.cabin_class,
-        "seat": record.seat,
-        "departure_terminal": record.departure_terminal,
-        "departure_gate": record.departure_gate,
-        "arrival_terminal": record.arrival_terminal,
-        "arrival_gate": record.arrival_gate,
-        "aircraft_model": record.aircraft_model,
-        "train_type": record.train_type,
-        "carriage": record.carriage,
-        "seat_type": record.seat_type,
+        "cabin_class": getattr(record, "cabin_class", None),
+        "seat": getattr(record, "seat", None),
+        "departure_terminal": getattr(record, "departure_terminal", None),
+        "departure_gate": getattr(record, "departure_gate", None),
+        "arrival_terminal": getattr(record, "arrival_terminal", None),
+        "arrival_gate": getattr(record, "arrival_gate", None),
+        "aircraft_model": getattr(record, "aircraft_model", None),
+        "train_type": getattr(record, "train_type", None),
+        "carriage": getattr(record, "carriage", None),
+        "seat_type": getattr(record, "seat_type", None),
         "price": float(record.price) if record.price is not None else None,
         "currency": record.currency,
     }
@@ -229,8 +229,32 @@ async def _get_trip(db: Session, user_id: uuid.UUID, args: dict) -> dict:
 
     # Read-only on purpose: unlike ``list_items`` this does not materialise
     # TripItem rows, so a read token never writes as a side effect.
-    records = service.list_records(user_id=user_id, trip_id=parsed_id)
-    return {**_compact_trip(trip), "records": [_compact_record(r) for r in records]}
+    items = service.list_items(user_id=user_id, trip_id=parsed_id)
+    expenses = service.list_expenses(user_id=user_id, trip_id=parsed_id)
+    notes = service.list_notes(user_id=user_id, trip_id=parsed_id)
+    attachments = service.list_attachments(user_id=user_id, trip_id=parsed_id)
+    summary = service.expense_summary(user_id=user_id, trip_id=parsed_id)
+    return {
+        **_compact_trip(trip),
+        "timeline_order_mode": trip.timeline_order_mode,
+        "records": [_compact_record(item.record) for item in items if item.record is not None],
+        "items": [_compact_trip_item(item) for item in items],
+        "unscheduled": [_compact_trip_item(item) for item in items if item.is_unscheduled],
+        "expenses": [_compact_expense(expense) for expense in expenses],
+        "expense_summary": _compact_expense_summary(summary),
+        "notes": [_compact_note(note) for note in notes],
+        "attachments": [
+            {
+                "id": str(attachment.id),
+                "filename": attachment.filename,
+                "mime_type": attachment.mime_type,
+                "size": attachment.size,
+                "resource_type": attachment.resource_type,
+                "resource_id": str(attachment.resource_id),
+            }
+            for attachment in attachments
+        ],
+    }
 
 
 def _flight_source_summary(data) -> dict | None:
@@ -713,7 +737,7 @@ _PLACE_TYPES = frozenset(
     }
 )
 _ACTIVITY_TYPES = frozenset(
-    {"sightseeing", "dining", "shopping", "culture", "outdoor", "event", "other"}
+    {"sightseeing", "dining", "shopping", "culture", "outdoor", "event", "visit", "other"}
 )
 
 
@@ -784,7 +808,43 @@ def _compact_expense(expense) -> dict:
         "occurred_at": expense.occurred_at.isoformat() if expense.occurred_at else None,
         "description": expense.description,
         "trip_id": str(expense.trip_id) if expense.trip_id else None,
+        "source_type": expense.source_type,
+        "source_id": str(expense.source_id) if expense.source_id else None,
     }
+
+
+def _compact_expense_summary(summary) -> dict:
+    return {
+        "report_currency": summary.report_currency,
+        "converted_total": float(summary.converted_total),
+        "converted_count": summary.converted_count,
+        "unconverted_count": summary.unconverted_count,
+        "unconverted": [
+            {"currency": item.currency, "amount": float(item.amount)}
+            for item in summary.unconverted
+        ],
+    }
+
+
+def _compact_trip_item(item) -> dict:
+    data = {
+        "item_type": item.item_type,
+        "sort_order": item.sort_order,
+        "time_kind": item.time_kind,
+        "start_at": item.start_at.isoformat() if item.start_at else None,
+        "end_at": item.end_at.isoformat() if item.end_at else None,
+        "start_date": item.start_date.isoformat() if item.start_date else None,
+        "end_date": item.end_date.isoformat() if item.end_date else None,
+        "timezone": item.timezone,
+        "is_unscheduled": item.is_unscheduled,
+    }
+    if item.record is not None:
+        data["record"] = _compact_record(item.record)
+    if item.hotel is not None:
+        data["hotel"] = _compact_hotel(item.hotel)
+    if item.activity is not None:
+        data["activity"] = _compact_activity(item.activity)
+    return data
 
 
 def _compact_note(note) -> dict:
@@ -1024,10 +1084,11 @@ def _delete_activity_proposal(args: dict) -> AiProposal:
 
 
 def _add_place_to_trip_proposal(args: dict) -> AiProposal:
-    """Propose putting an existing place on a trip timeline (spec #16).
+    """Propose recording a visit to an existing place (docs §4.2, §9.2).
 
-    A place has no ``trip_id`` of its own; membership is an explicit
-    ``trip_items`` row, so this maps to ``POST /trips/{id}/items``.
+    The confirmation creates an Activity with ``type='visit'`` and the place
+    name as a snapshot. The same place may be visited several times, so this
+    never rejects a repeat by itself.
     """
     data = dict(args.get("data", {}) or {})
     trip_id = str(data.get("trip_id") or "")
@@ -1036,7 +1097,7 @@ def _add_place_to_trip_proposal(args: dict) -> AiProposal:
         id=uuid.uuid4().hex,
         action="add_place_to_trip",
         record_type="place",
-        summary=f"Add place {place_id or '—'} to trip {trip_id or '—'}",
+        summary=f"Add visit {place_id or '—'} to trip {trip_id or '—'}",
         data=data,
     )
 
@@ -1157,8 +1218,11 @@ TOOLS: dict[str, ToolDef] = {
     "get_trip": ToolDef(
         name="get_trip",
         description=(
-            "Get one trip by id with its transport records in chronological "
-            "order (compact fields, never sensitive PNR/ticket data)."
+            "Get one trip by id with its full read-only timeline: ordered items "
+            "(transport, hotel, activity with place summary), the unscheduled "
+            "partition, ordering mode, expenses with a report-currency summary, "
+            "notes and transport attachments. Compact fields only, never "
+            "sensitive PNR/ticket data."
         ),
         parameters={
             "type": "object",
@@ -1884,7 +1948,11 @@ TOOLS: dict[str, ToolDef] = {
             "confirms. Pass amount and currency (ISO 4217); optionally category, "
             "occurred_at (ISO 8601 with offset), description, and a conversion "
             "(converted_amount / converted_currency / exchange_rate) when the user "
-            "gives one, and trip_id when it belongs to a trip. Infer the category "
+            "gives one, and trip_id when it belongs to a trip. When the spend is "
+            "for an existing transport record, hotel or activity, pass "
+            "source_type (transport/hotel/activity) and source_id instead of "
+            "guessing trip_id: the trip is derived from that source and must not "
+            "disagree with it. Infer the category "
             "from the description (default other) and the currency from the "
             "user's locale or destination when the amount has none."
         ),
@@ -1913,6 +1981,15 @@ TOOLS: dict[str, ToolDef] = {
                         "converted_currency": {"type": "string"},
                         "exchange_rate": {"type": "number"},
                         "trip_id": {"type": "string", "description": "Trip UUID to attach it to"},
+                        "source_type": {
+                            "type": "string",
+                            "enum": ["transport", "hotel", "activity"],
+                            "description": "Linked record kind; the trip is derived from it",
+                        },
+                        "source_id": {
+                            "type": "string",
+                            "description": "Linked record UUID (must be the user's own)",
+                        },
                     },
                     "required": ["amount", "currency"],
                 },
@@ -1945,6 +2022,11 @@ TOOLS: dict[str, ToolDef] = {
                         "converted_currency": {"type": "string"},
                         "exchange_rate": {"type": "number"},
                         "trip_id": {"type": "string"},
+                        "source_type": {
+                            "type": "string",
+                            "enum": ["transport", "hotel", "activity"],
+                        },
+                        "source_id": {"type": "string"},
                     },
                 },
             },
@@ -2042,8 +2124,8 @@ TOOLS: dict[str, ToolDef] = {
             "Propose adding a place (a geographic reference entity). Nothing is "
             "saved until the user confirms. Pass name (required) and type; "
             "optionally localized_name, country, region, city, district, lat, lon, "
-            "timezone and external_ids. A place has no trip of its own — to put it "
-            "on a trip timeline call add_place_to_trip afterwards."
+            "timezone and external_ids. A place has no trip of its own; adding it "
+            "to a trip is a separate visit activity."
         ),
         parameters={
             "type": "object",
@@ -2133,11 +2215,12 @@ TOOLS: dict[str, ToolDef] = {
     "add_place_to_trip": ToolDef(
         name="add_place_to_trip",
         description=(
-            "Propose putting an existing place on a trip's timeline. Nothing is "
-            "saved until the user confirms. Resolve trip_id with list_trips and "
-            "place_id with search_places first — never guess ids. Optionally pass "
-            "start_at / end_at to order the visit; a place already in the trip "
-            "cannot be added twice."
+            "Propose recording a visit to an existing place on a trip's timeline. "
+            "Nothing is saved until the user confirms. Resolve trip_id with "
+            "list_trips and place_id with search_places first — never guess ids; "
+            "search the trip's activities first to avoid retrying the same event. "
+            "Optionally pass start_at / end_at. The same place may be visited "
+            "several times, so a repeat by itself is not an error."
         ),
         parameters={
             "type": "object",
@@ -2162,7 +2245,7 @@ TOOLS: dict[str, ToolDef] = {
         name="create_activity",
         description=(
             "Propose recording an activity (sightseeing, dining, shopping, culture, "
-            "outdoor, event). Nothing is saved until the user confirms. Pass name "
+            "outdoor, event, visit). Nothing is saved until the user confirms. Pass name "
             "(required) and type; optionally start_at / end_at (ISO 8601 with "
             "offset), price, currency, notes, place_id (an existing place — resolve "
             "with search_places) and trip_id (resolve with list_trips). The "

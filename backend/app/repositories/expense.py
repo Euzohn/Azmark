@@ -22,6 +22,8 @@ class ExpenseRepository:
         search: str | None = None,
         category: str | None = None,
         trip_id: uuid.UUID | None = None,
+        source_type: str | None = None,
+        source_id: uuid.UUID | None = None,
         date_from: date | None = None,
         date_to: date | None = None,
         sort: str = "newest",
@@ -36,6 +38,10 @@ class ExpenseRepository:
             filters.append(Expense.category == category)
         if trip_id is not None:
             filters.append(Expense.trip_id == trip_id)
+        if source_type is not None:
+            filters.append(Expense.source_type == source_type)
+        if source_id is not None:
+            filters.append(Expense.source_id == source_id)
         if date_from is not None:
             filters.append(Expense.occurred_at >= datetime.combine(date_from, time.min, tzinfo=UTC))
         if date_to is not None:
@@ -64,6 +70,22 @@ class ExpenseRepository:
         return self.db.scalar(
             select(Expense).where(Expense.id == expense_id, Expense.user_id == user_id)
         )
+
+    def list_for_trip(self, *, user_id: uuid.UUID, trip_id: uuid.UUID) -> list[Expense]:
+        stmt = (
+            select(Expense)
+            .where(Expense.user_id == user_id, Expense.trip_id == trip_id)
+            .order_by(Expense.occurred_at.asc().nullslast(), Expense.created_at.asc())
+        )
+        return list(self.db.scalars(stmt))
+
+    def list_for_user(self, *, user_id: uuid.UUID) -> list[Expense]:
+        stmt = (
+            select(Expense)
+            .where(Expense.user_id == user_id)
+            .order_by(Expense.occurred_at.asc().nullslast(), Expense.created_at.asc())
+        )
+        return list(self.db.scalars(stmt))
 
     def create(self, expense: Expense) -> Expense:
         self.db.add(expense)

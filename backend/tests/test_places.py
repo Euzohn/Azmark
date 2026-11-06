@@ -1,10 +1,7 @@
-"""Place CRUD and trip-item membership (spec #14, #16, #57)."""
+"""Place CRUD and visit conversion (spec #14, #16, #57)."""
 
 import uuid
 
-from sqlalchemy import select
-
-from app.models.trip_item import TripItem
 from tests.conftest import auth_headers, register_and_login
 
 PLACE = {
@@ -114,7 +111,7 @@ def test_user_isolation(client):
     assert client.get("/api/v1/places", headers=b).json()["total"] == 0
 
 
-def test_delete_place_removes_trip_items(client, db):
+def test_delete_place_keeps_visit_activity(client):
     headers = _headers(client, "place_delete_item")
     trip = _create_trip(client, headers)
     place = client.post("/api/v1/places", json=PLACE, headers=headers).json()
@@ -130,15 +127,19 @@ def test_delete_place_removes_trip_items(client, db):
         headers=headers,
     )
     assert added.status_code == 201, added.text
-    assert added.json()["place"]["id"] == place["id"]
+    assert added.json()["activity"]["place_id"] == place["id"]
 
     assert client.delete(f"/api/v1/places/{place['id']}", headers=headers).status_code == 204
     detail = client.get(f"/api/v1/trips/{trip['id']}", headers=headers).json()
-    assert detail["items"] == []
-    assert db.scalar(select(TripItem).where(TripItem.item_type == "place")) is None
+    assert len(detail["items"]) == 1
+    activity = detail["items"][0]["activity"]
+    # The visit survives as a name snapshot without the dangling place link.
+    assert activity["id"] == added.json()["activity"]["id"]
+    assert activity["name"] == "Gardens by the Bay"
+    assert activity["place_id"] is None
 
 
-def test_add_and_remove_place_item(client):
+def test_add_and_remove_place_item_creates_a_visit(client):
     headers = _headers(client, "place_item")
     trip = _create_trip(client, headers)
     place = client.post("/api/v1/places", json=PLACE, headers=headers).json()
@@ -152,24 +153,29 @@ def test_add_and_remove_place_item(client):
     added = client.post(f"/api/v1/trips/{trip['id']}/items", json=payload, headers=headers)
     assert added.status_code == 201, added.text
     item = added.json()
-    assert item["item_type"] == "place"
-    assert item["item_id"] == place["id"]
-    assert item["place"]["name"] == "Gardens by the Bay"
+    assert item["item_type"] == "activity"
+    assert item["activity"]["type"] == "visit"
+    assert item["activity"]["place_id"] == place["id"]
+    # The name is a snapshot of the place at creation time.
+    assert item["activity"]["name"] == "Gardens by the Bay"
+    assert item["activity"]["place"]["id"] == place["id"]
+    assert item["activity"]["place"]["localized_name"] == "滨海湾花园"
 
-    # the same place cannot appear twice in one trip
+    # The same place can be visited twice in one trip (docs §4.3).
     duplicate = client.post(f"/api/v1/trips/{trip['id']}/items", json=payload, headers=headers)
-    assert duplicate.status_code == 409
+    assert duplicate.status_code == 201, duplicate.text
+    assert duplicate.json()["activity"]["id"] != item["activity"]["id"]
 
     detail = client.get(f"/api/v1/trips/{trip['id']}", headers=headers).json()
-    place_items = [i for i in detail["items"] if i["item_type"] == "place"]
-    assert len(place_items) == 1
-    assert place_items[0]["place"]["localized_name"] == "滨海湾花园"
+    visit_items = [i for i in detail["items"] if i["item_type"] == "activity"]
+    assert len(visit_items) == 2
+    assert all(i["activity"]["type"] == "visit" for i in visit_items)
 
     assert (
         client.delete(f"/api/v1/trips/{trip['id']}/items/{item['id']}", headers=headers).status_code
         == 204
     )
-    assert client.get(f"/api/v1/trips/{trip['id']}", headers=headers).json()["items"] == []
+    assert len(client.get(f"/api/v1/trips/{trip['id']}", headers=headers).json()["items"]) == 1
     assert (
         client.delete(f"/api/v1/trips/{trip['id']}/items/{item['id']}", headers=headers).status_code
         == 404
@@ -222,19 +228,25 @@ def test_add_item_rejects_non_place_types(client):
     assert resp.status_code == 422
 
 
-def test_remove_mirrored_item_is_rejected(client):
+def test_removing_mirrored_item_detaches_source_record(client):
     headers = _headers(client, "place_item_mirror")
     trip = _create_trip(client, headers)
-    client.post(
+    hotel = client.post(
         "/api/v1/hotels",
         json={"hotel": "Marina Bay Sands", "check_in": "2026-04-29", "trip_id": trip["id"]},
         headers=headers,
-    )
+    ).json()
     detail = client.get(f"/api/v1/trips/{trip['id']}", headers=headers).json()
     hotel_item = next(i for i in detail["items"] if i["item_type"] == "hotel")
 
     resp = client.delete(f"/api/v1/trips/{trip['id']}/items/{hotel_item['id']}", headers=headers)
-    assert resp.status_code == 400
+    assert resp.status_code == 204
+
+    # The trip no longer shows it, but the hotel record itself is kept.
+    assert client.get(f"/api/v1/trips/{trip['id']}", headers=headers).json()["items"] == []
+    kept = client.get(f"/api/v1/hotels/{hotel['id']}", headers=headers)
+    assert kept.status_code == 200
+    assert kept.json()["trip_id"] is None
 
 
 def test_audit_log(client):

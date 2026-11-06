@@ -6,6 +6,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
 import { AttachmentPanel } from "@/components/attachment-panel";
+import { LinkedExpenses } from "@/components/linked-expenses";
 import { PageHeader } from "@/components/page-header";
 import { TransportForm } from "@/components/transport-form";
 import { TransportSummary } from "@/components/transport-summary";
@@ -132,6 +133,7 @@ function TransportDetail() {
         <>
           <TransportSummary transport={data} />
           <AttachmentPanel resourceType="transport" resourceId={id} />
+          <LinkedExpenses sourceType="transport" sourceId={id} />
         </>
       )}
       <Dialog

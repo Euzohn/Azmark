@@ -30,6 +30,13 @@ class Trip(Base):
 
     status: Mapped[str] = mapped_column(String(20), default="planned", nullable=False)
 
+    # "chronological" derives the timeline order from event times; "manual"
+    # keeps the order the user arranged. Existing trips are backfilled as
+    # manual by migration 0025 so their layout does not change silently.
+    timeline_order_mode: Mapped[str] = mapped_column(
+        String(20), default="chronological", nullable=False
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )

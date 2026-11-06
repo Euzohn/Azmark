@@ -53,6 +53,14 @@ class NoteRepository:
     def get(self, *, user_id: uuid.UUID, note_id: uuid.UUID) -> Note | None:
         return self.db.scalar(select(Note).where(Note.id == note_id, Note.user_id == user_id))
 
+    def list_for_trip(self, *, user_id: uuid.UUID, trip_id: uuid.UUID) -> list[Note]:
+        stmt = (
+            select(Note)
+            .where(Note.user_id == user_id, Note.trip_id == trip_id)
+            .order_by(Note.updated_at.desc(), Note.id)
+        )
+        return list(self.db.scalars(stmt))
+
     def create(self, note: Note) -> Note:
         self.db.add(note)
         self.db.commit()

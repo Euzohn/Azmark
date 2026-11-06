@@ -13,8 +13,19 @@ import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-store";
 import { fromZonedInput, toLocalInput } from "@/lib/datetime";
-import { useI18n } from "@/lib/i18n";
-import type { Expense, ExpenseCategory, ExpenseInput, TripList } from "@/lib/types";
+import { useI18n, type TranslationKey } from "@/lib/i18n";
+import type {
+  Expense,
+  ExpenseCategory,
+  ExpenseInput,
+  ExpenseSourceType,
+  TripList,
+} from "@/lib/types";
+
+export interface ExpenseSourceRef {
+  type: ExpenseSourceType;
+  id: string;
+}
 
 const CATEGORIES: ExpenseCategory[] = [
   "transport",
@@ -25,8 +36,18 @@ const CATEGORIES: ExpenseCategory[] = [
   "other",
 ];
 
+const SOURCE_LABEL_KEYS: Record<ExpenseSourceType, TranslationKey> = {
+  transport: "expenses.sourceType.transport",
+  hotel: "expenses.sourceType.hotel",
+  activity: "expenses.sourceType.activity",
+};
+
 interface ExpenseFormProps {
   initial?: Expense;
+  /** Pre-link a new spend to the record the user came from. */
+  source?: ExpenseSourceRef | null;
+  /** Preselect a trip for an independent spend (docs §6.3). */
+  initialTripId?: string | null;
   submitting?: boolean;
   onDirtyChange?: (dirty: boolean) => void;
   onCancel?: () => void;
@@ -40,20 +61,29 @@ interface FormState {
   occurred_at: string;
   description: string;
   trip_id: string;
+  source_type: ExpenseSourceType | "";
+  source_id: string;
   converted_amount: string;
   converted_currency: string;
   exchange_rate: string;
   exchange_rate_date: string;
 }
 
-function toForm(expense: Expense | undefined, defaultCurrency: string): FormState {
+function toForm(
+  expense: Expense | undefined,
+  defaultCurrency: string,
+  source: ExpenseSourceRef | null | undefined,
+  initialTripId: string | null | undefined,
+): FormState {
   return {
     category: expense?.category ?? "other",
     amount: expense?.amount ?? "",
     currency: expense?.currency ?? defaultCurrency,
     occurred_at: toLocalInput(expense?.occurred_at),
     description: expense?.description ?? "",
-    trip_id: expense?.trip_id ?? "",
+    trip_id: expense?.trip_id ?? initialTripId ?? "",
+    source_type: expense?.source_type ?? source?.type ?? "",
+    source_id: expense?.source_id ?? source?.id ?? "",
     converted_amount: expense?.converted_amount ?? "",
     converted_currency: expense?.converted_currency ?? "",
     exchange_rate: expense?.exchange_rate ?? "",
@@ -69,13 +99,18 @@ function optionalNumber(value: string): number | null {
 }
 
 function toInput(form: FormState): ExpenseInput {
+  const linked = form.source_type !== "" && form.source_id !== "";
   return {
     category: form.category,
     amount: Number(form.amount),
     currency: form.currency.trim().toUpperCase(),
     occurred_at: form.occurred_at ? fromZonedInput(form.occurred_at) : null,
     description: form.description.trim() || null,
-    trip_id: form.trip_id || null,
+    // A linked expense derives its trip from the source; sending a value would
+    // either duplicate the derivation or trip the conflict check (docs §6.3).
+    ...(linked
+      ? { source_type: form.source_type as ExpenseSourceType, source_id: form.source_id }
+      : { trip_id: form.trip_id || null }),
     converted_amount: optionalNumber(form.converted_amount),
     converted_currency: form.converted_currency.trim().toUpperCase() || null,
     exchange_rate: optionalNumber(form.exchange_rate),
@@ -94,6 +129,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 export function ExpenseForm({
   initial,
+  source,
+  initialTripId,
   submitting,
   onDirtyChange,
   onCancel,
@@ -102,8 +139,9 @@ export function ExpenseForm({
   const { t } = useI18n();
   const { user } = useAuth();
   const [form, setForm] = useState<FormState>(() =>
-    toForm(initial, user?.currency ?? ""),
+    toForm(initial, user?.currency ?? "", source, initialTripId),
   );
+  const sourceBound = form.source_type !== "" && form.source_id !== "";
   const { data: trips } = useQuery<TripList>({
     queryKey: ["trips", { page_size: 100 }],
     queryFn: () => api.listTrips({ page_size: 100 }),
@@ -136,14 +174,20 @@ export function ExpenseForm({
             </Select>
           </Field>
           <Field label={t("expenses.trip")}>
-            <Select value={form.trip_id} onChange={(e) => set("trip_id", e.target.value)}>
-              <option value="">{t("expenses.tripNone")}</option>
-              {trips?.items.map((trip) => (
-                <option key={trip.id} value={trip.id}>
-                  {trip.name}
-                </option>
-              ))}
-            </Select>
+            {sourceBound ? (
+              <div className="flex h-10 items-center rounded-lg border border-border bg-muted/40 px-3 text-sm text-muted-foreground">
+                {t("expenses.sourceHint")}
+              </div>
+            ) : (
+              <Select value={form.trip_id} onChange={(e) => set("trip_id", e.target.value)}>
+                <option value="">{t("expenses.tripNone")}</option>
+                {trips?.items.map((trip) => (
+                  <option key={trip.id} value={trip.id}>
+                    {trip.name}
+                  </option>
+                ))}
+              </Select>
+            )}
           </Field>
           <Field label={t("expenses.amount")}>
             <Input
@@ -177,6 +221,11 @@ export function ExpenseForm({
               />
             </Field>
           </div>
+          {sourceBound ? (
+            <div className="rounded-lg bg-muted/40 px-3 py-2 text-xs text-muted-foreground sm:col-span-2">
+              {t("expenses.source")}: {t(SOURCE_LABEL_KEYS[form.source_type as ExpenseSourceType])}
+            </div>
+          ) : null}
           <div className="mt-2 border-t border-border pt-4 sm:col-span-2">
             <p className="text-xs font-medium text-muted-foreground">
               {t("expenses.conversionTitle")}

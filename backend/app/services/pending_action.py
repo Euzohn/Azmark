@@ -395,13 +395,30 @@ class PendingActionService:
         try:
             if record.action == PendingActionKind.CREATE:
                 schema = _CREATE_SCHEMAS[record.record_type]
-                written = _service_create(
-                    record.record_type,
-                    service,
-                    user_id=user_id,
-                    payload=schema.model_validate(payload),
-                    force=force,
-                )
+                if record.record_type == "activity":
+                    # A retried confirmation must not create a second event.
+                    written, _ = service.create_activity_idempotent(
+                        user_id=user_id,
+                        payload=schema.model_validate(payload),
+                        idempotency_key=f"pending:{record.id}",
+                        idempotency_operation="confirm_pending_action",
+                    )
+                elif record.record_type == "expense":
+                    # Same guarantee for a spend approved from the AI inbox.
+                    written, _ = service.create_expense_idempotent(
+                        user_id=user_id,
+                        payload=schema.model_validate(payload),
+                        idempotency_key=f"pending:{record.id}",
+                        idempotency_operation="confirm_pending_action",
+                    )
+                else:
+                    written = _service_create(
+                        record.record_type,
+                        service,
+                        user_id=user_id,
+                        payload=schema.model_validate(payload),
+                        force=force,
+                    )
             elif record.action == PendingActionKind.UPDATE:
                 schema = _UPDATE_SCHEMAS[record.record_type]
                 written = _service_update(

@@ -8,6 +8,7 @@ import { Suspense, useState } from "react";
 import { AttachmentPanel } from "@/components/attachment-panel";
 import { FlightSummary } from "@/components/flight-summary";
 import { FlightForm } from "@/components/flight-form";
+import { LinkedExpenses } from "@/components/linked-expenses";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -75,6 +76,7 @@ function FlightDetail() {
       </> : <>
         <FlightSummary flight={data} />
         <AttachmentPanel resourceType="flight" resourceId={id} />
+        <LinkedExpenses sourceType="transport" sourceId={id} />
       </>}
       <Dialog open={moreOpen} onClose={() => setMoreOpen(false)} title={t("common.actions")} variant="responsive">
         <Button variant="ghost" className="w-full justify-start text-danger" onClick={() => { setMoreOpen(false); setDeleteOpen(true); }}><Trash2 className="h-4 w-4" />{t("common.delete")}</Button>

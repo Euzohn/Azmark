@@ -1,285 +1,148 @@
 import uuid
-from datetime import UTC, date, datetime, time
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models.activity import Activity
 from app.models.hotel import Hotel
 from app.models.transport_record import TransportRecord
+from app.models.trip import Trip
 from app.models.trip_item import TripItem
 
 TRANSPORT_ITEM = "transport"
 HOTEL_ITEM = "hotel"
-PLACE_ITEM = "place"
 ACTIVITY_ITEM = "activity"
 
-
-def _as_utc(value: datetime | None) -> datetime | None:
-    """Normalize a stored datetime for comparison (SQLite hands back naive values)."""
-    if value is None:
-        return None
-    if value.tzinfo is None:
-        return value.replace(tzinfo=UTC)
-    return value.astimezone(UTC)
-
-
-def _date_at_midnight(value: date | None) -> datetime | None:
-    """Turn a hotel check-in/out date into a sortable UTC timestamp."""
-    if value is None:
-        return None
-    return datetime.combine(value, time.min, tzinfo=UTC)
+TIMELINE_ITEM_TYPES = (TRANSPORT_ITEM, HOTEL_ITEM, ACTIVITY_ITEM)
 
 
 class TripItemRepository:
-    """Trip membership/order rows (spec #16), always scoped by user_id."""
+    """Trip membership/order rows (spec #16), always scoped by user_id.
+
+    ``trip_items`` is a projection: membership comes from the source record's
+    ``trip_id`` and event times come from the source entity. The row only adds
+    a stable item id and the display order. ``start_at/end_at`` are legacy
+    columns kept until the final cleanup migration.
+    """
 
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def _chronological_sort_order(
-        self, *, user_id: uuid.UUID, trip_id: uuid.UUID, start_at: datetime | None
-    ) -> int:
-        """Pick the sort_order where a new item with ``start_at`` belongs.
+    def _next_sort_order(self, *, user_id: uuid.UUID, trip_id: uuid.UUID) -> int:
+        """Append to the trip; chronological display order is derived on read."""
+        current = self.db.scalar(
+            select(func.max(TripItem.sort_order)).where(
+                TripItem.user_id == user_id, TripItem.trip_id == trip_id
+            )
+        )
+        return int(current) + 1 if current is not None else 0
 
-        The trip detail page reads as a timeline: a new item slots in before
-        the first existing item that starts later, and items without a time
-        sink to the end. Existing items at/after the slot shift down by one
-        so sort_order stays contiguous. Manual reordering (set_order) still
-        wins — this only decides where *new* items appear.
-        """
-        items = self.list_for_trip(user_id=user_id, trip_id=trip_id)
-        target = _as_utc(start_at)
-        position = len(items)
-        for index, item in enumerate(items):
-            existing = _as_utc(item.start_at)
-            if target is not None and (existing is None or target < existing):
-                position = index
-                break
-        for item in items[position:]:
-            item.sort_order += 1
-        return position
-
-    def get_for_record(self, *, user_id: uuid.UUID, record_id: uuid.UUID) -> TripItem | None:
-        return self.db.scalar(
+    def _sync_entity(
+        self, *, item_type: str, entity_id: uuid.UUID, user_id: uuid.UUID, trip_id: uuid.UUID | None
+    ) -> None:
+        item = self.db.scalar(
             select(TripItem).where(
                 TripItem.user_id == user_id,
-                TripItem.item_type == TRANSPORT_ITEM,
-                TripItem.item_id == record_id,
+                TripItem.item_type == item_type,
+                TripItem.item_id == entity_id,
             )
         )
 
-    def sync_transport(self, record: TransportRecord) -> None:
-        """Mirror ``record.trip_id`` into TripItem, keeping times in sync."""
-        item = self.get_for_record(user_id=record.user_id, record_id=record.id)
-
-        if record.trip_id is None:
+        if trip_id is None:
             if item is not None:
                 self.db.delete(item)
-                self.db.commit()
+            self.db.flush()
             return
 
         if item is None:
-            item = TripItem(
-                user_id=record.user_id,
-                trip_id=record.trip_id,
-                item_type=TRANSPORT_ITEM,
-                item_id=record.id,
-                sort_order=self._chronological_sort_order(
-                    user_id=record.user_id, trip_id=record.trip_id, start_at=record.departure_time
-                ),
-                start_at=record.departure_time,
-                end_at=record.arrival_time,
-            )
-            self.db.add(item)
-        else:
-            if item.trip_id != record.trip_id:
-                # Moving between trips slots the record in at its time position.
-                item.sort_order = self._chronological_sort_order(
-                    user_id=record.user_id, trip_id=record.trip_id, start_at=record.departure_time
+            self.db.add(
+                TripItem(
+                    user_id=user_id,
+                    trip_id=trip_id,
+                    item_type=item_type,
+                    item_id=entity_id,
+                    sort_order=self._next_sort_order(user_id=user_id, trip_id=trip_id),
                 )
-                item.trip_id = record.trip_id
-            item.start_at = record.departure_time
-            item.end_at = record.arrival_time
+            )
+        else:
+            if item.trip_id != trip_id:
+                # Moving between trips keeps the stable item id and appends to
+                # the target's order; chronological display recomputes anyway.
+                item.sort_order = self._next_sort_order(user_id=user_id, trip_id=trip_id)
+                item.trip_id = trip_id
+        self.db.flush()
 
-        self.db.commit()
+    def get_for_record(self, *, user_id: uuid.UUID, record_id: uuid.UUID) -> TripItem | None:
+        return self._get_entity(user_id=user_id, item_type=TRANSPORT_ITEM, entity_id=record_id)
+
+    def sync_transport(self, record: TransportRecord) -> None:
+        self._sync_entity(
+            item_type=TRANSPORT_ITEM,
+            entity_id=record.id,
+            user_id=record.user_id,
+            trip_id=record.trip_id,
+        )
 
     def delete_transport(self, *, user_id: uuid.UUID, record_id: uuid.UUID) -> None:
         item = self.get_for_record(user_id=user_id, record_id=record_id)
         if item is not None:
             self.db.delete(item)
-            self.db.commit()
+            self.db.flush()
 
     def get_for_hotel(self, *, user_id: uuid.UUID, hotel_id: uuid.UUID) -> TripItem | None:
-        return self.db.scalar(
-            select(TripItem).where(
-                TripItem.user_id == user_id,
-                TripItem.item_type == HOTEL_ITEM,
-                TripItem.item_id == hotel_id,
-            )
-        )
+        return self._get_entity(user_id=user_id, item_type=HOTEL_ITEM, entity_id=hotel_id)
 
     def sync_hotel(self, hotel: Hotel) -> None:
-        """Mirror ``hotel.trip_id`` into TripItem, keeping dates in sync."""
-        item = self.get_for_hotel(user_id=hotel.user_id, hotel_id=hotel.id)
-
-        if hotel.trip_id is None:
-            if item is not None:
-                self.db.delete(item)
-                self.db.commit()
-            return
-
-        if item is None:
-            item = TripItem(
-                user_id=hotel.user_id,
-                trip_id=hotel.trip_id,
-                item_type=HOTEL_ITEM,
-                item_id=hotel.id,
-                sort_order=self._chronological_sort_order(
-                    user_id=hotel.user_id,
-                    trip_id=hotel.trip_id,
-                    start_at=_date_at_midnight(hotel.check_in),
-                ),
-                start_at=_date_at_midnight(hotel.check_in),
-                end_at=_date_at_midnight(hotel.check_out),
-            )
-            self.db.add(item)
-        else:
-            if item.trip_id != hotel.trip_id:
-                # Moving between trips slots the hotel in at its time position.
-                item.sort_order = self._chronological_sort_order(
-                    user_id=hotel.user_id,
-                    trip_id=hotel.trip_id,
-                    start_at=_date_at_midnight(hotel.check_in),
-                )
-                item.trip_id = hotel.trip_id
-            item.start_at = _date_at_midnight(hotel.check_in)
-            item.end_at = _date_at_midnight(hotel.check_out)
-
-        self.db.commit()
+        self._sync_entity(
+            item_type=HOTEL_ITEM,
+            entity_id=hotel.id,
+            user_id=hotel.user_id,
+            trip_id=hotel.trip_id,
+        )
 
     def delete_hotel(self, *, user_id: uuid.UUID, hotel_id: uuid.UUID) -> None:
         item = self.get_for_hotel(user_id=user_id, hotel_id=hotel_id)
         if item is not None:
             self.db.delete(item)
-            self.db.commit()
+            self.db.flush()
 
     def get_for_activity(self, *, user_id: uuid.UUID, activity_id: uuid.UUID) -> TripItem | None:
-        return self.db.scalar(
-            select(TripItem).where(
-                TripItem.user_id == user_id,
-                TripItem.item_type == ACTIVITY_ITEM,
-                TripItem.item_id == activity_id,
-            )
-        )
+        return self._get_entity(user_id=user_id, item_type=ACTIVITY_ITEM, entity_id=activity_id)
 
     def sync_activity(self, activity: Activity) -> None:
-        """Mirror ``activity.trip_id`` into TripItem, keeping times in sync."""
-        item = self.get_for_activity(user_id=activity.user_id, activity_id=activity.id)
-
-        if activity.trip_id is None:
-            if item is not None:
-                self.db.delete(item)
-                self.db.commit()
-            return
-
-        if item is None:
-            item = TripItem(
-                user_id=activity.user_id,
-                trip_id=activity.trip_id,
-                item_type=ACTIVITY_ITEM,
-                item_id=activity.id,
-                sort_order=self._chronological_sort_order(
-                    user_id=activity.user_id,
-                    trip_id=activity.trip_id,
-                    start_at=activity.start_at,
-                ),
-                start_at=activity.start_at,
-                end_at=activity.end_at,
-            )
-            self.db.add(item)
-        else:
-            if item.trip_id != activity.trip_id:
-                item.sort_order = self._chronological_sort_order(
-                    user_id=activity.user_id,
-                    trip_id=activity.trip_id,
-                    start_at=activity.start_at,
-                )
-                item.trip_id = activity.trip_id
-            item.start_at = activity.start_at
-            item.end_at = activity.end_at
-
-        self.db.commit()
+        self._sync_entity(
+            item_type=ACTIVITY_ITEM,
+            entity_id=activity.id,
+            user_id=activity.user_id,
+            trip_id=activity.trip_id,
+        )
 
     def delete_activity(self, *, user_id: uuid.UUID, activity_id: uuid.UUID) -> None:
         item = self.get_for_activity(user_id=user_id, activity_id=activity_id)
         if item is not None:
             self.db.delete(item)
-            self.db.commit()
+            self.db.flush()
 
-    def get_place_item(
-        self, *, user_id: uuid.UUID, trip_id: uuid.UUID, place_id: uuid.UUID
+    def _get_entity(
+        self, *, user_id: uuid.UUID, item_type: str, entity_id: uuid.UUID
     ) -> TripItem | None:
         return self.db.scalar(
             select(TripItem).where(
                 TripItem.user_id == user_id,
-                TripItem.trip_id == trip_id,
-                TripItem.item_type == PLACE_ITEM,
-                TripItem.item_id == place_id,
+                TripItem.item_type == item_type,
+                TripItem.item_id == entity_id,
             )
         )
-
-    def add_place(
-        self,
-        *,
-        user_id: uuid.UUID,
-        trip_id: uuid.UUID,
-        place_id: uuid.UUID,
-        start_at: datetime | None,
-        end_at: datetime | None,
-    ) -> TripItem:
-        """Create an explicit place item, slotted at its visit time (spec #16)."""
-        item = TripItem(
-            user_id=user_id,
-            trip_id=trip_id,
-            item_type=PLACE_ITEM,
-            item_id=place_id,
-            sort_order=self._chronological_sort_order(
-                user_id=user_id, trip_id=trip_id, start_at=start_at
-            ),
-            start_at=start_at,
-            end_at=end_at,
-        )
-        self.db.add(item)
-        self.db.commit()
-        self.db.refresh(item)
-        return item
-
-    def delete_place_items(self, *, user_id: uuid.UUID, place_id: uuid.UUID) -> None:
-        """Drop every trip item pointing at a place (used when the place is deleted)."""
-        items = list(
-            self.db.scalars(
-                select(TripItem).where(
-                    TripItem.user_id == user_id,
-                    TripItem.item_type == PLACE_ITEM,
-                    TripItem.item_id == place_id,
-                )
-            )
-        )
-        for item in items:
-            self.db.delete(item)
-        if items:
-            self.db.commit()
 
     def delete_item(self, item: TripItem) -> None:
         self.db.delete(item)
-        self.db.commit()
+        self.db.flush()
 
     def list_for_trip(self, *, user_id: uuid.UUID, trip_id: uuid.UUID) -> list[TripItem]:
         stmt = (
             select(TripItem)
             .where(TripItem.user_id == user_id, TripItem.trip_id == trip_id)
-            .order_by(TripItem.sort_order.asc(), TripItem.start_at.asc().nullslast(), TripItem.id)
+            .order_by(TripItem.sort_order.asc(), TripItem.id)
         )
         return list(self.db.scalars(stmt))
 
@@ -294,66 +157,90 @@ class TripItemRepository:
 
     def save(self, item: TripItem) -> TripItem:
         self.db.add(item)
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(item)
         return item
 
-    def ensure_transport_items(self, *, user_id: uuid.UUID, trip_id: uuid.UUID) -> None:
-        """Self-heal legacy/partial data: every grouped record gets an item.
+    def repair_timeline(self, *, user_id: uuid.UUID, trip_id: uuid.UUID) -> dict[str, int]:
+        """Bring projections in line with source records, without reading.
 
-        Missing records slot in at their chronological position so a mixed
-        transport/hotel trip reads as a proper timeline.
+        - deletes projections whose source is gone or no longer belongs here;
+        - reassigns a projection that still sits in the old trip;
+        - adds projections missing for sources that belong to this trip.
+
+        Legacy place items were converted by migration 0027.
+        Idempotent and user-scoped.
         """
-        records = list(
-            self.db.scalars(
-                select(TransportRecord).where(
-                    TransportRecord.user_id == user_id,
-                    TransportRecord.trip_id == trip_id,
+        sources: dict[str, dict[uuid.UUID, object]] = {
+            TRANSPORT_ITEM: {
+                record.id: record
+                for record in self.db.scalars(
+                    select(TransportRecord).where(
+                        TransportRecord.user_id == user_id,
+                        TransportRecord.trip_id == trip_id,
+                    )
+                )
+            },
+            HOTEL_ITEM: {
+                hotel.id: hotel
+                for hotel in self.db.scalars(
+                    select(Hotel).where(Hotel.user_id == user_id, Hotel.trip_id == trip_id)
+                )
+            },
+            ACTIVITY_ITEM: {
+                activity.id: activity
+                for activity in self.db.scalars(
+                    select(Activity).where(Activity.user_id == user_id, Activity.trip_id == trip_id)
+                )
+            },
+        }
+
+        added = fixed = removed = 0
+        for item_type, entities in sources.items():
+            entity_ids = list(entities)
+            projections = list(
+                self.db.scalars(
+                    select(TripItem).where(
+                        TripItem.user_id == user_id,
+                        TripItem.item_type == item_type,
+                        or_(
+                            TripItem.trip_id == trip_id,
+                            TripItem.item_id.in_(entity_ids),
+                        )
+                        if entity_ids
+                        else TripItem.trip_id == trip_id,
+                    )
                 )
             )
-        )
-        record_ids = {record.id for record in records}
-        items = self.list_for_trip(user_id=user_id, trip_id=trip_id)
+            present: set[uuid.UUID] = set()
+            for item in projections:
+                if item.item_id in entities:
+                    present.add(item.item_id)
+                    if item.trip_id != trip_id:
+                        item.trip_id = trip_id
+                        item.sort_order = self._next_sort_order(user_id=user_id, trip_id=trip_id)
+                        fixed += 1
+                elif item.trip_id == trip_id:
+                    self.db.delete(item)
+                    removed += 1
 
-        changed = False
-        for item in items:
-            if item.item_type == TRANSPORT_ITEM and item.item_id not in record_ids:
-                self.db.delete(item)
-                changed = True
-        if changed:
-            self.db.flush()
-
-        survivors = self.list_for_trip(user_id=user_id, trip_id=trip_id)
-        item_record_ids = {item.item_id for item in survivors if item.item_type == TRANSPORT_ITEM}
-        _epoch = datetime.min.replace(tzinfo=UTC)
-        missing = [record for record in records if record.id not in item_record_ids]
-        missing.sort(
-            key=lambda record: (
-                _as_utc(record.departure_time) is None,
-                _as_utc(record.departure_time) or _epoch,
-                record.created_at,
-            )
-        )
-        for record in missing:
-            self.db.add(
-                TripItem(
-                    user_id=user_id,
-                    trip_id=trip_id,
-                    item_type=TRANSPORT_ITEM,
-                    item_id=record.id,
-                    sort_order=self._chronological_sort_order(
-                        user_id=user_id, trip_id=trip_id, start_at=record.departure_time
-                    ),
-                    start_at=record.departure_time,
-                    end_at=record.arrival_time,
+            for entity_id in entities:
+                if entity_id in present:
+                    continue
+                self.db.add(
+                    TripItem(
+                        user_id=user_id,
+                        trip_id=trip_id,
+                        item_type=item_type,
+                        item_id=entity_id,
+                        sort_order=self._next_sort_order(user_id=user_id, trip_id=trip_id),
+                    )
                 )
-            )
-            changed = True
-            # Make the row visible to the next slot computation.
-            self.db.flush()
+                self.db.flush()
+                added += 1
 
-        if changed:
-            self.db.commit()
+        self.db.commit()
+        return {"added": added, "fixed": fixed, "removed": removed}
 
     def set_order(
         self, *, user_id: uuid.UUID, trip_id: uuid.UUID, item_ids: list[uuid.UUID]
@@ -362,3 +249,9 @@ class TripItemRepository:
         for index, item_id in enumerate(item_ids):
             items[item_id].sort_order = index
         self.db.commit()
+
+    def trip_order_mode(self, *, user_id: uuid.UUID, trip_id: uuid.UUID) -> str:
+        mode = self.db.scalar(
+            select(Trip.timeline_order_mode).where(Trip.id == trip_id, Trip.user_id == user_id)
+        )
+        return mode or "chronological"

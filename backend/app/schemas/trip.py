@@ -5,10 +5,14 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.activity import ActivityRead
+from app.schemas.attachment import AttachmentRead
+from app.schemas.expense import ExpenseRead, ExpenseSummary
 from app.schemas.hotel import HotelRead
-from app.schemas.place import PlaceRead
+from app.schemas.note import NoteRead
 from app.schemas.status import TripStatus
 from app.schemas.transport import FlightRead
+
+TimelineOrderMode = Literal["chronological", "manual"]
 
 
 class _TripDates(BaseModel):
@@ -29,6 +33,7 @@ class TripBase(_TripDates):
     origin: str | None = Field(default=None, max_length=120)
     destination: str | None = Field(default=None, max_length=120)
     status: str = Field(default="planned", max_length=20)
+    timeline_order_mode: TimelineOrderMode = "chronological"
 
 
 class TripCreate(TripBase):
@@ -42,6 +47,7 @@ class TripUpdate(_TripDates):
     origin: str | None = Field(default=None, max_length=120)
     destination: str | None = Field(default=None, max_length=120)
     status: TripStatus | None = None
+    timeline_order_mode: TimelineOrderMode | None = None
 
 
 class TripRead(TripBase):
@@ -56,25 +62,35 @@ class TripRead(TripBase):
 class TripItemRead(BaseModel):
     """Ordered trip member (spec #16).
 
-    ``record`` is populated for transport items, ``hotel`` for accommodation,
-    ``place`` for a bare place visit and ``activity`` for activities; exactly
-    one payload is set per item.
+    Times are computed from the source entity; ``trip_items`` no longer owns
+    them. ``record`` is populated for transport items, ``hotel`` for
+    accommodation and ``activity`` for activities; exactly one payload is set
+    per item.
+
+    ``time_kind`` distinguishes an instant (transport/activity) from a date
+    range (hotel). ``is_unscheduled`` marks rows without a start time.
     """
 
-    id: uuid.UUID
+    id: uuid.UUID | None = None
     item_type: str
     item_id: uuid.UUID
     sort_order: int
+    time_kind: Literal["instant", "date"] = "instant"
     start_at: datetime | None = None
     end_at: datetime | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    timezone: str | None = None
+    is_unscheduled: bool = False
     record: FlightRead | None = None
     hotel: HotelRead | None = None
-    place: PlaceRead | None = None
     activity: ActivityRead | None = None
 
 
 class TripItemCreate(BaseModel):
-    """Add a place to a trip as an explicit timeline item (spec #16)."""
+    """Add a place to a trip as a visit Activity (legacy facade, spec #9.1)."""
+
+    model_config = ConfigDict(extra="forbid")
 
     item_type: Literal["place"]
     item_id: uuid.UUID
@@ -89,9 +105,15 @@ class TripItemCreate(BaseModel):
 
 
 class TripItemUpdate(BaseModel):
+    """Only the display order. Event times must be changed at the source.
+
+    ``extra="forbid"`` turns a stale client sending ``start_at`` into a 422
+    instead of silently ignoring it.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
     sort_order: int | None = Field(default=None, ge=0)
-    start_at: datetime | None = None
-    end_at: datetime | None = None
 
 
 class TripItemOrder(BaseModel):
@@ -99,10 +121,14 @@ class TripItemOrder(BaseModel):
 
 
 class TripDetail(TripRead):
-    """Trip plus ordered items and the grouped transport records (#15/#16)."""
+    """Trip plus ordered items, grouped records, expenses, notes and attachments."""
 
     records: list[FlightRead] = []
     items: list[TripItemRead] = []
+    expenses: list[ExpenseRead] = []
+    expense_summary: ExpenseSummary | None = None
+    notes: list[NoteRead] = []
+    attachments: list[AttachmentRead] = []
 
 
 class TripList(BaseModel):

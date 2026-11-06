@@ -7,6 +7,8 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict
 
+from app.schemas.expense import ExpenseSummary
+
 
 class DashboardRecord(BaseModel):
     """Common fields for the dashboard's cross-type recent/upcoming lists."""
@@ -84,6 +86,8 @@ class StatisticsRead(BaseModel):
     by_station: list[BreakdownItem]
     by_train_class: list[BreakdownItem]
     by_train_seat_type: list[BreakdownItem]
+    # Spend is reported in the user's currency; unconverted buckets stay separate.
+    expense_summary: ExpenseSummary
 
 
 class MapPoint(BaseModel):

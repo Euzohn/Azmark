@@ -7,6 +7,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { ActivityForm } from "@/components/activity-form";
+import { LinkedExpenses } from "@/components/linked-expenses";
 import { PageHeader } from "@/components/page-header";
 import { TripLinkCard } from "@/components/trip-link-card";
 import { Badge } from "@/components/ui/badge";
@@ -172,6 +173,7 @@ function ActivityDetail() {
           {data.trip_id ? (
             <TripLinkCard tripId={data.trip_id} label={t("activities.trip")} />
           ) : null}
+          <LinkedExpenses sourceType="activity" sourceId={data.id} />
         </>
       )}
 

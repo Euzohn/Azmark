@@ -5,6 +5,9 @@ from app.models.audit_log import AuditAction, AuditLog
 from app.models.data_source import DataSource
 from app.models.expense import Expense
 from app.models.hotel import Hotel
+from app.models.idempotency_key import IdempotencyKey
+from app.models.import_mapping import ImportBundleMapping
+from app.models.migration import PlaceVisitMapping, TimelineMigrationArchive
 from app.models.note import Note
 from app.models.pending_action import PendingAction, PendingActionKind, PendingActionStatus
 from app.models.personal_access_token import PersonalAccessToken, TokenScope
@@ -23,13 +26,17 @@ __all__ = [
     "DataSource",
     "Expense",
     "Hotel",
+    "IdempotencyKey",
+    "ImportBundleMapping",
     "Note",
     "PendingAction",
     "PendingActionKind",
     "PendingActionStatus",
     "PersonalAccessToken",
     "Place",
+    "PlaceVisitMapping",
     "ProviderSetting",
+    "TimelineMigrationArchive",
     "TokenScope",
     "TransportRecord",
     "Trip",

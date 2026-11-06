@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MapPin, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { PageHeader } from "@/components/page-header";
 import { PlaceForm } from "@/components/place-form";
@@ -14,7 +14,7 @@ import { DateTimeLocalInput } from "@/components/ui/date-input";
 import { Dialog } from "@/components/ui/dialog";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { api, ApiError } from "@/lib/api";
+import { api } from "@/lib/api";
 import { fromZonedInput } from "@/lib/datetime";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
 import type { Place, PlaceInput, TripList } from "@/lib/types";
@@ -34,6 +34,13 @@ function PlaceDetail() {
   const [visitStart, setVisitStart] = useState("");
   const [visitEnd, setVisitEnd] = useState("");
   const [tripMessage, setTripMessage] = useState<string | null>(null);
+  const visitKey = useRef<string | null>(null);
+
+  // A changed visit form is a new operation; only a retry of the same input
+  // reuses the idempotency key.
+  useEffect(() => {
+    visitKey.current = null;
+  }, [tripId, visitStart, visitEnd]);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["place", id],
@@ -44,6 +51,12 @@ function PlaceDetail() {
   const { data: trips } = useQuery<TripList>({
     queryKey: ["trips", { page_size: 100 }],
     queryFn: () => api.listTrips({ page_size: 100 }),
+  });
+
+  const { data: existingVisits } = useQuery({
+    queryKey: ["activities", { trip_id: tripId, place_id: id }],
+    queryFn: () => api.listActivities({ trip_id: tripId, place_id: id, page_size: 100 }),
+    enabled: Boolean(tripId),
   });
 
   const update = useMutation({
@@ -74,29 +87,34 @@ function PlaceDetail() {
   });
 
   const addToTrip = useMutation({
-    mutationFn: () =>
-      api.addTripItem(tripId, {
-        item_type: "place",
-        item_id: id,
-        start_at: fromZonedInput(visitStart),
-        end_at: fromZonedInput(visitEnd),
-      }),
+    mutationFn: () => {
+      if (!visitKey.current) {
+        visitKey.current = crypto.randomUUID();
+      }
+      return api.addTripItem(
+        tripId,
+        {
+          item_type: "place",
+          item_id: id,
+          start_at: fromZonedInput(visitStart),
+          end_at: fromZonedInput(visitEnd),
+        },
+        visitKey.current,
+      );
+    },
     onSuccess: async () => {
+      visitKey.current = null;
       setTripMessage(t("places.addedToTrip"));
       setVisitStart("");
       setVisitEnd("");
       await Promise.all(
-        ["trip", "trips", "dashboard"].map((key) =>
+        ["trip", "trips", "dashboard", "activities"].map((key) =>
           queryClient.invalidateQueries({ queryKey: [key] }),
         ),
       );
     },
-    onError: (error) => {
-      if (error instanceof ApiError && error.status === 409) {
-        setTripMessage(t("places.alreadyInTrip"));
-      } else {
-        setTripMessage(t("common.error"));
-      }
+    onError: () => {
+      setTripMessage(t("common.error"));
     },
   });
 
@@ -208,6 +226,11 @@ function PlaceDetail() {
                   </label>
                 </div>
               </div>
+              {existingVisits && existingVisits.total > 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  {t("places.existingVisits", { count: existingVisits.total })}
+                </p>
+              ) : null}
               <div className="flex items-center gap-3">
                 <Button
                   disabled={!tripId || addToTrip.isPending}
@@ -216,7 +239,11 @@ function PlaceDetail() {
                     addToTrip.mutate();
                   }}
                 >
-                  {addToTrip.isPending ? t("common.loading") : t("places.addToTrip")}
+                  {addToTrip.isPending
+                    ? t("common.loading")
+                    : existingVisits && existingVisits.total > 0
+                      ? t("places.addAnotherVisit")
+                      : t("places.addToTrip")}
                 </Button>
                 {tripMessage ? (
                   <span role="status" className="text-sm text-muted-foreground">

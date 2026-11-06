@@ -1,23 +1,39 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint, Uuid
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+    Uuid,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
 
 
 class TripItem(Base):
-    """Ordered member of a Trip (spec #16).
+    """Ordered projection of a timeline event (spec #16).
 
-    ``item_type``/``item_id`` are polymorphic so transport, hotels, places and
-    activities share one ordered timeline. Transport, hotel and activity items
-    mirror their entity's ``trip_id``; place items are explicit additions.
+    ``item_type`` is one of ``transport``/``hotel``/``activity``; the source
+    entity owns membership and times, while this row keeps the stable item id
+    and the display order. Legacy ``place`` items were converted to ``visit``
+    Activities by migration 0027.
     """
 
     __tablename__ = "trip_items"
     __table_args__ = (
+        CheckConstraint(
+            "item_type IN ('transport', 'hotel', 'activity')",
+            name="ck_trip_items_item_type",
+        ),
         UniqueConstraint("trip_id", "item_type", "item_id", name="uq_trip_items_trip_item"),
+        # One projection per source entity. Moving a record between trips keeps
+        # the same row (and therefore the same stable item id).
+        UniqueConstraint("user_id", "item_type", "item_id", name="uq_trip_items_user_entity"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)

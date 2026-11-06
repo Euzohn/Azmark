@@ -17,6 +17,8 @@ from app.core.timezones import in_timezone
 from app.models.hotel import Hotel
 from app.models.transport_record import TransportRecord
 from app.models.trip import Trip
+from app.models.user import User
+from app.repositories.expense import ExpenseRepository
 from app.repositories.transport import TransportRepository
 from app.schemas.dashboard import (
     BreakdownItem,
@@ -30,6 +32,7 @@ from app.schemas.dashboard import (
     StatisticsTotals,
 )
 from app.services import reference
+from app.services.expense import summarize_expenses
 from app.utils.geo import haversine_km
 
 
@@ -43,6 +46,7 @@ def _naive_utc(dt: datetime) -> datetime:
 class DashboardService:
     def __init__(self, db: Session) -> None:
         self.records = TransportRepository(db)
+        self.expenses = ExpenseRepository(db)
         self.db = db
 
     # ------------------------------------------------------------------
@@ -269,6 +273,12 @@ class DashboardService:
             or 0
         )
 
+        user = self.db.get(User, user_id)
+        report_currency = (user.currency if user else None) or "CNY"
+        expense_summary = summarize_expenses(
+            self.expenses.list_for_user(user_id=user_id), report_currency
+        )
+
         return StatisticsRead(
             totals=StatisticsTotals(
                 countries=len(countries),
@@ -294,6 +304,7 @@ class DashboardService:
             by_station=self._ranked(stations),
             by_train_class=self._ranked(train_classes),
             by_train_seat_type=self._ranked(train_seat_types),
+            expense_summary=expense_summary,
         )
 
     @staticmethod

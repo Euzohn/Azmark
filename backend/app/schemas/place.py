@@ -73,6 +73,17 @@ class PlaceRead(PlaceBase):
     updated_at: datetime
 
 
+class PlaceSummary(BaseModel):
+    """Compact place attached to an Activity card (docs §4.4)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    localized_name: str | None = None
+    city: str | None = None
+
+
 class PlaceList(BaseModel):
     items: list[PlaceRead]
     total: int

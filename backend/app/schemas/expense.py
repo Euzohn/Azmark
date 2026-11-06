@@ -3,7 +3,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # Spend buckets are a small, stable vocabulary so the UI can sum by category.
 # The DB column stays a permissive String(40) for future/imported values.
@@ -25,6 +25,10 @@ EXPENSE_CATEGORIES: tuple[str, ...] = (
     "other",
 )
 
+# Entity vocabulary (docs/data-model.md §3.1). A transport record's own type
+# still says flight/train/other; the link only names the entity kind.
+ExpenseSourceType = Literal["transport", "hotel", "activity"]
+
 
 def _upper_currency(value: str | None) -> str | None:
     return value.strip().upper() if isinstance(value, str) else value
@@ -41,15 +45,31 @@ class ExpenseBase(BaseModel):
     occurred_at: datetime | None = None
     description: str | None = None
     trip_id: uuid.UUID | None = None
+    source_type: ExpenseSourceType | None = None
+    source_id: uuid.UUID | None = None
 
     @field_validator("currency", "converted_currency")
     @classmethod
     def _normalize_currency(cls, value: str | None) -> str | None:
         return _upper_currency(value)
 
+    @model_validator(mode="after")
+    def _check_source_pair(self) -> "ExpenseBase":
+        if (self.source_type is None) != (self.source_id is None):
+            raise ValueError("source_type and source_id must be provided together")
+        return self
+
 
 class ExpenseCreate(ExpenseBase):
-    pass
+    @model_validator(mode="after")
+    def _check_conversion(self) -> "ExpenseCreate":
+        if (self.converted_amount is None) != (self.converted_currency is None):
+            raise ValueError("converted_amount and converted_currency must be provided together")
+        if self.exchange_rate is not None and self.converted_amount is None:
+            raise ValueError("exchange_rate requires converted_amount and converted_currency")
+        if self.exchange_rate is not None and self.exchange_rate <= 0:
+            raise ValueError("exchange_rate must be greater than zero")
+        return self
 
 
 class ExpenseUpdate(BaseModel):
@@ -63,6 +83,8 @@ class ExpenseUpdate(BaseModel):
     occurred_at: datetime | None = None
     description: str | None = None
     trip_id: uuid.UUID | None = None
+    source_type: ExpenseSourceType | None = None
+    source_id: uuid.UUID | None = None
 
     @field_validator("currency", "converted_currency")
     @classmethod
@@ -84,3 +106,22 @@ class ExpenseList(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class ExpenseCurrencyTotal(BaseModel):
+    currency: str
+    amount: Decimal
+
+
+class ExpenseSummary(BaseModel):
+    """Trip spend in the user's report currency (docs §6.6).
+
+    Expenses in another currency without a matching conversion are reported
+    separately instead of being added to the total.
+    """
+
+    report_currency: str
+    converted_total: Decimal
+    converted_count: int
+    unconverted_count: int
+    unconverted: list[ExpenseCurrencyTotal]

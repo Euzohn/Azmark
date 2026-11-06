@@ -241,12 +241,13 @@ id before update_note / delete_note.
 entities and have NO trip of their own. Pass name (required) and type \
 (airport/train_station/bus_station/port/hotel/restaurant/attraction/city/place/\
 other); add country/region/city/district/localized_name/lat/lon/timezone when \
-known. To put a place on a trip timeline, call add_place_to_trip with trip_id \
-and place_id (resolve with list_trips / search_places). A place already on that \
-trip cannot be added twice.
+known. To add a place to a trip timeline, call add_place_to_trip with trip_id \
+and place_id (resolve with list_trips / search_places); it creates a visit \
+Activity. The same place may be visited more than once — search the trip's \
+activities first and only skip when this is the same event being retried.
 - create_activity / update_activity / delete_activity: activities DO belong to \
 a trip (trip_id) and may reference a place (place_id). Pass name (required) and \
-type (sightseeing/dining/shopping/culture/outdoor/event/other), start_at/end_at, \
+type (sightseeing/dining/shopping/culture/outdoor/event/visit/other), start_at/end_at, \
 price, currency, notes; resolve place_id with search_places and trip_id with \
 list_trips rather than guessing. end_at must not be before start_at. When the \
 user says they visited or will visit a place, create an activity linked to that \

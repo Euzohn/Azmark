@@ -4,7 +4,9 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from app.models.activity import Activity
+from app.models.expense import Expense
 from app.models.hotel import Hotel
+from app.models.note import Note
 from app.models.transport_record import TransportRecord
 from app.models.trip import Trip
 from app.models.trip_item import TripItem
@@ -83,6 +85,18 @@ class TripRepository:
         self.db.execute(
             update(Activity)
             .where(Activity.user_id == user_id, Activity.trip_id == trip_id)
+            .values(trip_id=None)
+        )
+        # Expenses and notes are not timeline members; keep them as records
+        # without a trip (and expenses keep their source link).
+        self.db.execute(
+            update(Expense)
+            .where(Expense.user_id == user_id, Expense.trip_id == trip_id)
+            .values(trip_id=None)
+        )
+        self.db.execute(
+            update(Note)
+            .where(Note.user_id == user_id, Note.trip_id == trip_id)
             .values(trip_id=None)
         )
         self.db.commit()
