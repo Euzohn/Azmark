@@ -162,6 +162,41 @@ class ExpenseService:
             raise ExpenseNotFoundError
         return expense
 
+    def prepare_expense(self, *, user_id: uuid.UUID, payload, restore: bool = False) -> Expense:
+        """Validate and derive an unsaved expense (shared with the v2 importer).
+
+        ``restore`` keeps an exported ``occurred_at`` of null as null instead of
+        stamping "now", so a round trip never invents a timestamp.
+        """
+        data = payload.model_dump()
+        source_type = data.get("source_type")
+        source_id = data.get("source_id")
+
+        if (source_type is None) != (source_id is None):
+            raise ExpenseSourceTypeError
+
+        if source_type is not None:
+            if not restore:
+                # A restore already resolved the source inside its bundle and
+                # derived the trip; pending rows are not queryable yet.
+                derived_trip = self._resolve_source(
+                    user_id=user_id, source_type=source_type, source_id=source_id
+                )
+                requested = data.get("trip_id")
+                if requested is not None and requested != derived_trip:
+                    raise ExpenseTripConflictError
+                data["trip_id"] = derived_trip
+        elif not restore:
+            self._check_trip(user_id=user_id, trip_id=data.get("trip_id"))
+
+        self._validate_amounts(data)
+
+        # A spend without a timestamp would sort to the very bottom of the
+        # timeline; default to "now" so it lands where it was recorded.
+        if not restore and data.get("occurred_at") is None:
+            data["occurred_at"] = utcnow()
+        return Expense(user_id=user_id, **data)
+
     def create_expense(self, *, user_id: uuid.UUID, payload) -> Expense:
         expense, _ = self.create_expense_idempotent(user_id=user_id, payload=payload)
         return expense
@@ -196,31 +231,7 @@ class ExpenseService:
                 raise IdempotencyResultGoneError
             return expense, True
 
-        data = payload.model_dump()
-        source_type = data.get("source_type")
-        source_id = data.get("source_id")
-
-        if (source_type is None) != (source_id is None):
-            raise ExpenseSourceTypeError
-
-        if source_type is not None:
-            derived_trip = self._resolve_source(
-                user_id=user_id, source_type=source_type, source_id=source_id
-            )
-            requested = data.get("trip_id")
-            if requested is not None and requested != derived_trip:
-                raise ExpenseTripConflictError
-            data["trip_id"] = derived_trip
-        else:
-            self._check_trip(user_id=user_id, trip_id=data.get("trip_id"))
-
-        self._validate_amounts(data)
-
-        # A spend without a timestamp would sort to the very bottom of the
-        # timeline; default to "now" so it lands where it was recorded.
-        if data.get("occurred_at") is None:
-            data["occurred_at"] = utcnow()
-        expense = Expense(user_id=user_id, **data)
+        expense = self.prepare_expense(user_id=user_id, payload=payload)
         self.db.add(expense)
         self.db.flush()
         idem.complete(

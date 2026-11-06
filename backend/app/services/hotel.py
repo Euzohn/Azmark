@@ -90,9 +90,19 @@ class HotelService:
             raise HotelNotFoundError
         return hotel
 
-    def create_hotel(self, *, user_id: uuid.UUID, payload, force: bool = False) -> Hotel:
+    def prepare_hotel(
+        self,
+        *,
+        user_id: uuid.UUID,
+        payload,
+        force: bool = False,
+        validate_refs: bool = True,
+        restore: bool = False,
+    ) -> Hotel:
+        """Validate, normalize and encrypt an unsaved hotel (docs §10.6)."""
         data = payload.model_dump()
-        self._check_trip(user_id=user_id, trip_id=data.get("trip_id"))
+        if validate_refs:
+            self._check_trip(user_id=user_id, trip_id=data.get("trip_id"))
 
         if not force:
             existing = self._check_duplicate(
@@ -106,14 +116,21 @@ class HotelService:
 
         # Confirmation numbers are sensitive (spec #45/#96): store ciphertext only.
         booking_reference = data.pop("booking_reference", None)
-        data["status"] = self._infer_status(
-            check_in=data["check_in"],
-            check_out=data.get("check_out"),
-            current=data.get("status") if data.get("status") != "scheduled" else None,
-        )
+        # A restore keeps the exported status verbatim; only newly created rows
+        # derive scheduled/completed from the stay dates.
+        if not (restore and data.get("status")):
+            data["status"] = self._infer_status(
+                check_in=data["check_in"],
+                check_out=data.get("check_out"),
+                current=data.get("status") if data.get("status") != "scheduled" else None,
+            )
         hotel = Hotel(user_id=user_id, **data)
         if booking_reference:
             hotel.booking_reference_enc = encrypt_value(booking_reference)
+        return hotel
+
+    def create_hotel(self, *, user_id: uuid.UUID, payload, force: bool = False) -> Hotel:
+        hotel = self.prepare_hotel(user_id=user_id, payload=payload, force=force)
         hotel = self.hotels.create(hotel)
         self.trip_items.sync_hotel(hotel)
         self.db.commit()

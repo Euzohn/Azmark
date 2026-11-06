@@ -90,6 +90,34 @@ class ActivityService:
         activity, _ = self.create_activity_idempotent(user_id=user_id, payload=payload)
         return activity
 
+    def prepare_activity(
+        self,
+        *,
+        user_id: uuid.UUID,
+        payload,
+        validate_refs: bool = True,
+        place_timezone: str | None = None,
+    ) -> Activity:
+        """Validate and derive an unsaved activity (shared with the v2 importer).
+
+        Applies the same trip/place ownership checks and the display-timezone
+        fallback (explicit → place → user, docs §5.2) as normal creation, so an
+        imported bundle cannot produce an activity that creation would reject.
+        The importer passes ``validate_refs=False`` plus the place timezone from
+        the bundle, because pending rows are not queryable yet.
+        """
+        data = payload.model_dump()
+        if validate_refs:
+            self._check_trip(user_id=user_id, trip_id=data.get("trip_id"))
+            self._check_place(user_id=user_id, place_id=data.get("place_id"))
+            if data.get("timezone") is None:
+                data["timezone"] = self._default_timezone(
+                    user_id=user_id, place_id=data.get("place_id")
+                )
+        elif data.get("timezone") is None:
+            data["timezone"] = place_timezone or self._user_timezone(user_id)
+        return Activity(user_id=user_id, **data)
+
     def create_activity_idempotent(
         self,
         *,
@@ -99,7 +127,6 @@ class ActivityService:
         idempotency_operation: str = "create_activity",
     ) -> tuple[Activity, bool]:
         """Create an activity; ``replayed`` is true for an idempotent retry."""
-        data = payload.model_dump()
         idem = IdempotencyService(self.db)
         replay, record, _ = idem.begin(
             user_id=user_id,
@@ -117,14 +144,7 @@ class ActivityService:
                 raise IdempotencyResultGoneError
             return activity, True
 
-        data = dict(data)
-        self._check_trip(user_id=user_id, trip_id=data.get("trip_id"))
-        self._check_place(user_id=user_id, place_id=data.get("place_id"))
-        if data.get("timezone") is None:
-            data["timezone"] = self._default_timezone(
-                user_id=user_id, place_id=data.get("place_id")
-            )
-        activity = Activity(user_id=user_id, **data)
+        activity = self.prepare_activity(user_id=user_id, payload=payload)
         activity = self.activities.create(activity)
         self.trip_items.sync_activity(activity)
         idem.complete(
@@ -141,6 +161,9 @@ class ActivityService:
             place = self.places.get(user_id=user_id, place_id=place_id)
             if place is not None and place.timezone:
                 return place.timezone
+        return self._user_timezone(user_id)
+
+    def _user_timezone(self, user_id: uuid.UUID) -> str | None:
         user = self.db.get(User, user_id)
         return user.timezone if user is not None else None
 

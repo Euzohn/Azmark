@@ -686,3 +686,67 @@ def test_v2_roundtrip_restores_migration_evidence(client, db):
         )
         == 1
     )
+
+
+def test_v2_import_uses_service_defaults(client):
+    """Imported rows go through the business Service layer (docs §10.6)."""
+    token_a = register_and_login(client, "v2_service_a")["access_token"]
+    token_b = register_and_login(client, "v2_service_b")["access_token"]
+    headers_a = auth_headers(token_a)
+    headers_b = auth_headers(token_b)
+
+    trip = client.post("/api/v1/trips", json={"name": "Kyoto"}, headers=headers_a).json()
+    place = client.post(
+        "/api/v1/places",
+        json={
+            "name": "Gion",
+            "type": "attraction",
+            "city": "Kyoto",
+            "timezone": "Asia/Tokyo",
+        },
+        headers=headers_a,
+    ).json()
+    created = client.post(
+        "/api/v1/activities",
+        json={
+            "name": "Evening walk",
+            "type": "visit",
+            "place_id": place["id"],
+            "trip_id": trip["id"],
+            "start_at": "2026-08-03T18:00:00Z",
+        },
+        headers=headers_a,
+    )
+    assert created.status_code == 201, created.text
+    spent = client.post(
+        "/api/v1/expenses",
+        json={"category": "food", "amount": "12.50", "currency": "JPY"},
+        headers=headers_a,
+    )
+    assert spent.status_code == 201, spent.text
+    hotel = client.post(
+        "/api/v1/hotels",
+        json={"hotel": "Ryokan", "check_in": "2020-01-01", "trip_id": trip["id"]},
+        headers=headers_a,
+    )
+    assert hotel.status_code == 201, hotel.text
+    assert hotel.json()["status"] == "completed"
+
+    bundle = client.get("/api/v1/export?format=json", headers=headers_a).json()
+    # An older bundle may omit the activity timezone, carry a null timestamp,
+    # or pin a status that the create-time defaults would otherwise override.
+    bundle["activities"][0]["timezone"] = None
+    bundle["expenses"][0]["occurred_at"] = None
+    bundle["hotels"][0]["status"] = "scheduled"
+
+    response = _commit(client, headers_b, json.dumps(bundle), filename="b.json", fmt="json")
+    assert response.status_code == 200, response.text
+
+    activities_b = client.get("/api/v1/activities", headers=headers_b).json()["items"]
+    assert activities_b[0]["timezone"] == "Asia/Tokyo"
+
+    expenses_b = client.get("/api/v1/expenses", headers=headers_b).json()["items"]
+    assert expenses_b[0]["occurred_at"] is None
+
+    hotels_b = client.get("/api/v1/hotels", headers=headers_b).json()["items"]
+    assert hotels_b[0]["status"] == "scheduled"

@@ -38,9 +38,12 @@ class PlaceService:
             raise PlaceNotFoundError
         return place
 
+    def prepare_place(self, *, user_id: uuid.UUID, payload) -> Place:
+        """Build an unsaved place (shared with the v2 importer)."""
+        return Place(user_id=user_id, **payload.model_dump())
+
     def create_place(self, *, user_id: uuid.UUID, payload) -> Place:
-        place = Place(user_id=user_id, **payload.model_dump())
-        return self.places.create(place)
+        return self.places.create(self.prepare_place(user_id=user_id, payload=payload))
 
     def update_place(self, *, user_id: uuid.UUID, place_id: uuid.UUID, payload) -> Place:
         place = self.get_place(user_id=user_id, place_id=place_id)

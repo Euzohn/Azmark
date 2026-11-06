@@ -510,9 +510,12 @@ class TripService:
         self.get_trip(user_id=user_id, trip_id=trip_id)
         return self.items.repair_timeline(user_id=user_id, trip_id=trip_id)
 
+    def prepare_trip(self, *, user_id: uuid.UUID, payload: TripCreate) -> Trip:
+        """Build an unsaved trip (shared with the v2 importer)."""
+        return Trip(user_id=user_id, **payload.model_dump())
+
     def create_trip(self, *, user_id: uuid.UUID, payload: TripCreate) -> Trip:
-        trip = Trip(user_id=user_id, **payload.model_dump())
-        return self.trips.create(trip)
+        return self.trips.create(self.prepare_trip(user_id=user_id, payload=payload))
 
     def update_trip(self, *, user_id: uuid.UUID, trip_id: uuid.UUID, payload: TripUpdate) -> Trip:
         trip = self.get_trip(user_id=user_id, trip_id=trip_id)

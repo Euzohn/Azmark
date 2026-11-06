@@ -16,7 +16,6 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.crypto import encrypt_value
 from app.models.activity import Activity
 from app.models.expense import Expense
 from app.models.hotel import Hotel
@@ -42,8 +41,14 @@ from app.schemas.place import PlaceCreate
 from app.schemas.status import normalize_record_status, normalize_trip_status
 from app.schemas.transport import FlightCreate, OtherTransportCreate, TrainCreate
 from app.schemas.trip import TripCreate
+from app.services.activity import ActivityService
 from app.services.dedup import iso_full, record_signature, record_signature_from_model
+from app.services.expense import ExpenseService
+from app.services.hotel import HotelService
+from app.services.note import NoteService
+from app.services.place import PlaceService
 from app.services.transport import FlightService, OtherTransportService, TrainService
+from app.services.trip import TripService
 
 EXPORT_VERSION = 2
 PREVIEW_ROW_LIMIT = 200
@@ -852,6 +857,7 @@ class DataTransferService:
         item: dict[str, Any],
         resolved: dict[tuple[str, str], uuid.UUID],
         entity_trip: dict[tuple[str, uuid.UUID], uuid.UUID | None],
+        place_timezones: dict[uuid.UUID, str | None],
     ) -> Any:
         new_id = uuid.uuid4()
         if entity_type == "trip":
@@ -867,7 +873,9 @@ class DataTransferService:
                 "timeline_order_mode": item.get("timeline_order_mode") or "chronological",
             }
             payload = TripCreate.model_validate(data)
-            return Trip(id=new_id, user_id=user_id, **payload.model_dump())
+            trip = TripService(self.db).prepare_trip(user_id=user_id, payload=payload)
+            trip.id = new_id
+            return trip
 
         if entity_type == "place":
             data = {
@@ -887,13 +895,16 @@ class DataTransferService:
                 )
             }
             payload = PlaceCreate.model_validate(data)
-            return Place(id=new_id, user_id=user_id, **payload.model_dump())
+            place = PlaceService(self.db).prepare_place(user_id=user_id, payload=payload)
+            place.id = new_id
+            return place
 
         if entity_type == "transport":
             trip_id = self._resolve_v2_ref(resolved, "trip", item.get("trip_id"), "trip_id")
             record_type = str(item.get("type") or "flight").lower()
             create_model = CREATE_BY_TYPE.get(record_type)
-            if create_model is None:
+            service_class = SERVICE_BY_TYPE.get(record_type)
+            if create_model is None or service_class is None:
                 raise ValueError(f"unsupported transport type '{record_type}'")
             data = {
                 field: item.get(field)
@@ -902,13 +913,12 @@ class DataTransferService:
             }
             data["trip_id"] = trip_id
             payload = create_model.model_validate(data)
-            values = payload.model_dump()
-            sensitive: dict[str, str | None] = {}
-            for field in SENSITIVE_FIELDS:
-                sensitive[field] = values.pop(field, None)
-            record = TransportRecord(id=new_id, user_id=user_id, type=record_type, **values)
-            for field, value in sensitive.items():
-                setattr(record, f"{field}_enc", encrypt_value(value) if value else None)
+            # force=True: a restore is not a new submission, so dedup against
+            # the target user's existing records must not apply.
+            record = service_class(self.db).prepare_record(
+                user_id=user_id, payload=payload, force=True, validate_refs=False
+            )
+            record.id = new_id
             return record
 
         if entity_type == "hotel":
@@ -930,11 +940,10 @@ class DataTransferService:
                 "lon": item.get("lon"),
             }
             payload = HotelCreate.model_validate(data)
-            values = payload.model_dump()
-            booking_reference = values.pop("booking_reference", None)
-            hotel = Hotel(id=new_id, user_id=user_id, **values)
-            if booking_reference:
-                hotel.booking_reference_enc = encrypt_value(booking_reference)
+            hotel = HotelService(self.db).prepare_hotel(
+                user_id=user_id, payload=payload, force=True, validate_refs=False, restore=True
+            )
+            hotel.id = new_id
             return hotel
 
         if entity_type == "activity":
@@ -953,7 +962,14 @@ class DataTransferService:
                 "trip_id": trip_id,
             }
             payload = ActivityCreate.model_validate(data)
-            return Activity(id=new_id, user_id=user_id, **payload.model_dump())
+            activity = ActivityService(self.db).prepare_activity(
+                user_id=user_id,
+                payload=payload,
+                validate_refs=False,
+                place_timezone=(place_timezones.get(place_id) if place_id is not None else None),
+            )
+            activity.id = new_id
+            return activity
 
         if entity_type == "expense":
             trip_id = self._resolve_v2_ref(resolved, "trip", item.get("trip_id"), "trip_id")
@@ -983,7 +999,12 @@ class DataTransferService:
                 "source_id": source_id,
             }
             payload = ExpenseCreate.model_validate(data)
-            return Expense(id=new_id, user_id=user_id, **payload.model_dump())
+            # restore=True keeps a null occurred_at null instead of stamping now.
+            expense = ExpenseService(self.db).prepare_expense(
+                user_id=user_id, payload=payload, restore=True
+            )
+            expense.id = new_id
+            return expense
 
         if entity_type == "note":
             trip_id = self._resolve_v2_ref(resolved, "trip", item.get("trip_id"), "trip_id")
@@ -993,7 +1014,10 @@ class DataTransferService:
                 "trip_id": trip_id,
             }
             payload = NoteCreate.model_validate(data)
-            note = Note(id=new_id, user_id=user_id, **payload.model_dump())
+            note = NoteService(self.db).prepare_note(
+                user_id=user_id, payload=payload, validate_refs=False
+            )
+            note.id = new_id
             created_at = parse_datetime(item.get("created_at"))
             updated_at = parse_datetime(item.get("updated_at"))
             if created_at is not None:
@@ -1111,6 +1135,8 @@ class DataTransferService:
         mappings = self._load_mappings(user_id, bundle_id)
         resolved: dict[tuple[str, str], uuid.UUID] = {}
         entity_trip: dict[tuple[str, uuid.UUID], uuid.UUID | None] = {}
+        place_timezones: dict[uuid.UUID, str | None] = {}
+        failed: set[tuple[str, str]] = set()
         errors: list[ImportRowError] = []
         imported = skipped = trips_created = 0
         row = 0
@@ -1132,9 +1158,12 @@ class DataTransferService:
                     )
                 except ValueError as exc:
                     errors.append(ImportRowError(row=row, field=entity_type, message=str(exc)))
+                    failed.add(key)
                     continue
                 resolved[key] = model.id
                 entity_trip[(entity_type, model.id)] = getattr(model, "trip_id", None)
+                if entity_type == "place":
+                    place_timezones[model.id] = model.timezone
                 if entity_type not in V2_METADATA_TYPES and entity_type != "trip_item":
                     skipped += 1
 
@@ -1142,7 +1171,9 @@ class DataTransferService:
             for item in items:
                 exported_id = self._exported_id(item, entity_type)
                 key = (entity_type, exported_id)
-                if key in resolved:
+                # Do not recreate a row that failed verification under the same
+                # bundle id: its mapping still exists and must not be duplicated.
+                if key in resolved or key in failed:
                     continue
                 try:
                     model = self._build_v2_entity(
@@ -1152,6 +1183,7 @@ class DataTransferService:
                         item=item,
                         resolved=resolved,
                         entity_trip=entity_trip,
+                        place_timezones=place_timezones,
                     )
                 except (ValueError, ValidationError, TypeError) as exc:
                     message = " ".join(str(exc).splitlines()[:3])[:300]
@@ -1160,6 +1192,8 @@ class DataTransferService:
                     continue
                 resolved[key] = model.id
                 entity_trip[(entity_type, model.id)] = getattr(model, "trip_id", None)
+                if entity_type == "place":
+                    place_timezones[model.id] = model.timezone
                 if not dry_run:
                     self.db.add(model)
                     self.db.add(

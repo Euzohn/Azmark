@@ -52,11 +52,15 @@ class NoteService:
             raise NoteNotFoundError
         return note
 
-    def create_note(self, *, user_id: uuid.UUID, payload) -> Note:
+    def prepare_note(self, *, user_id: uuid.UUID, payload, validate_refs: bool = True) -> Note:
+        """Validate an unsaved note (shared with the v2 importer)."""
         data = payload.model_dump()
-        self._check_trip(user_id=user_id, trip_id=data.get("trip_id"))
-        note = Note(user_id=user_id, **data)
-        return self.notes.create(note)
+        if validate_refs:
+            self._check_trip(user_id=user_id, trip_id=data.get("trip_id"))
+        return Note(user_id=user_id, **data)
+
+    def create_note(self, *, user_id: uuid.UUID, payload) -> Note:
+        return self.notes.create(self.prepare_note(user_id=user_id, payload=payload))
 
     def update_note(self, *, user_id: uuid.UUID, note_id: uuid.UUID, payload) -> Note:
         note = self.get_note(user_id=user_id, note_id=note_id)

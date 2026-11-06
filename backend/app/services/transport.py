@@ -110,15 +110,25 @@ class TransportService:
         if inferred:
             data["seat_type"] = inferred
 
-    def create_record(
+    def prepare_record(
         self,
         *,
         user_id: uuid.UUID,
         payload,
         force: bool = False,
+        validate_refs: bool = True,
     ) -> TransportRecord:
+        """Validate, normalize and encrypt an unsaved record.
+
+        Shared with the v2 importer (docs §10.6) so the transport rules — trip
+        ownership, dedup, seat inference and sensitive-field encryption — are
+        never reimplemented by the import path. The importer resolves references
+        from the bundle itself, so it passes ``validate_refs=False`` (rows are
+        still pending and therefore invisible to a query).
+        """
         data = payload.model_dump()
-        self._check_trip(user_id=user_id, trip_id=data.get("trip_id"))
+        if validate_refs:
+            self._check_trip(user_id=user_id, trip_id=data.get("trip_id"))
 
         if not force:
             existing = self._check_duplicate(user_id=user_id, payload=data)
@@ -130,6 +140,16 @@ class TransportService:
         record = TransportRecord(user_id=user_id, type=self.record_type, **data)
         for field, cipher in enc.items():
             setattr(record, f"{field}_enc", cipher)
+        return record
+
+    def create_record(
+        self,
+        *,
+        user_id: uuid.UUID,
+        payload,
+        force: bool = False,
+    ) -> TransportRecord:
+        record = self.prepare_record(user_id=user_id, payload=payload, force=force)
         record = self.records.create(record)
         self.trip_items.sync_transport(record)
         self.db.commit()
