@@ -43,12 +43,13 @@ from app.schemas.transport import FlightCreate, OtherTransportCreate, TrainCreat
 from app.schemas.trip import TripCreate
 from app.services.activity import ActivityService
 from app.services.dedup import iso_full, record_signature, record_signature_from_model
-from app.services.expense import ExpenseService
+from app.services.expense import ExpenseService, ExpenseSourceTypeError, InvalidExpenseAmountsError
 from app.services.hotel import HotelService
 from app.services.note import NoteService
 from app.services.place import PlaceService
 from app.services.transport import FlightService, OtherTransportService, TrainService
 from app.services.trip import TripService
+from app.services.write_lock import lock_user_writes
 
 EXPORT_VERSION = 2
 PREVIEW_ROW_LIMIT = 200
@@ -647,10 +648,12 @@ class DataTransferService:
         format: str,
         content: str,
         mapping: dict[str, str] | None = None,
+        commit: bool = True,
     ) -> ImportResult:
         bundle = self._load_v2_bundle(format, content)
         if bundle is not None:
-            return self._import_v2(user_id, bundle)
+            return self._import_v2(user_id, bundle, commit=commit)
+        lock_user_writes(self.db, user_id)
         columns, raw_rows, trips = self._parse(format, content)
         field_mapping = self._resolve_mapping(columns, mapping)
 
@@ -692,6 +695,8 @@ class DataTransferService:
                     ImportRowError(row=index, field=None, message=str(exc).splitlines()[0][:300])
                 )
                 failed += 1
+        if commit:
+            self.db.commit()
         return ImportResult(
             imported=imported,
             skipped_duplicates=skipped,
@@ -1032,6 +1037,10 @@ class DataTransferService:
             if item_type not in ("transport", "hotel", "activity"):
                 raise ValueError("trip_item has an unsupported item_type")
             item_id = self._resolve_v2_ref(resolved, item_type, item.get("item_id"), "item_id")
+            if trip_id is None or item_id is None:
+                raise ValueError("trip_item requires a trip and source")
+            if entity_trip.get((item_type, item_id)) != trip_id:
+                raise ValueError("trip_item trip_id disagrees with its source record")
             return TripItem(
                 id=new_id,
                 user_id=user_id,
@@ -1132,10 +1141,13 @@ class DataTransferService:
             return 0, 0, 0, [ImportRowError(row=0, field="bundle", message=str(exc))]
 
         bundle_id = sections["bundle_id"]
+        if not dry_run:
+            lock_user_writes(self.db, user_id)
         mappings = self._load_mappings(user_id, bundle_id)
         resolved: dict[tuple[str, str], uuid.UUID] = {}
         entity_trip: dict[tuple[str, uuid.UUID], uuid.UUID | None] = {}
         place_timezones: dict[uuid.UUID, str | None] = {}
+        projected: set[tuple[str, uuid.UUID]] = set()
         failed: set[tuple[str, str]] = set()
         errors: list[ImportRowError] = []
         imported = skipped = trips_created = 0
@@ -1164,6 +1176,8 @@ class DataTransferService:
                 entity_trip[(entity_type, model.id)] = getattr(model, "trip_id", None)
                 if entity_type == "place":
                     place_timezones[model.id] = model.timezone
+                if entity_type == "trip_item":
+                    projected.add((model.item_type, model.item_id))
                 if entity_type not in V2_METADATA_TYPES and entity_type != "trip_item":
                     skipped += 1
 
@@ -1185,8 +1199,14 @@ class DataTransferService:
                         entity_trip=entity_trip,
                         place_timezones=place_timezones,
                     )
-                except (ValueError, ValidationError, TypeError) as exc:
-                    message = " ".join(str(exc).splitlines()[:3])[:300]
+                except (
+                    ValueError,
+                    ValidationError,
+                    TypeError,
+                    ExpenseSourceTypeError,
+                    InvalidExpenseAmountsError,
+                ) as exc:
+                    message = " ".join(str(exc).splitlines()[:3])[:300] or "Invalid expense"
                     errors.append(ImportRowError(row=row, field=entity_type, message=message))
                     row += 1
                     continue
@@ -1194,6 +1214,16 @@ class DataTransferService:
                 entity_trip[(entity_type, model.id)] = getattr(model, "trip_id", None)
                 if entity_type == "place":
                     place_timezones[model.id] = model.timezone
+                if entity_type == "trip_item":
+                    source_key = (model.item_type, model.item_id)
+                    if source_key in projected:
+                        errors.append(
+                            ImportRowError(
+                                row=row, field=entity_type, message="duplicate source projection"
+                            )
+                        )
+                        continue
+                    projected.add(source_key)
                 if not dry_run:
                     self.db.add(model)
                     self.db.add(
@@ -1212,17 +1242,31 @@ class DataTransferService:
                     imported += 1
                 row += 1
 
+        for (entity_type, entity_id), trip_id in entity_trip.items():
+            if entity_type in EXPENSE_SOURCE_TYPES and trip_id is not None:
+                if (entity_type, entity_id) not in projected:
+                    errors.append(
+                        ImportRowError(
+                            row=0,
+                            field="trip_items",
+                            message="source is missing its timeline projection",
+                        )
+                    )
+
         # On errors nothing is committed; the request-scoped session rollback
         # discards every pending row and mapping (docs §10.6 atomic bundle).
         return imported, skipped, trips_created, errors
 
-    def _import_v2(self, user_id: uuid.UUID, bundle: dict[str, Any]) -> ImportResult:
+    def _import_v2(
+        self, user_id: uuid.UUID, bundle: dict[str, Any], *, commit: bool = True
+    ) -> ImportResult:
         imported, skipped, trips_created, errors = self._run_v2(user_id, bundle, dry_run=False)
         if errors:
             detail = errors[0].message
             raise ValueError(f"import failed and was rolled back: {detail}")
         # A single outer commit keeps the bundle atomic (docs §10.6).
-        self.db.commit()
+        if commit:
+            self.db.commit()
         return ImportResult(
             imported=imported,
             skipped_duplicates=skipped,
@@ -1603,7 +1647,7 @@ class DataTransferService:
         service = service_cls(self.db)
         # The import loop already skipped duplicates via `existing`; bypass the
         # service-level check to avoid a second (and uncaught) conflict.
-        service.create_record(user_id=user_id, payload=payload, force=True)
+        service.create_record(user_id=user_id, payload=payload, force=True, commit=False)
 
     def _ensure_trips(
         self, user_id: uuid.UUID, trips: list[dict[str, Any]]
@@ -1632,7 +1676,6 @@ class DataTransferService:
             self.db.flush()
             existing[name] = new_trip.id
             created += 1
-        self.db.commit()
         return existing, created
 
     def _json_safe(self, data: dict[str, Any]) -> dict[str, Any]:

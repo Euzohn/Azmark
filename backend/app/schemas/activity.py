@@ -3,7 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.core.timezones import normalize_timezone
 from app.schemas.place import PlaceSummary
@@ -67,15 +67,16 @@ class ActivityBase(BaseModel):
 
 
 class ActivityCreate(ActivityBase):
-    pass
+    start_at: AwareDatetime | None = None
+    end_at: AwareDatetime | None = None
 
 
 class ActivityUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     type: ActivityType | None = None
     place_id: uuid.UUID | None = None
-    start_at: datetime | None = None
-    end_at: datetime | None = None
+    start_at: AwareDatetime | None = None
+    end_at: AwareDatetime | None = None
     timezone: str | None = Field(default=None, max_length=64)
     price: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     currency: str | None = Field(default=None, min_length=3, max_length=3)

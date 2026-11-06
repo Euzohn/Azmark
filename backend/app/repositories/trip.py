@@ -43,21 +43,30 @@ class TripRepository:
     def get(self, *, user_id: uuid.UUID, trip_id: uuid.UUID) -> Trip | None:
         return self.db.scalar(select(Trip).where(Trip.id == trip_id, Trip.user_id == user_id))
 
-    def create(self, trip: Trip) -> Trip:
+    def create(self, trip: Trip, *, commit: bool = True) -> Trip:
         self.db.add(trip)
-        self.db.commit()
+        if commit:
+            self.db.commit()
+        else:
+            self.db.flush()
         self.db.refresh(trip)
         return trip
 
-    def save(self, trip: Trip) -> Trip:
+    def save(self, trip: Trip, *, commit: bool = True) -> Trip:
         self.db.add(trip)
-        self.db.commit()
+        if commit:
+            self.db.commit()
+        else:
+            self.db.flush()
         self.db.refresh(trip)
         return trip
 
-    def delete(self, trip: Trip) -> None:
+    def delete(self, trip: Trip, *, commit: bool = True) -> None:
         self.db.delete(trip)
-        self.db.commit()
+        if commit:
+            self.db.commit()
+        else:
+            self.db.flush()
 
     def clear_records(self, *, user_id: uuid.UUID, trip_id: uuid.UUID) -> None:
         """Drop trip items and unlink records so nothing is orphaned (spec #57)."""
@@ -99,7 +108,7 @@ class TripRepository:
             .where(Note.user_id == user_id, Note.trip_id == trip_id)
             .values(trip_id=None)
         )
-        self.db.commit()
+        self.db.flush()
 
     def list_records(self, *, user_id: uuid.UUID, trip_id: uuid.UUID) -> list[TransportRecord]:
         """All transport records in the trip, any type (spec #15/#16)."""

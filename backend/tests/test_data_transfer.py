@@ -588,6 +588,33 @@ def test_v1_json_preview_warns_about_unsupported_arrays(client):
     assert any("expenses" in warning for warning in warnings)
     assert any("notes" in warning for warning in warnings)
     assert all("records" not in warning for warning in warnings)
+    assert (
+        _commit(client, headers, json.dumps(legacy), filename="v1.json", fmt="json").status_code
+        == 422
+    )
+    confirmed = client.post(
+        "/api/v1/import",
+        files={"file": ("v1.json", json.dumps(legacy).encode(), "application/json")},
+        data={"format": "json", "confirm_partial": "true"},
+        headers=headers,
+    )
+    assert confirmed.status_code == 200
+
+
+def test_v2_preview_rejects_missing_and_wrong_trip_projection(client):
+    headers = auth_headers(register_and_login(client, "v2_projection_validation")["access_token"])
+    trip = client.post("/api/v1/trips", json={"name": "One"}, headers=headers).json()
+    other = client.post("/api/v1/trips", json={"name": "Two"}, headers=headers).json()
+    client.post("/api/v1/flights", json={**_flight(), "trip_id": trip["id"]}, headers=headers)
+    bundle = client.get("/api/v1/export?format=json", headers=headers).json()
+    projection = bundle["trip_items"][0]
+    bundle["trip_items"] = []
+    preview = _upload(client, headers, json.dumps(bundle), filename="bad.json", fmt="json")
+    assert preview.json()["error_count"] > 0
+    projection["trip_id"] = other["id"]
+    bundle["trip_items"] = [projection]
+    preview = _upload(client, headers, json.dumps(bundle), filename="bad.json", fmt="json")
+    assert preview.json()["error_count"] > 0
 
 
 def test_v2_roundtrip_restores_migration_evidence(client, db):

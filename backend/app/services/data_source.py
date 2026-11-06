@@ -30,6 +30,7 @@ class DataSourceService:
         provider: str | None = None,
         confidence: float | None = None,
         metadata: dict[str, Any] | None = None,
+        commit: bool = True,
     ) -> DataSource:
         source = DataSource(
             user_id=user_id,
@@ -41,7 +42,7 @@ class DataSourceService:
             meta=metadata,
         )
         self.db.add(source)
-        self.db.commit()
+        self.db.commit() if commit else self.db.flush()
         self.db.refresh(source)
         return source
 

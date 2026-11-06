@@ -75,6 +75,7 @@ def create_activity(
             user_id=current_user.id,
             payload=payload,
             idempotency_key=idempotency_key,
+            commit=False,
         )
     except ActivityTripAssignmentError:
         raise HTTPException(
@@ -133,7 +134,7 @@ def update_activity(
 ) -> ActivityRead:
     try:
         activity = service.update_activity(
-            user_id=current_user.id, activity_id=activity_id, payload=payload
+            user_id=current_user.id, activity_id=activity_id, payload=payload, commit=False
         )
     except ActivityNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
@@ -169,7 +170,7 @@ def delete_activity(
     audit: AuditService = Depends(get_audit_service),
 ) -> None:
     try:
-        service.delete_activity(user_id=current_user.id, activity_id=activity_id)
+        service.delete_activity(user_id=current_user.id, activity_id=activity_id, commit=False)
     except ActivityNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
     audit.log(

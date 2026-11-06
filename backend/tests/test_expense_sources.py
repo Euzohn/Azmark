@@ -240,6 +240,33 @@ def test_bound_expense_cannot_drop_its_trip(client):
     )
 
 
+def test_bound_expense_rejects_explicit_null_on_create_and_partial_source_patch(client):
+    headers = _headers(client, "expense_explicit_source_contract")
+    trip = _trip(client, headers)
+    flight = _flight(client, headers, trip["id"])
+    source = {"source_type": "transport", "source_id": flight["id"]}
+    response = client.post(
+        "/api/v1/expenses", json={**SPEND, **source, "trip_id": None}, headers=headers
+    )
+    assert response.status_code == 422
+    expense = _expense(client, headers, **source)
+    response = client.patch(
+        f"/api/v1/expenses/{expense['id']}", json={"source_type": "transport"}, headers=headers
+    )
+    assert response.status_code == 422
+
+
+def test_activity_source_lock_targets_only_activity_table_on_postgres():
+    from sqlalchemy.dialects import postgresql
+
+    from app.models.activity import Activity
+
+    statement = select(Activity).with_for_update(of=Activity)
+    sql = str(statement.compile(dialect=postgresql.dialect()))
+    assert "LEFT OUTER JOIN places" in sql
+    assert "FOR UPDATE OF activities" in sql
+
+
 def test_removing_a_stale_projection_keeps_the_source_trip(client, db):
     headers = _headers(client, "expense_source_stale")
     trip = _trip(client, headers)

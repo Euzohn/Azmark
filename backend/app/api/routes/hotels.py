@@ -80,7 +80,9 @@ def create_hotel(
     audit: AuditService = Depends(get_audit_service),
 ):
     try:
-        hotel = service.create_hotel(user_id=current_user.id, payload=payload, force=force)
+        hotel = service.create_hotel(
+            user_id=current_user.id, payload=payload, force=force, commit=False
+        )
     except HotelTripAssignmentError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found"
@@ -133,7 +135,9 @@ def update_hotel(
     audit: AuditService = Depends(get_audit_service),
 ):
     try:
-        hotel = service.update_hotel(user_id=current_user.id, hotel_id=hotel_id, payload=payload)
+        hotel = service.update_hotel(
+            user_id=current_user.id, hotel_id=hotel_id, payload=payload, commit=False
+        )
     except HotelNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
     audit.log(
@@ -211,7 +215,7 @@ async def geocode_hotel(
         result.provider,
     )
     hotel = service.set_coordinates(
-        user_id=current_user.id, hotel_id=hotel_id, lat=result.lat, lon=result.lon
+        user_id=current_user.id, hotel_id=hotel_id, lat=result.lat, lon=result.lon, commit=False
     )
     audit.log(
         action=AuditAction.UPDATE_RECORD,
@@ -240,13 +244,13 @@ def delete_hotel(
         service.get_hotel(user_id=current_user.id, hotel_id=hotel_id)
     except HotelNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
-    attachments.delete_for_resource(
-        user_id=current_user.id, resource_type="hotel", resource_id=hotel_id
-    )
     try:
-        service.delete_hotel(user_id=current_user.id, hotel_id=hotel_id)
+        service.delete_hotel(user_id=current_user.id, hotel_id=hotel_id, commit=False)
     except HotelNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
+    objects = attachments.stage_delete_for_resource(
+        user_id=current_user.id, resource_type="hotel", resource_id=hotel_id
+    )
     audit.log(
         action=AuditAction.DELETE_RECORD,
         user_id=current_user.id,
@@ -254,3 +258,4 @@ def delete_hotel(
         resource_id=str(hotel_id),
         request=request,
     )
+    attachments.cleanup_staged_objects(objects)

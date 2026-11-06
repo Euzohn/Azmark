@@ -39,7 +39,13 @@ class TripItemRepository:
         return int(current) + 1 if current is not None else 0
 
     def _sync_entity(
-        self, *, item_type: str, entity_id: uuid.UUID, user_id: uuid.UUID, trip_id: uuid.UUID | None
+        self,
+        *,
+        item_type: str,
+        entity_id: uuid.UUID,
+        user_id: uuid.UUID,
+        trip_id: uuid.UUID | None,
+        append_to_partition: bool = False,
     ) -> None:
         item = self.db.scalar(
             select(TripItem).where(
@@ -71,17 +77,22 @@ class TripItemRepository:
                 # the target's order; chronological display recomputes anyway.
                 item.sort_order = self._next_sort_order(user_id=user_id, trip_id=trip_id)
                 item.trip_id = trip_id
+            elif append_to_partition:
+                # A start time crossing the scheduled boundary enters the end
+                # of its new manual partition without disturbing the others.
+                item.sort_order = self._next_sort_order(user_id=user_id, trip_id=trip_id)
         self.db.flush()
 
     def get_for_record(self, *, user_id: uuid.UUID, record_id: uuid.UUID) -> TripItem | None:
         return self._get_entity(user_id=user_id, item_type=TRANSPORT_ITEM, entity_id=record_id)
 
-    def sync_transport(self, record: TransportRecord) -> None:
+    def sync_transport(self, record: TransportRecord, *, append_to_partition: bool = False) -> None:
         self._sync_entity(
             item_type=TRANSPORT_ITEM,
             entity_id=record.id,
             user_id=record.user_id,
             trip_id=record.trip_id,
+            append_to_partition=append_to_partition,
         )
 
     def delete_transport(self, *, user_id: uuid.UUID, record_id: uuid.UUID) -> None:
@@ -110,12 +121,13 @@ class TripItemRepository:
     def get_for_activity(self, *, user_id: uuid.UUID, activity_id: uuid.UUID) -> TripItem | None:
         return self._get_entity(user_id=user_id, item_type=ACTIVITY_ITEM, entity_id=activity_id)
 
-    def sync_activity(self, activity: Activity) -> None:
+    def sync_activity(self, activity: Activity, *, append_to_partition: bool = False) -> None:
         self._sync_entity(
             item_type=ACTIVITY_ITEM,
             entity_id=activity.id,
             user_id=activity.user_id,
             trip_id=activity.trip_id,
+            append_to_partition=append_to_partition,
         )
 
     def delete_activity(self, *, user_id: uuid.UUID, activity_id: uuid.UUID) -> None:
@@ -162,7 +174,9 @@ class TripItemRepository:
         self.db.refresh(item)
         return item
 
-    def repair_timeline(self, *, user_id: uuid.UUID, trip_id: uuid.UUID) -> dict[str, int]:
+    def repair_timeline(
+        self, *, user_id: uuid.UUID, trip_id: uuid.UUID, commit: bool = True
+    ) -> dict[str, int]:
         """Bring projections in line with source records, without reading.
 
         - deletes projections whose source is gone or no longer belongs here;
@@ -240,16 +254,27 @@ class TripItemRepository:
                 self.db.flush()
                 added += 1
 
-        self.db.commit()
+        if commit:
+            self.db.commit()
+        else:
+            self.db.flush()
         return {"added": added, "fixed": fixed, "removed": removed}
 
     def set_order(
-        self, *, user_id: uuid.UUID, trip_id: uuid.UUID, item_ids: list[uuid.UUID]
+        self,
+        *,
+        user_id: uuid.UUID,
+        trip_id: uuid.UUID,
+        item_ids: list[uuid.UUID],
+        commit: bool = True,
     ) -> None:
         items = {item.id: item for item in self.list_for_trip(user_id=user_id, trip_id=trip_id)}
         for index, item_id in enumerate(item_ids):
             items[item_id].sort_order = index
-        self.db.commit()
+        if commit:
+            self.db.commit()
+        else:
+            self.db.flush()
 
     def trip_order_mode(self, *, user_id: uuid.UUID, trip_id: uuid.UUID) -> str:
         mode = self.db.scalar(

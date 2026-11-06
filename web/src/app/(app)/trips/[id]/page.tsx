@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Fragment } from "react";
 import {
   ArrowDown,
   ArrowLeft,
@@ -277,6 +278,12 @@ export default function TripDetailPage() {
             />
           ) : (
             displayItems.map((item, index) => {
+              const sectionHeading = item.is_unscheduled &&
+                (index === 0 || !displayItems[index - 1].is_unscheduled) ? (
+                  <h3 className="pt-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    {t("trips.unscheduled")}
+                  </h3>
+                ) : null;
               const itemIndex = item.id
                 ? items.findIndex((entry) => entry.id === item.id)
                 : -1;
@@ -312,6 +319,8 @@ export default function TripDetailPage() {
               if (item.activity) {
                 const activity = item.activity;
                 return (
+                  <Fragment key={item.id ?? `${item.item_type}-${item.item_id}`}>
+                  {sectionHeading}
                   <Card
                     key={item.id ?? `${item.item_type}-${item.item_id}`}
                     interactive
@@ -361,11 +370,14 @@ export default function TripDetailPage() {
                       {orderControls}
                     </CardContent>
                   </Card>
+                  </Fragment>
                 );
               }
               if (item.hotel) {
                 const hotel = item.hotel;
                 return (
+                  <Fragment key={item.id ?? `${item.item_type}-${item.item_id}`}>
+                  {sectionHeading}
                   <Card
                     key={hotel.id}
                     interactive
@@ -394,6 +406,7 @@ export default function TripDetailPage() {
                       {orderControls}
                     </CardContent>
                   </Card>
+                  </Fragment>
                 );
               }
               const record = item.record;
@@ -406,6 +419,8 @@ export default function TripDetailPage() {
                   ? `/transports/${record.id}`
                   : `/flights/${record.id}`;
               return (
+                <Fragment key={item.id ?? `${item.item_type}-${item.item_id}`}>
+                {sectionHeading}
                 <Card
                   key={record.id}
                   interactive
@@ -459,6 +474,7 @@ export default function TripDetailPage() {
                     <FlightStatusBadge status={record.status} />
                   </CardContent>
                 </Card>
+                </Fragment>
               );
             })
           )}

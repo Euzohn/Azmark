@@ -53,7 +53,7 @@ def create_trip(
     service: TripService = Depends(get_trip_service),
     audit: AuditService = Depends(get_audit_service),
 ):
-    trip = service.create_trip(user_id=current_user.id, payload=payload)
+    trip = service.create_trip(user_id=current_user.id, payload=payload, commit=False)
     audit.log(
         action=AuditAction.CREATE_RECORD,
         user_id=current_user.id,
@@ -103,9 +103,15 @@ def update_trip(
     audit: AuditService = Depends(get_audit_service),
 ):
     try:
-        trip = service.update_trip(user_id=current_user.id, trip_id=trip_id, payload=payload)
+        trip = service.update_trip(
+            user_id=current_user.id, trip_id=trip_id, payload=payload, commit=False
+        )
     except TripNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
+    except TimelineRepairRequiredError:
+        raise HTTPException(
+            status_code=409, detail="Timeline repair required before switching mode"
+        ) from None
     audit.log(
         action=AuditAction.UPDATE_RECORD,
         user_id=current_user.id,
@@ -127,7 +133,9 @@ def reorder_trip_items(
     audit: AuditService = Depends(get_audit_service),
 ) -> None:
     try:
-        service.reorder_items(user_id=current_user.id, trip_id=trip_id, item_ids=payload.item_ids)
+        service.reorder_items(
+            user_id=current_user.id, trip_id=trip_id, item_ids=payload.item_ids, commit=False
+        )
     except TripNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
     except TimelineRepairRequiredError:
@@ -159,7 +167,7 @@ def repair_timeline(
 ) -> dict[str, int]:
     """Rebuild missing/stale timeline projections explicitly (never on read)."""
     try:
-        counts = service.repair_timeline(user_id=current_user.id, trip_id=trip_id)
+        counts = service.repair_timeline(user_id=current_user.id, trip_id=trip_id, commit=False)
     except TripNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
     audit.log(
@@ -189,6 +197,7 @@ def update_trip_item(
             trip_id=trip_id,
             item_id=item_id,
             payload=payload,
+            commit=False,
         )
     except TripNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
@@ -230,6 +239,7 @@ def add_trip_item(
             trip_id=trip_id,
             payload=payload,
             idempotency_key=idempotency_key,
+            commit=False,
         )
     except TripNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
@@ -278,7 +288,7 @@ def delete_trip_item(
 ) -> None:
     """Detach a source record from the trip without deleting the record."""
     try:
-        service.remove_item(user_id=current_user.id, trip_id=trip_id, item_id=item_id)
+        service.remove_item(user_id=current_user.id, trip_id=trip_id, item_id=item_id, commit=False)
     except TripNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
     except TripItemNotFoundError:
@@ -307,7 +317,8 @@ def delete_trip(
     audit: AuditService = Depends(get_audit_service),
 ) -> None:
     try:
-        service.delete_trip(user_id=current_user.id, trip_id=trip_id)
+        # AuditService.log commits both the unlink/delete and its audit entry.
+        service.delete_trip(user_id=current_user.id, trip_id=trip_id, commit=False)
     except TripNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
     audit.log(

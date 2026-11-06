@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.activity import ActivityRead
 from app.schemas.attachment import AttachmentRead
@@ -94,8 +94,8 @@ class TripItemCreate(BaseModel):
 
     item_type: Literal["place"]
     item_id: uuid.UUID
-    start_at: datetime | None = None
-    end_at: datetime | None = None
+    start_at: AwareDatetime | None = None
+    end_at: AwareDatetime | None = None
 
     @model_validator(mode="after")
     def _check_window(self) -> "TripItemCreate":

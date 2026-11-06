@@ -13,7 +13,6 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.idempotency_key import IdempotencyKey
@@ -88,17 +87,12 @@ class IdempotencyService:
             status="pending",
             expires_at=datetime.now(UTC) + TTL,
         )
-        try:
-            with self.db.begin_nested():
-                self.db.add(record)
-                self.db.flush()
-        except IntegrityError:
-            # Another transaction won the race; its result is authoritative.
-            existing = self._get(user_id=user_id, operation=operation, key=key)
-            if existing is None:
-                raise
-            self._check(existing, digest)
-            return existing, None, digest
+        # Callers hold the user write lock before begin(), serializing same-key
+        # reservations on PostgreSQL. Flush into the outer transaction: releasing
+        # a savepoint on SQLite can otherwise persist a reservation before the
+        # business operation and its audit entry have committed.
+        self.db.add(record)
+        self.db.flush()
         return None, record, digest
 
     @staticmethod

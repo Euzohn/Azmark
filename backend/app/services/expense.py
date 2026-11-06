@@ -15,6 +15,7 @@ from app.repositories.trip import TripRepository
 from app.schemas.expense import ExpenseCurrencyTotal, ExpenseSummary
 from app.services.expense_source import SOURCE_ACTIVITY, SOURCE_HOTEL, SOURCE_TRANSPORT
 from app.services.idempotency import IdempotencyResultGoneError, IdempotencyService
+from app.services.write_lock import lock_user_writes
 
 ZERO = Decimal("0")
 
@@ -106,7 +107,9 @@ class ExpenseService:
         else:
             raise ExpenseSourceTypeError
         entity = self.db.scalar(
-            select(model).where(model.id == source_id, model.user_id == user_id).with_for_update()
+            select(model)
+            .where(model.id == source_id, model.user_id == user_id)
+            .with_for_update(of=model)
         )
         if entity is None:
             raise ExpenseSourceNotFoundError
@@ -183,7 +186,7 @@ class ExpenseService:
                     user_id=user_id, source_type=source_type, source_id=source_id
                 )
                 requested = data.get("trip_id")
-                if requested is not None and requested != derived_trip:
+                if "trip_id" in payload.model_fields_set and requested != derived_trip:
                     raise ExpenseTripConflictError
                 data["trip_id"] = derived_trip
         elif not restore:
@@ -197,8 +200,8 @@ class ExpenseService:
             data["occurred_at"] = utcnow()
         return Expense(user_id=user_id, **data)
 
-    def create_expense(self, *, user_id: uuid.UUID, payload) -> Expense:
-        expense, _ = self.create_expense_idempotent(user_id=user_id, payload=payload)
+    def create_expense(self, *, user_id: uuid.UUID, payload, commit: bool = True) -> Expense:
+        expense, _ = self.create_expense_idempotent(user_id=user_id, payload=payload, commit=commit)
         return expense
 
     def create_expense_idempotent(
@@ -208,12 +211,14 @@ class ExpenseService:
         payload,
         idempotency_key: str | None = None,
         idempotency_operation: str = "create_expense",
+        commit: bool = True,
     ) -> tuple[Expense, bool]:
         """Create an expense; ``replayed`` is true for an idempotent retry.
 
         The record-detail "add expense" flow can be retried by the browser or a
         mobile network without writing the same spend twice (docs §4.3).
         """
+        lock_user_writes(self.db, user_id)
         idem = IdempotencyService(self.db)
         replay, record, _ = idem.begin(
             user_id=user_id,
@@ -240,11 +245,15 @@ class ExpenseService:
             response={"id": str(expense.id), "amount": str(expense.amount)},
         )
         # One commit keeps the row and the idempotency result atomic.
-        self.db.commit()
+        if commit:
+            self.db.commit()
         self.db.refresh(expense)
         return expense, False
 
-    def update_expense(self, *, user_id: uuid.UUID, expense_id: uuid.UUID, payload) -> Expense:
+    def update_expense(
+        self, *, user_id: uuid.UUID, expense_id: uuid.UUID, payload, commit: bool = True
+    ) -> Expense:
+        lock_user_writes(self.db, user_id)
         expense = self.get_expense(user_id=user_id, expense_id=expense_id)
         data = payload.model_dump(exclude_unset=True)
 
@@ -255,6 +264,8 @@ class ExpenseService:
 
         source_touched = "source_type" in data or "source_id" in data
         if source_touched:
+            if ("source_type" in data) != ("source_id" in data):
+                raise ExpenseSourceTypeError
             source_type = data.get("source_type", _MISSING)
             source_id = data.get("source_id", _MISSING)
             if source_type is _MISSING:
@@ -324,8 +335,11 @@ class ExpenseService:
 
         for field, value in data.items():
             setattr(expense, field, value)
-        return self.expenses.save(expense)
+        return self.expenses.save(expense, commit=commit)
 
-    def delete_expense(self, *, user_id: uuid.UUID, expense_id: uuid.UUID) -> None:
+    def delete_expense(
+        self, *, user_id: uuid.UUID, expense_id: uuid.UUID, commit: bool = True
+    ) -> None:
+        lock_user_writes(self.db, user_id)
         expense = self.get_expense(user_id=user_id, expense_id=expense_id)
-        self.expenses.delete(expense)
+        self.expenses.delete(expense, commit=commit)

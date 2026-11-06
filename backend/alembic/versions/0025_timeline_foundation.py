@@ -107,42 +107,26 @@ def upgrade() -> None:
     )
 
     # -- one projection per source entity ----------------------------------
-    # Older data could hold the same source in several trips. Keep the oldest
-    # projection and let the explicit repair command rebuild a missing one.
+    # Never discard older projections here: a repeated place is a distinct
+    # historical visit and its old row may be the only copy of its time.
     duplicate_rows = bind.execute(
         sa.text(
             """
             SELECT user_id, item_type, item_id
               FROM trip_items
+             WHERE item_type <> 'place'
              GROUP BY user_id, item_type, item_id
             HAVING COUNT(*) > 1
             """
         )
     ).fetchall()
-    for user_id, item_type, item_id in duplicate_rows:
-        ids = bind.execute(
-            sa.text(
-                """
-                SELECT id
-                  FROM trip_items
-                 WHERE user_id = :user_id
-                   AND item_type = :item_type
-                   AND item_id = :item_id
-                 ORDER BY sort_order, id
-                """
-            ),
-            {"user_id": user_id, "item_type": item_type, "item_id": item_id},
-        ).fetchall()
-        for (item_id_to_delete,) in ids[1:]:
-            bind.execute(
-                sa.text("DELETE FROM trip_items WHERE id = :id"),
-                {"id": item_id_to_delete},
-            )
-    op.create_unique_constraint(
-        "uq_trip_items_user_entity",
-        "trip_items",
-        ["user_id", "item_type", "item_id"],
-    )
+    if duplicate_rows:
+        raise RuntimeError(
+            "Duplicate timeline projections need explicit preservation and repair before "
+            "migration 0025; no rows were deleted. Restore or retain the pre-switch backup."
+        )
+    # Place rows can represent multiple independent visits to the same place.
+    # 0027 converts them first and only then creates the entity constraint.
 
     # -- idempotency keys ---------------------------------------------------
     op.create_table(
@@ -177,7 +161,11 @@ def downgrade() -> None:
     op.drop_index("ix_idempotency_keys_user_id", table_name="idempotency_keys")
     op.drop_table("idempotency_keys")
 
-    op.drop_constraint("uq_trip_items_user_entity", "trip_items", type_="unique")
+    if any(
+        constraint["name"] == "uq_trip_items_user_entity"
+        for constraint in sa.inspect(op.get_bind()).get_unique_constraints("trip_items")
+    ):
+        op.drop_constraint("uq_trip_items_user_entity", "trip_items", type_="unique")
 
     op.drop_index("ix_expenses_user_trip", table_name="expenses")
     op.drop_index("ix_expenses_source", table_name="expenses")

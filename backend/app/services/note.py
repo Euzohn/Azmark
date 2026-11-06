@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.models.note import Note
 from app.repositories.note import NoteRepository
 from app.repositories.trip import TripRepository
+from app.services.write_lock import lock_user_writes
 
 
 class NoteNotFoundError(Exception):
@@ -59,10 +60,14 @@ class NoteService:
             self._check_trip(user_id=user_id, trip_id=data.get("trip_id"))
         return Note(user_id=user_id, **data)
 
-    def create_note(self, *, user_id: uuid.UUID, payload) -> Note:
-        return self.notes.create(self.prepare_note(user_id=user_id, payload=payload))
+    def create_note(self, *, user_id: uuid.UUID, payload, commit: bool = True) -> Note:
+        lock_user_writes(self.db, user_id)
+        return self.notes.create(self.prepare_note(user_id=user_id, payload=payload), commit=commit)
 
-    def update_note(self, *, user_id: uuid.UUID, note_id: uuid.UUID, payload) -> Note:
+    def update_note(
+        self, *, user_id: uuid.UUID, note_id: uuid.UUID, payload, commit: bool = True
+    ) -> Note:
+        lock_user_writes(self.db, user_id)
         note = self.get_note(user_id=user_id, note_id=note_id)
         data = payload.model_dump(exclude_unset=True)
         if "trip_id" in data:
@@ -74,8 +79,9 @@ class NoteService:
 
         for field, value in data.items():
             setattr(note, field, value)
-        return self.notes.save(note)
+        return self.notes.save(note, commit=commit)
 
-    def delete_note(self, *, user_id: uuid.UUID, note_id: uuid.UUID) -> None:
+    def delete_note(self, *, user_id: uuid.UUID, note_id: uuid.UUID, commit: bool = True) -> None:
+        lock_user_writes(self.db, user_id)
         note = self.get_note(user_id=user_id, note_id=note_id)
-        self.notes.delete(note)
+        self.notes.delete(note, commit=commit)

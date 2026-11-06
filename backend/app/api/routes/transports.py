@@ -60,7 +60,7 @@ def create_other_transport(
 ):
     try:
         record = service.create_record(
-            user_id=current_user.id, payload=payload, force=force
+            user_id=current_user.id, payload=payload, force=force, commit=False
         )
     except RecordNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
@@ -75,9 +75,7 @@ def create_other_transport(
                     "service_number": existing.service_number,
                     "carrier": existing.carrier,
                     "departure_time": (
-                        existing.departure_time.isoformat()
-                        if existing.departure_time
-                        else None
+                        existing.departure_time.isoformat() if existing.departure_time else None
                     ),
                     "departure_timezone": existing.departure_timezone,
                     "origin": existing.origin,
@@ -119,7 +117,7 @@ def update_other_transport(
 ):
     try:
         record = service.update_record(
-            user_id=current_user.id, record_id=record_id, payload=payload
+            user_id=current_user.id, record_id=record_id, payload=payload, commit=False
         )
     except RecordNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
@@ -147,13 +145,13 @@ def delete_other_transport(
         service.get_record(user_id=current_user.id, record_id=record_id)
     except RecordNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
-    attachments.delete_for_resource(
-        user_id=current_user.id, resource_type="transport", resource_id=record_id
-    )
     try:
-        service.delete_record(user_id=current_user.id, record_id=record_id)
+        service.delete_record(user_id=current_user.id, record_id=record_id, commit=False)
     except RecordNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
+    objects = attachments.stage_delete_for_resource(
+        user_id=current_user.id, resource_type="transport", resource_id=record_id
+    )
     audit.log(
         action=AuditAction.DELETE_RECORD,
         user_id=current_user.id,
@@ -161,3 +159,4 @@ def delete_other_transport(
         resource_id=str(record_id),
         request=request,
     )
+    attachments.cleanup_staged_objects(objects)

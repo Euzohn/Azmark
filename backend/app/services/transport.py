@@ -11,6 +11,7 @@ from app.repositories.trip_item import TripItemRepository
 from app.services.dedup import record_signature
 from app.services.expense_source import SOURCE_TRANSPORT, clear_source, sync_source_trip
 from app.services.seating import infer_train_seat_type
+from app.services.write_lock import lock_user_writes
 
 
 class RecordNotFoundError(Exception):
@@ -148,17 +149,23 @@ class TransportService:
         user_id: uuid.UUID,
         payload,
         force: bool = False,
+        commit: bool = True,
     ) -> TransportRecord:
+        lock_user_writes(self.db, user_id)
         record = self.prepare_record(user_id=user_id, payload=payload, force=force)
         record = self.records.create(record)
         self.trip_items.sync_transport(record)
-        self.db.commit()
+        if commit:
+            self.db.commit()
         return record
 
     def update_record(
-        self, *, user_id: uuid.UUID, record_id: uuid.UUID, payload
+        self, *, user_id: uuid.UUID, record_id: uuid.UUID, payload, commit: bool = True
     ) -> TransportRecord:
+        lock_user_writes(self.db, user_id)
         record = self.get_record(user_id=user_id, record_id=record_id)
+        was_unscheduled = record.departure_time is None
+        previous_trip_id = record.trip_id
         data = payload.model_dump(exclude_unset=True)
         if "trip_id" in data:
             self._check_trip(user_id=user_id, trip_id=data["trip_id"])
@@ -177,18 +184,29 @@ class TransportService:
             trip_id=record.trip_id,
         )
         record = self.records.save(record)
-        self.trip_items.sync_transport(record)
-        self.db.commit()
+        self.trip_items.sync_transport(
+            record,
+            append_to_partition=(
+                previous_trip_id == record.trip_id
+                and was_unscheduled != (record.departure_time is None)
+            ),
+        )
+        if commit:
+            self.db.commit()
         return record
 
-    def delete_record(self, *, user_id: uuid.UUID, record_id: uuid.UUID) -> None:
+    def delete_record(
+        self, *, user_id: uuid.UUID, record_id: uuid.UUID, commit: bool = True
+    ) -> None:
+        lock_user_writes(self.db, user_id)
         record = self.get_record(user_id=user_id, record_id=record_id)
         # Delete the source first so its row lock arbitrates a concurrent
         # expense bind. The later clear then always sees that expense.
         self.records.delete(record)
         clear_source(self.db, user_id=user_id, source_type=SOURCE_TRANSPORT, source_id=record.id)
         self.trip_items.delete_transport(user_id=user_id, record_id=record.id)
-        self.db.commit()
+        if commit:
+            self.db.commit()
 
 
 class FlightService(TransportService):

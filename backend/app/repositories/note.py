@@ -61,18 +61,18 @@ class NoteRepository:
         )
         return list(self.db.scalars(stmt))
 
-    def create(self, note: Note) -> Note:
+    def create(self, note: Note, *, commit: bool = True) -> Note:
         self.db.add(note)
-        self.db.commit()
+        self.db.commit() if commit else self.db.flush()
         self.db.refresh(note)
         return note
 
-    def save(self, note: Note) -> Note:
+    def save(self, note: Note, *, commit: bool = True) -> Note:
         self.db.add(note)
-        self.db.commit()
+        self.db.commit() if commit else self.db.flush()
         self.db.refresh(note)
         return note
 
-    def delete(self, note: Note) -> None:
+    def delete(self, note: Note, *, commit: bool = True) -> None:
         self.db.delete(note)
-        self.db.commit()
+        self.db.commit() if commit else self.db.flush()

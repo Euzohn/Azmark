@@ -50,18 +50,18 @@ class PlaceRepository:
     def get(self, *, user_id: uuid.UUID, place_id: uuid.UUID) -> Place | None:
         return self.db.scalar(select(Place).where(Place.id == place_id, Place.user_id == user_id))
 
-    def create(self, place: Place) -> Place:
+    def create(self, place: Place, *, commit: bool = True) -> Place:
         self.db.add(place)
-        self.db.commit()
+        self.db.commit() if commit else self.db.flush()
         self.db.refresh(place)
         return place
 
-    def save(self, place: Place) -> Place:
+    def save(self, place: Place, *, commit: bool = True) -> Place:
         self.db.add(place)
-        self.db.commit()
+        self.db.commit() if commit else self.db.flush()
         self.db.refresh(place)
         return place
 
-    def delete(self, place: Place) -> None:
+    def delete(self, place: Place, *, commit: bool = True) -> None:
         self.db.delete(place)
-        self.db.commit()
+        self.db.commit() if commit else self.db.flush()

@@ -110,6 +110,7 @@ async def import_data(
     file: Annotated[UploadFile, File()],
     format: Annotated[str | None, Form()] = None,
     mapping: Annotated[str | None, Form()] = None,
+    confirm_partial: Annotated[bool, Form()] = False,
     current_user: User = Depends(get_current_user),
     service: DataTransferService = Depends(get_data_transfer_service),
     sources: DataSourceService = Depends(get_data_source_service),
@@ -119,8 +120,10 @@ async def import_data(
     fmt = format or _infer_format(file.filename, content)
     mapping_dict = _parse_mapping(mapping)
     try:
+        if service._v1_warnings(fmt, content) and not confirm_partial:
+            raise ValueError("v1 import omits unsupported data; explicit confirmation required")
         result = service.import_records(
-            user_id=current_user.id, format=fmt, content=content, mapping=mapping_dict
+            user_id=current_user.id, format=fmt, content=content, mapping=mapping_dict, commit=False
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
@@ -137,6 +140,7 @@ async def import_data(
             "failed": result.failed,
             "trips_created": result.trips_created,
         },
+        commit=False,
     )
     audit.log(
         action=AuditAction.IMPORT,

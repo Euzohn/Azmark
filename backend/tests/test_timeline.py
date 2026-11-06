@@ -228,3 +228,92 @@ def test_trip_item_row_has_no_event_time_columns():
     columns = set(TripItem.__table__.columns.keys())
     assert "start_at" not in columns
     assert "end_at" not in columns
+
+
+def test_chronological_groups_by_day_and_switch_preserves_display_order(client):
+    headers = _headers(client, "timeline_mixed_dates")
+    trip = _trip(client, headers)
+    hotel = client.post(
+        "/api/v1/hotels",
+        json={"hotel": "Later", "check_in": "2026-05-01", "trip_id": trip["id"]},
+        headers=headers,
+    ).json()
+    flight = _flight(client, headers, trip["id"])
+    items = _detail(client, headers, trip["id"])["items"]
+    assert [item["item_id"] for item in items] == [flight["id"], hotel["id"]]
+    ids = [item["id"] for item in items]
+    assert (
+        client.put(
+            f"/api/v1/trips/{trip['id']}/items/order", json={"item_ids": ids}, headers=headers
+        ).status_code
+        == 204
+    )
+    assert (
+        client.patch(
+            f"/api/v1/trips/{trip['id']}", json={"timeline_order_mode": "manual"}, headers=headers
+        ).status_code
+        == 200
+    )
+    assert [item["id"] for item in _detail(client, headers, trip["id"])["items"]] == ids
+
+
+def test_event_time_inputs_require_offsets(client):
+    headers = _headers(client, "timeline_naive_time")
+    response = client.post(
+        "/api/v1/activities",
+        json={"name": "No zone", "start_at": "2026-05-01T10:00:00"},
+        headers=headers,
+    )
+    assert response.status_code == 422
+    response = client.post(
+        "/api/v1/flights",
+        json={**FLIGHT, "departure_time": "2026-05-01T10:00:00"},
+        headers=headers,
+    )
+    assert response.status_code == 422
+
+
+def test_manual_partition_changes_append_to_destination(client):
+    headers = _headers(client, "timeline_partition_append")
+    trip = _trip(client, headers)
+    assert (
+        client.patch(
+            f"/api/v1/trips/{trip['id']}", json={"timeline_order_mode": "manual"}, headers=headers
+        ).status_code
+        == 200
+    )
+    activities = []
+    for name, start in [("A", "2026-05-01T10:00:00Z"), ("B", None), ("C", None)]:
+        response = client.post(
+            "/api/v1/activities",
+            json={"name": name, "trip_id": trip["id"], "start_at": start},
+            headers=headers,
+        )
+        assert response.status_code == 201, response.text
+        activities.append(response.json())
+    assert (
+        client.patch(
+            f"/api/v1/activities/{activities[0]['id']}", json={"start_at": None}, headers=headers
+        ).status_code
+        == 200
+    )
+    items = _detail(client, headers, trip["id"])["items"]
+    assert [item["activity"]["name"] for item in items] == ["B", "C", "A"]
+    assert (
+        client.patch(
+            f"/api/v1/activities/{activities[1]['id']}",
+            json={"start_at": "2026-05-02T10:00:00Z"},
+            headers=headers,
+        ).status_code
+        == 200
+    )
+    assert (
+        client.patch(
+            f"/api/v1/activities/{activities[2]['id']}",
+            json={"start_at": "2026-05-01T10:00:00Z"},
+            headers=headers,
+        ).status_code
+        == 200
+    )
+    items = _detail(client, headers, trip["id"])["items"]
+    assert [item["activity"]["name"] for item in items] == ["B", "C", "A"]

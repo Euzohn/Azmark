@@ -11,6 +11,7 @@ from app.repositories.trip import TripRepository
 from app.repositories.trip_item import TripItemRepository
 from app.services.expense_source import SOURCE_ACTIVITY, clear_source, sync_source_trip
 from app.services.idempotency import IdempotencyResultGoneError, IdempotencyService
+from app.services.write_lock import lock_user_writes
 
 
 class ActivityNotFoundError(Exception):
@@ -85,9 +86,11 @@ class ActivityService:
             raise ActivityNotFoundError
         return activity
 
-    def create_activity(self, *, user_id: uuid.UUID, payload) -> Activity:
+    def create_activity(self, *, user_id: uuid.UUID, payload, commit: bool = True) -> Activity:
         """Create an activity through the generic service dispatch."""
-        activity, _ = self.create_activity_idempotent(user_id=user_id, payload=payload)
+        activity, _ = self.create_activity_idempotent(
+            user_id=user_id, payload=payload, commit=commit
+        )
         return activity
 
     def prepare_activity(
@@ -125,8 +128,10 @@ class ActivityService:
         payload,
         idempotency_key: str | None = None,
         idempotency_operation: str = "create_activity",
+        commit: bool = True,
     ) -> tuple[Activity, bool]:
         """Create an activity; ``replayed`` is true for an idempotent retry."""
+        lock_user_writes(self.db, user_id)
         idem = IdempotencyService(self.db)
         replay, record, _ = idem.begin(
             user_id=user_id,
@@ -152,7 +157,8 @@ class ActivityService:
             resource_id=activity.id,
             response={"id": str(activity.id), "name": activity.name, "type": activity.type},
         )
-        self.db.commit()
+        if commit:
+            self.db.commit()
         return activity, False
 
     def _default_timezone(self, *, user_id: uuid.UUID, place_id: uuid.UUID | None) -> str | None:
@@ -167,8 +173,13 @@ class ActivityService:
         user = self.db.get(User, user_id)
         return user.timezone if user is not None else None
 
-    def update_activity(self, *, user_id: uuid.UUID, activity_id: uuid.UUID, payload) -> Activity:
+    def update_activity(
+        self, *, user_id: uuid.UUID, activity_id: uuid.UUID, payload, commit: bool = True
+    ) -> Activity:
+        lock_user_writes(self.db, user_id)
         activity = self.get_activity(user_id=user_id, activity_id=activity_id)
+        was_unscheduled = activity.start_at is None
+        previous_trip_id = activity.trip_id
         data = payload.model_dump(exclude_unset=True)
         if "trip_id" in data:
             self._check_trip(user_id=user_id, trip_id=data["trip_id"])
@@ -197,14 +208,25 @@ class ActivityService:
             trip_id=activity.trip_id,
         )
         activity = self.activities.save(activity)
-        self.trip_items.sync_activity(activity)
-        self.db.commit()
+        self.trip_items.sync_activity(
+            activity,
+            append_to_partition=(
+                previous_trip_id == activity.trip_id
+                and was_unscheduled != (activity.start_at is None)
+            ),
+        )
+        if commit:
+            self.db.commit()
         return activity
 
-    def delete_activity(self, *, user_id: uuid.UUID, activity_id: uuid.UUID) -> None:
+    def delete_activity(
+        self, *, user_id: uuid.UUID, activity_id: uuid.UUID, commit: bool = True
+    ) -> None:
+        lock_user_writes(self.db, user_id)
         activity = self.get_activity(user_id=user_id, activity_id=activity_id)
         # Delete first to lock the source row before clearing linked expenses.
         self.activities.delete(activity)
         clear_source(self.db, user_id=user_id, source_type=SOURCE_ACTIVITY, source_id=activity.id)
         self.trip_items.delete_activity(user_id=user_id, activity_id=activity.id)
-        self.db.commit()
+        if commit:
+            self.db.commit()

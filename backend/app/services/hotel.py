@@ -10,6 +10,7 @@ from app.repositories.trip import TripRepository
 from app.repositories.trip_item import TripItemRepository
 from app.services.dedup import hotel_signature
 from app.services.expense_source import SOURCE_HOTEL, clear_source, sync_source_trip
+from app.services.write_lock import lock_user_writes
 
 
 class HotelNotFoundError(Exception):
@@ -129,14 +130,21 @@ class HotelService:
             hotel.booking_reference_enc = encrypt_value(booking_reference)
         return hotel
 
-    def create_hotel(self, *, user_id: uuid.UUID, payload, force: bool = False) -> Hotel:
+    def create_hotel(
+        self, *, user_id: uuid.UUID, payload, force: bool = False, commit: bool = True
+    ) -> Hotel:
+        lock_user_writes(self.db, user_id)
         hotel = self.prepare_hotel(user_id=user_id, payload=payload, force=force)
         hotel = self.hotels.create(hotel)
         self.trip_items.sync_hotel(hotel)
-        self.db.commit()
+        if commit:
+            self.db.commit()
         return hotel
 
-    def update_hotel(self, *, user_id: uuid.UUID, hotel_id: uuid.UUID, payload) -> Hotel:
+    def update_hotel(
+        self, *, user_id: uuid.UUID, hotel_id: uuid.UUID, payload, commit: bool = True
+    ) -> Hotel:
+        lock_user_writes(self.db, user_id)
         hotel = self.get_hotel(user_id=user_id, hotel_id=hotel_id)
         data = payload.model_dump(exclude_unset=True)
         if "trip_id" in data:
@@ -166,26 +174,37 @@ class HotelService:
         )
         hotel = self.hotels.save(hotel)
         self.trip_items.sync_hotel(hotel)
-        self.db.commit()
+        if commit:
+            self.db.commit()
         return hotel
 
-    def delete_hotel(self, *, user_id: uuid.UUID, hotel_id: uuid.UUID) -> None:
+    def delete_hotel(self, *, user_id: uuid.UUID, hotel_id: uuid.UUID, commit: bool = True) -> None:
+        lock_user_writes(self.db, user_id)
         hotel = self.get_hotel(user_id=user_id, hotel_id=hotel_id)
         # Delete first to lock the source row before clearing linked expenses.
         self.hotels.delete(hotel)
         clear_source(self.db, user_id=user_id, source_type=SOURCE_HOTEL, source_id=hotel.id)
         self.trip_items.delete_hotel(user_id=user_id, hotel_id=hotel.id)
-        self.db.commit()
+        if commit:
+            self.db.commit()
 
     def set_coordinates(
-        self, *, user_id: uuid.UUID, hotel_id: uuid.UUID, lat: float, lon: float
+        self,
+        *,
+        user_id: uuid.UUID,
+        hotel_id: uuid.UUID,
+        lat: float,
+        lon: float,
+        commit: bool = True,
     ) -> Hotel:
         """Attach map coordinates from the explicit geocode action (spec #10)."""
+        lock_user_writes(self.db, user_id)
         hotel = self.get_hotel(user_id=user_id, hotel_id=hotel_id)
         hotel.lat = lat
         hotel.lon = lon
         hotel = self.hotels.save(hotel)
-        self.db.commit()
+        if commit:
+            self.db.commit()
         return hotel
 
     # -- pending-action surface ------------------------------------------------
@@ -193,8 +212,14 @@ class HotelService:
     # names the transport services expose, so an agent can propose a hotel stay
     # the same way it proposes a flight. These delegate to the hotel-specific
     # methods above.
-    def create_record(self, *, user_id: uuid.UUID, payload, force: bool = False) -> Hotel:
-        return self.create_hotel(user_id=user_id, payload=payload, force=force)
+    def create_record(
+        self, *, user_id: uuid.UUID, payload, force: bool = False, commit: bool = True
+    ) -> Hotel:
+        return self.create_hotel(user_id=user_id, payload=payload, force=force, commit=commit)
 
-    def update_record(self, *, user_id: uuid.UUID, record_id: uuid.UUID, payload) -> Hotel:
-        return self.update_hotel(user_id=user_id, hotel_id=record_id, payload=payload)
+    def update_record(
+        self, *, user_id: uuid.UUID, record_id: uuid.UUID, payload, commit: bool = True
+    ) -> Hotel:
+        return self.update_hotel(
+            user_id=user_id, hotel_id=record_id, payload=payload, commit=commit
+        )

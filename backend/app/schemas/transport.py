@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
 from app.core.timezones import normalize_timezone
 from app.schemas.status import RecordStatus
@@ -54,6 +54,10 @@ class FlightBase(BaseModel):
 
 
 class FlightCreate(FlightBase):
+    departure_time: AwareDatetime | None = None
+    arrival_time: AwareDatetime | None = None
+    actual_departure_time: AwareDatetime | None = None
+    actual_arrival_time: AwareDatetime | None = None
     origin: str = Field(min_length=1, max_length=120)
     destination: str = Field(min_length=1, max_length=120)
     status: RecordStatus = "scheduled"
@@ -66,10 +70,10 @@ class FlightUpdate(BaseModel):
         return _normalize_tz(value)
 
     status: RecordStatus | None = None
-    departure_time: datetime | None = None
-    arrival_time: datetime | None = None
-    actual_departure_time: datetime | None = None
-    actual_arrival_time: datetime | None = None
+    departure_time: AwareDatetime | None = None
+    arrival_time: AwareDatetime | None = None
+    actual_departure_time: AwareDatetime | None = None
+    actual_arrival_time: AwareDatetime | None = None
     departure_timezone: str | None = Field(default=None, max_length=64)
     arrival_timezone: str | None = Field(default=None, max_length=64)
     origin: str | None = Field(default=None, max_length=120)
@@ -154,6 +158,10 @@ class TrainBase(BaseModel):
 
 
 class TrainCreate(TrainBase):
+    departure_time: AwareDatetime | None = None
+    arrival_time: AwareDatetime | None = None
+    actual_departure_time: AwareDatetime | None = None
+    actual_arrival_time: AwareDatetime | None = None
     origin: str = Field(min_length=1, max_length=120)
     destination: str = Field(min_length=1, max_length=120)
     status: RecordStatus = "scheduled"
@@ -166,10 +174,10 @@ class TrainUpdate(BaseModel):
         return _normalize_tz(value)
 
     status: RecordStatus | None = None
-    departure_time: datetime | None = None
-    arrival_time: datetime | None = None
-    actual_departure_time: datetime | None = None
-    actual_arrival_time: datetime | None = None
+    departure_time: AwareDatetime | None = None
+    arrival_time: AwareDatetime | None = None
+    actual_departure_time: AwareDatetime | None = None
+    actual_arrival_time: AwareDatetime | None = None
     departure_timezone: str | None = Field(default=None, max_length=64)
     arrival_timezone: str | None = Field(default=None, max_length=64)
     origin: str | None = Field(default=None, max_length=120)
@@ -246,6 +254,10 @@ class OtherTransportBase(BaseModel):
 
 
 class OtherTransportCreate(OtherTransportBase):
+    departure_time: AwareDatetime | None = None
+    arrival_time: AwareDatetime | None = None
+    actual_departure_time: AwareDatetime | None = None
+    actual_arrival_time: AwareDatetime | None = None
     origin: str = Field(min_length=1, max_length=120)
     destination: str = Field(min_length=1, max_length=120)
     status: RecordStatus = "scheduled"
@@ -258,10 +270,10 @@ class OtherTransportUpdate(BaseModel):
         return _normalize_tz(value)
 
     status: RecordStatus | None = None
-    departure_time: datetime | None = None
-    arrival_time: datetime | None = None
-    actual_departure_time: datetime | None = None
-    actual_arrival_time: datetime | None = None
+    departure_time: AwareDatetime | None = None
+    arrival_time: AwareDatetime | None = None
+    actual_departure_time: AwareDatetime | None = None
+    actual_arrival_time: AwareDatetime | None = None
     departure_timezone: str | None = Field(default=None, max_length=64)
     arrival_timezone: str | None = Field(default=None, max_length=64)
     origin: str | None = Field(default=None, max_length=120)

@@ -45,6 +45,7 @@ from app.services.transport import (
     TrainService,
 )
 from app.services.trip import TripNotFoundError, TripService
+from app.services.write_lock import lock_user_writes
 
 #: How long an agent's proposal stays actionable. Agents can be slow, humans
 #: slower, but an unbounded queue of stale writes is a liability.
@@ -121,18 +122,22 @@ _LABELS = {
 def _service_create(record_type: str, service, *, user_id, payload, force: bool):
     """Dispatch a confirmed create to the entity's own service method."""
     if record_type in _DUPLICATE_TYPES:
-        return service.create_record(user_id=user_id, payload=payload, force=force)
-    return getattr(service, f"create_{record_type}")(user_id=user_id, payload=payload)
+        return service.create_record(user_id=user_id, payload=payload, force=force, commit=False)
+    return getattr(service, f"create_{record_type}")(user_id=user_id, payload=payload, commit=False)
 
 
 def _service_update(record_type: str, service, *, user_id, record_id, payload):
     """Dispatch a confirmed update; the id kwarg name varies per entity."""
     if record_type in _DUPLICATE_TYPES:
-        return service.update_record(user_id=user_id, record_id=record_id, payload=payload)
+        return service.update_record(
+            user_id=user_id, record_id=record_id, payload=payload, commit=False
+        )
     if record_type == "trip":
-        return service.update_trip(user_id=user_id, trip_id=record_id, payload=payload)
+        return service.update_trip(
+            user_id=user_id, trip_id=record_id, payload=payload, commit=False
+        )
     return getattr(service, f"update_{record_type}")(
-        user_id=user_id, **{f"{record_type}_id": record_id}, payload=payload
+        user_id=user_id, **{f"{record_type}_id": record_id}, payload=payload, commit=False
     )
 
 
@@ -367,18 +372,24 @@ class PendingActionService:
 
     # -- decisions --------------------------------------------------------
 
-    def reject(self, *, user_id: uuid.UUID, action_id: uuid.UUID) -> PendingAction:
+    def reject(
+        self, *, user_id: uuid.UUID, action_id: uuid.UUID, commit: bool = True
+    ) -> PendingAction:
+        lock_user_writes(self.db, user_id)
         record = self.get(user_id=user_id, action_id=action_id)
         if record.status != PendingActionStatus.PENDING:
             raise PendingActionStateError(record.status)
         record.status = PendingActionStatus.REJECTED
         record.resolved_at = utcnow()
-        self.db.commit()
+        if commit:
+            self.db.commit()
+        else:
+            self.db.flush()
         self.db.refresh(record)
         return record
 
     def confirm(
-        self, *, user_id: uuid.UUID, action_id: uuid.UUID, force: bool = False
+        self, *, user_id: uuid.UUID, action_id: uuid.UUID, force: bool = False, commit: bool = True
     ) -> tuple[PendingAction, Any]:
         """Execute a proposal and return the written record.
 
@@ -386,6 +397,7 @@ class PendingActionService:
         pending: the user can look at the existing record and retry with
         ``force=True``, exactly like the duplicate flow in the web UI (#41).
         """
+        lock_user_writes(self.db, user_id)
         record = self.get(user_id=user_id, action_id=action_id)
         if record.status != PendingActionStatus.PENDING:
             raise PendingActionStateError(record.status)
@@ -402,6 +414,7 @@ class PendingActionService:
                         payload=schema.model_validate(payload),
                         idempotency_key=f"pending:{record.id}",
                         idempotency_operation="confirm_pending_action",
+                        commit=False,
                     )
                 elif record.record_type == "expense":
                     # Same guarantee for a spend approved from the AI inbox.
@@ -410,6 +423,7 @@ class PendingActionService:
                         payload=schema.model_validate(payload),
                         idempotency_key=f"pending:{record.id}",
                         idempotency_operation="confirm_pending_action",
+                        commit=False,
                     )
                 else:
                     written = _service_create(
@@ -431,6 +445,7 @@ class PendingActionService:
             else:  # pragma: no cover - guarded at creation
                 raise PendingActionInvalidError(record.action)
         except (DuplicateRecordError, DuplicateHotelError):
+            self.db.rollback()
             raise
         except (
             RecordNotFoundError,
@@ -444,6 +459,13 @@ class PendingActionService:
             ValueError,
             KeyError,
         ) as exc:
+            # The operation may already have flushed a reservation or changed
+            # other rows. Never commit those writes with the failure status.
+            self.db.rollback()
+            lock_user_writes(self.db, user_id)
+            record = self.get(user_id=user_id, action_id=action_id)
+            if record.status != PendingActionStatus.PENDING:
+                raise PendingActionStateError(record.status) from None
             record.status = PendingActionStatus.FAILED
             record.error = str(exc)[:500]
             record.resolved_at = utcnow()
@@ -454,6 +476,9 @@ class PendingActionService:
         record.status = PendingActionStatus.CONFIRMED
         record.result = {"record_type": record.record_type, "record_id": str(written.id)}
         record.resolved_at = utcnow()
-        self.db.commit()
+        if commit:
+            self.db.commit()
+        else:
+            self.db.flush()
         self.db.refresh(record)
         return record, written

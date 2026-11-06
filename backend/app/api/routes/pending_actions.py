@@ -87,7 +87,7 @@ def confirm_pending_action(
 ) -> PendingActionRead:
     try:
         record, written = service.confirm(
-            user_id=current_user.id, action_id=action_id, force=payload.force
+            user_id=current_user.id, action_id=action_id, force=payload.force, commit=False
         )
     except PendingActionNotFoundError:
         raise _not_found() from None
@@ -157,7 +157,7 @@ def reject_pending_action(
     audit: AuditService = Depends(get_audit_service),
 ) -> PendingActionRead:
     try:
-        record = service.reject(user_id=current_user.id, action_id=action_id)
+        record = service.reject(user_id=current_user.id, action_id=action_id, commit=False)
     except PendingActionNotFoundError:
         raise _not_found() from None
     except PendingActionStateError as exc:

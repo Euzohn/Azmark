@@ -74,7 +74,9 @@ docker compose start api web
 ## Schema 迁移与回滚
 
 - `deploy.sh` 在重建后执行 `alembic upgrade head`；迁移失败时不要手工跳过，先看日志并保留切换前备份。
-- migration `0029_drop_trip_item_times` 删除 `trip_items.start_at/end_at`。事件时间改由 Transport / Hotel / Activity 提供，原值已归档在 `timeline_migration_archives`；该 migration 的 downgrade 只重建空列，**不会恢复时间值**。需要回退到旧结构时，恢复切换前的数据库备份。
+- migration `0029_drop_trip_item_times` 删除 `trip_items.start_at/end_at`。旧版迁移仅归档 place 条目，**不能假定其他条目的旧时间或被 0025 删除的重复条目已归档**。修订后的迁移在删列前检查档案，不满足时会阻断；但已经执行过的迁移不会重跑，也不能找回丢失数据。downgrade 只重建空列，**不会恢复时间值**。
+- 服务器应确认 `alembic current` 和切换前备份：若已执行 0029，先保全备份、核查历史数据及档案覆盖；不要盲目 downgrade 或覆盖当前库。若尚未执行 0029，暂停写入并先审计、处理时间差异与投影，确认每条旧数据归档后再运行迁移。重复旧 place 到访应逐条保留；未归档差异需要用户选择，不能自动猜测。
+- 当前尚无完整的用户范围差异审计和选择工具；迁移遇到阻断时不要伪造档案或跳过检查，需先完成处理方案并验证。
 - v2 JSON 导出包含记录、关系、迁移档案与排序，但不包含附件二进制；附件仍需依赖本文的 MinIO/S3 对象备份与恢复。
 
 ## 外部 S3 / R2 / OSS

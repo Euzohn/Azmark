@@ -45,6 +45,7 @@ from app.services.expense_source import (
     SOURCE_TRANSPORT,
     sync_source_trip,
 )
+from app.services.write_lock import lock_user_writes
 
 
 class TripNotFoundError(Exception):
@@ -251,7 +252,19 @@ class TripService:
                 )
             )
         else:
-            presented.sort(key=lambda entry: entry[1])
+            presented.sort(
+                key=lambda entry: _sort_key(
+                    entry[0],
+                    local_day=(
+                        entry[0].start_date
+                        if entry[0].time_kind == "date"
+                        else _local_date(entry[0].start_at, entry[0].timezone, fallback_tz)
+                        if entry[0].start_at
+                        else None
+                    ),
+                    start=entry[0].start_at,
+                )
+            )
 
         # Expose the display index as sort_order. In manual mode the persisted
         # order is already the display order, so the value is unchanged.
@@ -382,8 +395,10 @@ class TripService:
         trip_id: uuid.UUID,
         payload: TripItemCreate,
         idempotency_key: str | None = None,
+        commit: bool = True,
     ) -> tuple[TripItemRead, bool]:
         """Create a visit Activity for a place (legacy add-item facade, spec #16)."""
+        lock_user_writes(self.db, user_id)
         self.get_trip(user_id=user_id, trip_id=trip_id)
         if payload.item_type != "place":
             raise InvalidTripItemTypeError
@@ -402,6 +417,7 @@ class TripService:
             ),
             idempotency_key=idempotency_key,
             idempotency_operation="add_place_to_trip",
+            commit=commit,
         )
         projection = self.items.get_for_activity(user_id=user_id, activity_id=activity.id)
         item = self._present_activity(
@@ -411,8 +427,11 @@ class TripService:
         )
         return item, replayed
 
-    def remove_item(self, *, user_id: uuid.UUID, trip_id: uuid.UUID, item_id: uuid.UUID) -> None:
+    def remove_item(
+        self, *, user_id: uuid.UUID, trip_id: uuid.UUID, item_id: uuid.UUID, commit: bool = True
+    ) -> None:
         """Remove a source record from a trip without deleting the record."""
+        lock_user_writes(self.db, user_id)
         self.get_trip(user_id=user_id, trip_id=trip_id)
         item = self.items.get(user_id=user_id, trip_id=trip_id, item_id=item_id)
         if item is None:
@@ -458,11 +477,18 @@ class TripService:
             raise InvalidTripItemTypeError
 
         self.items.delete_item(item)
-        self.db.commit()
+        if commit:
+            self.db.commit()
 
     def reorder_items(
-        self, *, user_id: uuid.UUID, trip_id: uuid.UUID, item_ids: list[uuid.UUID]
+        self,
+        *,
+        user_id: uuid.UUID,
+        trip_id: uuid.UUID,
+        item_ids: list[uuid.UUID],
+        commit: bool = True,
     ) -> None:
+        lock_user_writes(self.db, user_id)
         trip, entries = self._load_timeline(user_id=user_id, trip_id=trip_id)
         current_ids = [entry.id for entry, _ in entries]
         if any(item_id is None for item_id in current_ids):
@@ -471,11 +497,16 @@ class TripService:
             raise InvalidTripOrderError
 
         if trip.timeline_order_mode != "manual":
-            groups = {group for _, group in entries}
-            if len(groups) > 1:
+            groups_by_id = {entry.id: group for entry, group in entries}
+            if [groups_by_id[item_id] for item_id in item_ids] != [group for _, group in entries]:
                 raise InvalidTripOrderError
+        elif [entry.is_unscheduled for entry, _ in entries] != [
+            {entry.id: entry.is_unscheduled for entry, _ in entries}[item_id]
+            for item_id in item_ids
+        ]:
+            raise InvalidTripOrderError
 
-        self.items.set_order(user_id=user_id, trip_id=trip_id, item_ids=item_ids)
+        self.items.set_order(user_id=user_id, trip_id=trip_id, item_ids=item_ids, commit=commit)
 
     def update_item(
         self,
@@ -484,8 +515,10 @@ class TripService:
         trip_id: uuid.UUID,
         item_id: uuid.UUID,
         payload: TripItemUpdate,
+        commit: bool = True,
     ) -> None:
         """Move one item to a new display position. Times are source-owned."""
+        lock_user_writes(self.db, user_id)
         self.get_trip(user_id=user_id, trip_id=trip_id)
         item = self.items.get(user_id=user_id, trip_id=trip_id, item_id=item_id)
         if item is None:
@@ -502,28 +535,47 @@ class TripService:
         if item_id not in ids:
             raise TripItemNotFoundError
         ids.remove(item_id)
-        index = min(payload.sort_order, len(ids))
+        if payload.sort_order > len(ids):
+            raise InvalidTripOrderError
+        index = payload.sort_order
         ids.insert(index, item_id)
-        self.reorder_items(user_id=user_id, trip_id=trip_id, item_ids=ids)
+        self.reorder_items(user_id=user_id, trip_id=trip_id, item_ids=ids, commit=commit)
 
-    def repair_timeline(self, *, user_id: uuid.UUID, trip_id: uuid.UUID) -> dict[str, int]:
+    def repair_timeline(
+        self, *, user_id: uuid.UUID, trip_id: uuid.UUID, commit: bool = True
+    ) -> dict[str, int]:
+        lock_user_writes(self.db, user_id)
         self.get_trip(user_id=user_id, trip_id=trip_id)
-        return self.items.repair_timeline(user_id=user_id, trip_id=trip_id)
+        return self.items.repair_timeline(user_id=user_id, trip_id=trip_id, commit=commit)
 
     def prepare_trip(self, *, user_id: uuid.UUID, payload: TripCreate) -> Trip:
         """Build an unsaved trip (shared with the v2 importer)."""
         return Trip(user_id=user_id, **payload.model_dump())
 
-    def create_trip(self, *, user_id: uuid.UUID, payload: TripCreate) -> Trip:
-        return self.trips.create(self.prepare_trip(user_id=user_id, payload=payload))
+    def create_trip(self, *, user_id: uuid.UUID, payload: TripCreate, commit: bool = True) -> Trip:
+        return self.trips.create(self.prepare_trip(user_id=user_id, payload=payload), commit=commit)
 
-    def update_trip(self, *, user_id: uuid.UUID, trip_id: uuid.UUID, payload: TripUpdate) -> Trip:
+    def update_trip(
+        self, *, user_id: uuid.UUID, trip_id: uuid.UUID, payload: TripUpdate, commit: bool = True
+    ) -> Trip:
+        lock_user_writes(self.db, user_id)
         trip = self.get_trip(user_id=user_id, trip_id=trip_id)
-        for field, value in payload.model_dump(exclude_unset=True).items():
+        data = payload.model_dump(exclude_unset=True)
+        if data.get("timeline_order_mode") == "manual" and trip.timeline_order_mode != "manual":
+            _, entries = self._load_timeline(user_id=user_id, trip_id=trip_id)
+            if any(entry.id is None for entry, _ in entries):
+                raise TimelineRepairRequiredError
+            projections = {
+                item.id: item for item in self.items.list_for_trip(user_id=user_id, trip_id=trip_id)
+            }
+            for index, (entry, _) in enumerate(entries):
+                projections[entry.id].sort_order = index
+        for field, value in data.items():
             setattr(trip, field, value)
-        return self.trips.save(trip)
+        return self.trips.save(trip, commit=commit)
 
-    def delete_trip(self, *, user_id: uuid.UUID, trip_id: uuid.UUID) -> None:
+    def delete_trip(self, *, user_id: uuid.UUID, trip_id: uuid.UUID, commit: bool = True) -> None:
+        lock_user_writes(self.db, user_id)
         trip = self.get_trip(user_id=user_id, trip_id=trip_id)
         self.trips.clear_records(user_id=user_id, trip_id=trip_id)
-        self.trips.delete(trip)
+        self.trips.delete(trip, commit=commit)

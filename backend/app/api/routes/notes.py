@@ -45,7 +45,7 @@ def create_note(
     audit: AuditService = Depends(get_audit_service),
 ):
     try:
-        note = service.create_note(user_id=current_user.id, payload=payload)
+        note = service.create_note(user_id=current_user.id, payload=payload, commit=False)
     except NoteTripAssignmentError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found"
@@ -83,7 +83,9 @@ def update_note(
     audit: AuditService = Depends(get_audit_service),
 ):
     try:
-        note = service.update_note(user_id=current_user.id, note_id=note_id, payload=payload)
+        note = service.update_note(
+            user_id=current_user.id, note_id=note_id, payload=payload, commit=False
+        )
     except NoteTripAssignmentError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found"
@@ -110,7 +112,7 @@ def delete_note(
     audit: AuditService = Depends(get_audit_service),
 ) -> None:
     try:
-        service.delete_note(user_id=current_user.id, note_id=note_id)
+        service.delete_note(user_id=current_user.id, note_id=note_id, commit=False)
     except NoteNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
     audit.log(

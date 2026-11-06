@@ -81,6 +81,7 @@ def create_expense(
             user_id=current_user.id,
             payload=payload,
             idempotency_key=idempotency_key,
+            commit=False,
         )
     except ExpenseSourceNotFoundError:
         raise HTTPException(
@@ -143,7 +144,7 @@ def update_expense(
 ):
     try:
         expense = service.update_expense(
-            user_id=current_user.id, expense_id=expense_id, payload=payload
+            user_id=current_user.id, expense_id=expense_id, payload=payload, commit=False
         )
     except ExpenseSourceNotFoundError:
         raise HTTPException(
@@ -179,7 +180,7 @@ def delete_expense(
     audit: AuditService = Depends(get_audit_service),
 ) -> None:
     try:
-        service.delete_expense(user_id=current_user.id, expense_id=expense_id)
+        service.delete_expense(user_id=current_user.id, expense_id=expense_id, commit=False)
     except ExpenseNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
     audit.log(

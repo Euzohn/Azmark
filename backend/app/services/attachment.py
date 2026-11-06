@@ -14,6 +14,7 @@ from app.services.storage import (
     StorageObjectNotFound,
     StorageProvider,
 )
+from app.services.write_lock import lock_user_writes
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +90,7 @@ class AttachmentService:
     """Upload/list/download/delete user files (spec #24, #44, #57)."""
 
     def __init__(self, db: Session, storage: StorageProvider) -> None:
+        self.db = db
         self.repo = AttachmentRepository(db)
         self.records = TransportRepository(db)
         self.storage = storage
@@ -129,6 +131,7 @@ class AttachmentService:
         content_type: str | None,
         stream: BinaryIO,
     ) -> Attachment:
+        lock_user_writes(self.db, user_id)
         self._ensure_resource(user_id=user_id, resource_type=resource_type, resource_id=resource_id)
 
         clean_name = _clean_filename(filename)
@@ -204,6 +207,22 @@ class AttachmentService:
             self._delete_object_best_effort(attachment.storage_key, attachment.id)
         if attachments:
             self.repo.delete_many(attachments)
+
+    def stage_delete_for_resource(
+        self, *, user_id: uuid.UUID, resource_type: str, resource_id: uuid.UUID
+    ) -> list[tuple[str, uuid.UUID]]:
+        """Remove metadata in the caller's transaction; delete blobs after commit."""
+        attachments = self.repo.list_for_resource(
+            user_id=user_id, resource_type=resource_type, resource_id=resource_id
+        )
+        objects = [(attachment.storage_key, attachment.id) for attachment in attachments]
+        if attachments:
+            self.repo.delete_many(attachments, commit=False)
+        return objects
+
+    def cleanup_staged_objects(self, objects: list[tuple[str, uuid.UUID]]) -> None:
+        for storage_key, attachment_id in objects:
+            self._delete_object_best_effort(storage_key, attachment_id)
 
     def delete_for_user(self, *, user_id: uuid.UUID) -> None:
         """Cascade cleanup before deleting an account (spec #48)."""

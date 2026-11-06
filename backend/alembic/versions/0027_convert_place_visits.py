@@ -13,9 +13,8 @@ Stage 2 data migration (docs/data-model.md §10.3). Every legacy
 - a mapping row and a timeline archive row record the old state.
 
 The migration never merges visits by similarity: two trips to the same place
-remain two events. If the referenced Place or Trip is missing or belongs to a
-different user, the visit is still preserved (with a null reference where
-needed) and the archive marks the anomaly instead of silently dropping data.
+remain two events. Invalid, missing or cross-user references and inverted
+windows block conversion so they can be repaired without losing history.
 
 After the conversion the database forbids ``item_type='place'``.
 Downgrade only relaxes the constraint; reverting converted rows is unsafe after
@@ -72,6 +71,14 @@ def upgrade() -> None:
         .mappings()
         .all()
     )
+
+    if any(
+        row["place_name"] is None
+        or row["valid_trip_id"] is None
+        or (row["start_at"] and row["end_at"] and row["end_at"] < row["start_at"])
+        for row in rows
+    ):
+        raise RuntimeError("Invalid legacy place references or time windows; repair before 0027")
 
     now = datetime.now(UTC)
     for row in rows:
@@ -179,6 +186,14 @@ def upgrade() -> None:
                 "status": status,
                 "created_at": now,
             },
+        )
+
+    if not any(
+        constraint["name"] == "uq_trip_items_user_entity"
+        for constraint in sa.inspect(bind).get_unique_constraints("trip_items")
+    ):
+        op.create_unique_constraint(
+            "uq_trip_items_user_entity", "trip_items", ["user_id", "item_type", "item_id"]
         )
 
     op.create_check_constraint(

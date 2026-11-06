@@ -93,12 +93,18 @@ class ExpenseRepository:
         self.db.refresh(expense)
         return expense
 
-    def save(self, expense: Expense) -> Expense:
+    def save(self, expense: Expense, *, commit: bool = True) -> Expense:
         self.db.add(expense)
-        self.db.commit()
+        if commit:
+            self.db.commit()
+        else:
+            self.db.flush()
         self.db.refresh(expense)
         return expense
 
-    def delete(self, expense: Expense) -> None:
+    def delete(self, expense: Expense, *, commit: bool = True) -> None:
         self.db.delete(expense)
-        self.db.commit()
+        if commit:
+            self.db.commit()
+        else:
+            self.db.flush()

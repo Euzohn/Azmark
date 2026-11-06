@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.models.place import Place
 from app.repositories.activity import ActivityRepository
 from app.repositories.place import PlaceRepository
+from app.services.write_lock import lock_user_writes
 
 
 class PlaceNotFoundError(Exception):
@@ -42,10 +43,16 @@ class PlaceService:
         """Build an unsaved place (shared with the v2 importer)."""
         return Place(user_id=user_id, **payload.model_dump())
 
-    def create_place(self, *, user_id: uuid.UUID, payload) -> Place:
-        return self.places.create(self.prepare_place(user_id=user_id, payload=payload))
+    def create_place(self, *, user_id: uuid.UUID, payload, commit: bool = True) -> Place:
+        lock_user_writes(self.db, user_id)
+        return self.places.create(
+            self.prepare_place(user_id=user_id, payload=payload), commit=commit
+        )
 
-    def update_place(self, *, user_id: uuid.UUID, place_id: uuid.UUID, payload) -> Place:
+    def update_place(
+        self, *, user_id: uuid.UUID, place_id: uuid.UUID, payload, commit: bool = True
+    ) -> Place:
+        lock_user_writes(self.db, user_id)
         place = self.get_place(user_id=user_id, place_id=place_id)
         data = payload.model_dump(exclude_unset=True)
         # name is NOT NULL; an explicit null must not wipe it.
@@ -53,11 +60,12 @@ class PlaceService:
             data.pop("name")
         for field, value in data.items():
             setattr(place, field, value)
-        return self.places.save(place)
+        return self.places.save(place, commit=commit)
 
-    def delete_place(self, *, user_id: uuid.UUID, place_id: uuid.UUID) -> None:
+    def delete_place(self, *, user_id: uuid.UUID, place_id: uuid.UUID, commit: bool = True) -> None:
+        lock_user_writes(self.db, user_id)
         place = self.get_place(user_id=user_id, place_id=place_id)
         # Visits keep their name snapshot; only the (now dangling) place link
         # is cleared (docs §4.2).
         self.activities.clear_place(user_id=user_id, place_id=place.id)
-        self.places.delete(place)
+        self.places.delete(place, commit=commit)

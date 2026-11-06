@@ -98,7 +98,7 @@ export default function DataPage({ embedded = false }: { embedded?: boolean } = 
   const importMutation = useMutation({
     mutationFn: () => {
       if (!file) throw new Error(t("data.noFile"));
-      return api.importData(file, mapping);
+      return api.importData(file, mapping, Boolean(preview?.warnings.length));
     },
     onSuccess: (data) => {
       setResult(data);
@@ -343,7 +343,10 @@ export default function DataPage({ embedded = false }: { embedded?: boolean } = 
               <div>
                 <Button
                   type="button"
-                  onClick={() => importMutation.mutate()}
+                  onClick={() => {
+                    if (preview.warnings.length && !window.confirm(t("data.confirmPartial"))) return;
+                    importMutation.mutate();
+                  }}
                   disabled={preview.valid === 0 || importMutation.isPending}
                 >
                   {importMutation.isPending ? t("data.importing") : t("data.commit")}

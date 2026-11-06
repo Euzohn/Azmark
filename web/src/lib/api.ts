@@ -555,10 +555,14 @@ export const api = {
       method: "POST",
       body: importForm(file, mapping),
     }),
-  importData: (file: File, mapping?: Record<string, string>) =>
+  importData: (file: File, mapping?: Record<string, string>, confirmPartial = false) =>
     request<ImportResult>("/import", {
       method: "POST",
-      body: importForm(file, mapping),
+      body: (() => {
+        const form = importForm(file, mapping);
+        if (confirmPartial) form.append("confirm_partial", "true");
+        return form;
+      })(),
     }),
 
   chatAi: (message: string, image?: string | null, history?: AiHistoryMessage[]) =>

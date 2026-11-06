@@ -43,7 +43,7 @@ def create_place(
     service: PlaceService = Depends(get_place_service),
     audit: AuditService = Depends(get_audit_service),
 ) -> PlaceRead:
-    place = service.create_place(user_id=current_user.id, payload=payload)
+    place = service.create_place(user_id=current_user.id, payload=payload, commit=False)
     audit.log(
         action=AuditAction.CREATE_RECORD,
         user_id=current_user.id,
@@ -77,7 +77,9 @@ def update_place(
     audit: AuditService = Depends(get_audit_service),
 ) -> PlaceRead:
     try:
-        place = service.update_place(user_id=current_user.id, place_id=place_id, payload=payload)
+        place = service.update_place(
+            user_id=current_user.id, place_id=place_id, payload=payload, commit=False
+        )
     except PlaceNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
     audit.log(
@@ -100,7 +102,7 @@ def delete_place(
     audit: AuditService = Depends(get_audit_service),
 ) -> None:
     try:
-        service.delete_place(user_id=current_user.id, place_id=place_id)
+        service.delete_place(user_id=current_user.id, place_id=place_id, commit=False)
     except PlaceNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
     audit.log(

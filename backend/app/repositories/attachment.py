@@ -73,7 +73,7 @@ class AttachmentRepository:
         self.db.delete(attachment)
         self.db.commit()
 
-    def delete_many(self, attachments: list[Attachment]) -> None:
+    def delete_many(self, attachments: list[Attachment], *, commit: bool = True) -> None:
         for attachment in attachments:
             self.db.delete(attachment)
-        self.db.commit()
+        self.db.commit() if commit else self.db.flush()

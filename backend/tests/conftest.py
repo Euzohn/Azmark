@@ -31,7 +31,11 @@ def _create_schema() -> None:
 def db() -> Generator[Session, None, None]:
     connection = engine.connect()
     transaction = connection.begin()
-    session = TestingSessionLocal(bind=connection)
+    # SQLite's legacy transaction mode does not BEGIN for reads. Start a real
+    # outer transaction before creating the request-session savepoint so that
+    # session commits and rollbacks stay isolated to this test.
+    connection.exec_driver_sql("BEGIN")
+    session = TestingSessionLocal(bind=connection, join_transaction_mode="create_savepoint")
     yield session
     session.close()
     transaction.rollback()
