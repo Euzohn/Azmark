@@ -71,6 +71,12 @@ docker compose start api web
 - 对象恢复使用只读挂载的备份目录，不会改动备份本身。
 - 恢复后建议跑一次迁移确认：`docker compose exec api alembic upgrade head`。
 
+## Schema 迁移与回滚
+
+- `deploy.sh` 在重建后执行 `alembic upgrade head`；迁移失败时不要手工跳过，先看日志并保留切换前备份。
+- migration `0029_drop_trip_item_times` 删除 `trip_items.start_at/end_at`。事件时间改由 Transport / Hotel / Activity 提供，原值已归档在 `timeline_migration_archives`；该 migration 的 downgrade 只重建空列，**不会恢复时间值**。需要回退到旧结构时，恢复切换前的数据库备份。
+- v2 JSON 导出包含记录、关系、迁移档案与排序，但不包含附件二进制；附件仍需依赖本文的 MinIO/S3 对象备份与恢复。
+
 ## 外部 S3 / R2 / OSS
 
 若把附件放在外部对象存储（`S3_ENDPOINT` 指向外部），备份脚本会直接用 `mc` 连外部端点，行为不变；

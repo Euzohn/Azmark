@@ -21,6 +21,7 @@ from app.models.activity import Activity
 from app.models.expense import Expense
 from app.models.hotel import Hotel
 from app.models.import_mapping import ImportBundleMapping
+from app.models.migration import PlaceVisitMapping, TimelineMigrationArchive
 from app.models.note import Note
 from app.models.place import Place
 from app.models.transport_record import TransportRecord
@@ -171,6 +172,10 @@ V2_ENTITY_ORDER: tuple[tuple[str, str], ...] = (
     ("expense", "expenses"),
     ("note", "notes"),
     ("trip_item", "trip_items"),
+    # Migration evidence travels after the entities it references. Archives
+    # keep historical ids but remap any still-existing trip/place/activity.
+    ("timeline_archive", "timeline_archives"),
+    ("place_visit_mapping", "place_visit_mappings"),
 )
 
 V2_MODEL_BY_TYPE = {
@@ -182,13 +187,28 @@ V2_MODEL_BY_TYPE = {
     "expense": Expense,
     "note": Note,
     "trip_item": TripItem,
+    "timeline_archive": TimelineMigrationArchive,
+    "place_visit_mapping": PlaceVisitMapping,
 }
+
+# Metadata rows are restored for audit continuity but are not user-visible
+# records, so they do not inflate the "imported" counters.
+V2_METADATA_TYPES = frozenset({"timeline_archive", "place_visit_mapping"})
 
 EXPENSE_SOURCE_TYPES = ("transport", "hotel", "activity")
 
 # v1 JSON only restores trips and transport records. These arrays exist in the
 # newer bundle shape and would otherwise be dropped silently (docs §10.6).
-V1_IGNORED_ARRAYS = ("hotels", "expenses", "notes", "places", "activities", "trip_items")
+V1_IGNORED_ARRAYS = (
+    "hotels",
+    "expenses",
+    "notes",
+    "places",
+    "activities",
+    "trip_items",
+    "timeline_archives",
+    "place_visit_mappings",
+)
 
 # Case-insensitive source header -> canonical field. Unknown headers are ignored.
 FIELD_ALIASES: dict[str, str] = {
@@ -457,6 +477,36 @@ class DataTransferService:
             "sort_order": item.sort_order,
         }
 
+    def _export_timeline_archive_v2(self, archive: TimelineMigrationArchive) -> dict[str, Any]:
+        return {
+            "id": str(archive.id),
+            "migration_key": archive.migration_key,
+            "original_item_id": str(archive.original_item_id),
+            "trip_id": str(archive.trip_id) if archive.trip_id else None,
+            "item_type": archive.item_type,
+            "item_id": str(archive.item_id) if archive.item_id else None,
+            "start_at": iso_full(archive.start_at) if archive.start_at else None,
+            "end_at": iso_full(archive.end_at) if archive.end_at else None,
+            "sort_order": archive.sort_order,
+            "source_start_at": (
+                iso_full(archive.source_start_at) if archive.source_start_at else None
+            ),
+            "source_end_at": iso_full(archive.source_end_at) if archive.source_end_at else None,
+            "diff_type": archive.diff_type,
+            "status": archive.status,
+            "user_choice": archive.user_choice,
+            "created_at": iso_full(archive.created_at),
+        }
+
+    def _export_place_visit_mapping_v2(self, mapping: PlaceVisitMapping) -> dict[str, Any]:
+        return {
+            "id": str(mapping.id),
+            "migration_key": mapping.migration_key,
+            "original_item_id": str(mapping.original_item_id),
+            "activity_id": str(mapping.activity_id),
+            "created_at": iso_full(mapping.created_at),
+        }
+
     def export_json(self, *, user_id: uuid.UUID, include_sensitive: bool = False) -> str:
         records = self._all_records(user_id)
         trips = self._all_trips(user_id)
@@ -483,6 +533,13 @@ class DataTransferService:
             "places": [self._export_place(p) for p in self._all_places(user_id)],
             "activities": [self._export_activity_v2(a) for a in self._all_activities(user_id)],
             "trip_items": [self._export_trip_item_v2(i) for i in self._all_trip_items(user_id)],
+            "timeline_archives": [
+                self._export_timeline_archive_v2(a) for a in self._all_timeline_archives(user_id)
+            ],
+            "place_visit_mappings": [
+                self._export_place_visit_mapping_v2(m)
+                for m in self._all_place_visit_mappings(user_id)
+            ],
         }
         return json.dumps(bundle, ensure_ascii=False, indent=2)
 
@@ -680,8 +737,7 @@ class DataTransferService:
             rows = data.get(key)
             if isinstance(rows, list) and rows:
                 warnings.append(
-                    f"v1 import ignores '{key}' ({len(rows)} rows); "
-                    "use a v2 export to restore it"
+                    f"v1 import ignores '{key}' ({len(rows)} rows); use a v2 export to restore it"
                 )
         return warnings
 
@@ -752,10 +808,46 @@ class DataTransferService:
             raise ValueError(f"{label} {value} does not resolve to an imported {entity_type}")
         return resolved[key]
 
+    @staticmethod
+    def _resolve_v2_optional(
+        resolved: dict[tuple[str, str], uuid.UUID],
+        entity_type: str,
+        value: Any,
+    ) -> uuid.UUID | None:
+        """Resolve a historical reference when its target is in this bundle."""
+        if value in (None, ""):
+            return None
+        return resolved.get((entity_type, str(value)))
+
+    @staticmethod
+    def _historical_uuid(value: Any, label: str) -> uuid.UUID | None:
+        """Keep a no-longer-existing id as an audit-only identifier (§10.6)."""
+        if value in (None, ""):
+            return None
+        try:
+            return uuid.UUID(str(value))
+        except (ValueError, TypeError):
+            raise ValueError(f"{label} must be a UUID") from None
+
+    def _required_historical_uuid(self, value: Any, label: str) -> uuid.UUID:
+        parsed = self._historical_uuid(value, label)
+        if parsed is None:
+            raise ValueError(f"{label} is required")
+        return parsed
+
+    @staticmethod
+    def _namespaced_migration_key(bundle_id: str, key: Any) -> str:
+        """Scope archive idempotency to one bundle, so imports never collide."""
+        value = f"{bundle_id}:{key or 'import'}"
+        if len(value) <= 64:
+            return value
+        return hashlib.sha256(value.encode("utf-8")).hexdigest()[:64]
+
     def _build_v2_entity(
         self,
         *,
         user_id: uuid.UUID,
+        bundle_id: str,
         entity_type: str,
         item: dict[str, Any],
         resolved: dict[tuple[str, str], uuid.UUID],
@@ -925,6 +1017,67 @@ class DataTransferService:
                 sort_order=int(item.get("sort_order") or 0),
             )
 
+        if entity_type == "timeline_archive":
+            item_type = str(item.get("item_type") or "unknown")
+            raw_item_id = item.get("item_id")
+            raw_trip_id = item.get("trip_id")
+            mapped_item_id = self._resolve_v2_optional(resolved, item_type, raw_item_id)
+            mapped_trip_id = self._resolve_v2_optional(resolved, "trip", raw_trip_id)
+            archive = TimelineMigrationArchive(
+                id=new_id,
+                user_id=user_id,
+                # Namespace the key so the same export imported as a different
+                # bundle never collides with the original archive row (§10.6).
+                migration_key=self._namespaced_migration_key(bundle_id, item.get("migration_key")),
+                original_item_id=self._required_historical_uuid(
+                    item.get("original_item_id"), "original_item_id"
+                ),
+                trip_id=(
+                    mapped_trip_id
+                    if mapped_trip_id is not None
+                    else self._historical_uuid(raw_trip_id, "trip_id")
+                ),
+                item_type=item_type,
+                item_id=(
+                    mapped_item_id
+                    if mapped_item_id is not None
+                    else self._historical_uuid(raw_item_id, "item_id")
+                ),
+                start_at=parse_datetime(item.get("start_at")),
+                end_at=parse_datetime(item.get("end_at")),
+                sort_order=int(item.get("sort_order") or 0),
+                source_start_at=parse_datetime(item.get("source_start_at")),
+                source_end_at=parse_datetime(item.get("source_end_at")),
+                diff_type=str(item.get("diff_type") or "unknown"),
+                status=str(item.get("status") or "unknown"),
+                user_choice=item.get("user_choice"),
+            )
+            created_at = parse_datetime(item.get("created_at"))
+            if created_at is not None:
+                archive.created_at = created_at
+            return archive
+
+        if entity_type == "place_visit_mapping":
+            raw_activity_id = item.get("activity_id")
+            mapped_activity_id = self._resolve_v2_optional(resolved, "activity", raw_activity_id)
+            mapping = PlaceVisitMapping(
+                id=new_id,
+                user_id=user_id,
+                migration_key=self._namespaced_migration_key(bundle_id, item.get("migration_key")),
+                original_item_id=self._required_historical_uuid(
+                    item.get("original_item_id"), "original_item_id"
+                ),
+                activity_id=(
+                    mapped_activity_id
+                    if mapped_activity_id is not None
+                    else self._required_historical_uuid(raw_activity_id, "activity_id")
+                ),
+            )
+            created_at = parse_datetime(item.get("created_at"))
+            if created_at is not None:
+                mapping.created_at = created_at
+            return mapping
+
         raise ValueError(f"unsupported entity type '{entity_type}'")
 
     def _verify_v2_mapping(
@@ -982,7 +1135,7 @@ class DataTransferService:
                     continue
                 resolved[key] = model.id
                 entity_trip[(entity_type, model.id)] = getattr(model, "trip_id", None)
-                if entity_type != "trip_item":
+                if entity_type not in V2_METADATA_TYPES and entity_type != "trip_item":
                     skipped += 1
 
         for entity_type, items in sections["entities"]:
@@ -994,6 +1147,7 @@ class DataTransferService:
                 try:
                     model = self._build_v2_entity(
                         user_id=user_id,
+                        bundle_id=bundle_id,
                         entity_type=entity_type,
                         item=item,
                         resolved=resolved,
@@ -1020,7 +1174,7 @@ class DataTransferService:
                     )
                 if entity_type == "trip":
                     trips_created += 1
-                elif entity_type != "trip_item":
+                elif entity_type != "trip_item" and entity_type not in V2_METADATA_TYPES:
                     imported += 1
                 row += 1
 
@@ -1092,6 +1246,24 @@ class DataTransferService:
                 select(TripItem)
                 .where(TripItem.user_id == user_id)
                 .order_by(TripItem.trip_id, TripItem.sort_order, TripItem.id)
+            )
+        )
+
+    def _all_timeline_archives(self, user_id: uuid.UUID) -> list[TimelineMigrationArchive]:
+        return list(
+            self.db.scalars(
+                select(TimelineMigrationArchive)
+                .where(TimelineMigrationArchive.user_id == user_id)
+                .order_by(TimelineMigrationArchive.created_at, TimelineMigrationArchive.id)
+            )
+        )
+
+    def _all_place_visit_mappings(self, user_id: uuid.UUID) -> list[PlaceVisitMapping]:
+        return list(
+            self.db.scalars(
+                select(PlaceVisitMapping)
+                .where(PlaceVisitMapping.user_id == user_id)
+                .order_by(PlaceVisitMapping.created_at, PlaceVisitMapping.id)
             )
         )
 

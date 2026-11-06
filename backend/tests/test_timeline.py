@@ -221,3 +221,10 @@ def test_legacy_place_item_creates_a_visit_activity(client):
     assert item["activity"]["place_id"] == place["id"]
     assert item["timezone"] == "Asia/Singapore"
     assert item["start_at"] is not None
+
+
+def test_trip_item_row_has_no_event_time_columns():
+    """Stage 4 dropped the duplicated time columns (docs §10.5)."""
+    columns = set(TripItem.__table__.columns.keys())
+    assert "start_at" not in columns
+    assert "end_at" not in columns

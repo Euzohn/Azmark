@@ -1,9 +1,7 @@
 import uuid
-from datetime import datetime
 
 from sqlalchemy import (
     CheckConstraint,
-    DateTime,
     ForeignKey,
     Integer,
     String,
@@ -48,5 +46,3 @@ class TripItem(Base):
     item_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
 
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

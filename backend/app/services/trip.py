@@ -56,7 +56,8 @@ class TripItemNotFoundError(Exception):
 
 
 class InvalidTripItemTypeError(Exception):
-    """Only place requests are accepted by the legacy add-item facade."""
+    """The legacy add-item facade only accepts place requests; removal only
+    supports the three projected types."""
 
 
 class InvalidTripOrderError(Exception):

@@ -286,7 +286,7 @@ def delete_trip_item(
     except InvalidTripItemTypeError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only place items can be removed here",
+            detail="Unsupported trip item type",
         ) from None
     audit.log(
         action=AuditAction.UPDATE_RECORD,

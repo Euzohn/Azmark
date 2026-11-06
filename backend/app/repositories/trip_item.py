@@ -21,8 +21,9 @@ class TripItemRepository:
 
     ``trip_items`` is a projection: membership comes from the source record's
     ``trip_id`` and event times come from the source entity. The row only adds
-    a stable item id and the display order. ``start_at/end_at`` are legacy
-    columns kept until the final cleanup migration.
+    a stable item id and the display order. Migration 0029 removed the legacy
+    ``start_at/end_at`` columns; their original values live in the migration
+    archives, not in normal reads.
     """
 
     def __init__(self, db: Session) -> None:

@@ -588,3 +588,101 @@ def test_v1_json_preview_warns_about_unsupported_arrays(client):
     assert any("expenses" in warning for warning in warnings)
     assert any("notes" in warning for warning in warnings)
     assert all("records" not in warning for warning in warnings)
+
+
+def test_v2_roundtrip_restores_migration_evidence(client, db):
+    from datetime import UTC, datetime
+    from uuid import UUID
+
+    from sqlalchemy import select
+
+    from app.models.migration import PlaceVisitMapping, TimelineMigrationArchive
+
+    token_a = register_and_login(client, "v2_archive_a")["access_token"]
+    token_b = register_and_login(client, "v2_archive_b")["access_token"]
+    headers_a = auth_headers(token_a)
+    headers_b = auth_headers(token_b)
+
+    trip = client.post("/api/v1/trips", json={"name": "Archive trip"}, headers=headers_a).json()
+    place = client.post(
+        "/api/v1/places",
+        json={"name": "Dotonbori", "type": "attraction", "city": "Osaka"},
+        headers=headers_a,
+    ).json()
+    activity = client.post(
+        "/api/v1/activities",
+        json={
+            "name": "Dotonbori",
+            "type": "visit",
+            "place_id": place["id"],
+            "trip_id": trip["id"],
+        },
+        headers=headers_a,
+    ).json()
+
+    original_item_id = UUID(int=1)
+    db.add(
+        TimelineMigrationArchive(
+            user_id=UUID(trip["user_id"]),
+            migration_key="0027_place_visit",
+            original_item_id=original_item_id,
+            trip_id=UUID(trip["id"]),
+            item_type="place",
+            item_id=UUID(place["id"]),
+            start_at=datetime(2026, 4, 20, 2, 0, tzinfo=UTC),
+            end_at=datetime(2026, 4, 20, 3, 0, tzinfo=UTC),
+            sort_order=0,
+            diff_type="place_to_visit",
+            status="converted",
+            user_choice="created_visit",
+        )
+    )
+    db.add(
+        PlaceVisitMapping(
+            user_id=UUID(trip["user_id"]),
+            migration_key="0027_place_visit",
+            original_item_id=original_item_id,
+            activity_id=UUID(activity["id"]),
+        )
+    )
+    db.flush()
+
+    exported = client.get("/api/v1/export?format=json", headers=headers_a).json()
+    assert len(exported["timeline_archives"]) == 1
+    assert len(exported["place_visit_mappings"]) == 1
+    assert exported["timeline_archives"][0]["item_type"] == "place"
+
+    response = _commit(client, headers_b, json.dumps(exported), filename="b.json", fmt="json")
+    assert response.status_code == 200, response.text
+
+    user_b_id = UUID(client.get("/api/v1/auth/me", headers=headers_b).json()["id"])
+    archive_b = db.scalar(
+        select(TimelineMigrationArchive).where(TimelineMigrationArchive.user_id == user_b_id)
+    )
+    mapping_b = db.scalar(select(PlaceVisitMapping).where(PlaceVisitMapping.user_id == user_b_id))
+    assert archive_b is not None and mapping_b is not None
+
+    trips_b = client.get("/api/v1/trips", headers=headers_b).json()["items"]
+    places_b = client.get("/api/v1/places", headers=headers_b).json()["items"]
+    activities_b = client.get("/api/v1/activities", headers=headers_b).json()["items"]
+    assert archive_b.trip_id == UUID(trips_b[0]["id"])
+    assert archive_b.item_id == UUID(places_b[0]["id"])
+    assert archive_b.original_item_id == original_item_id
+    assert mapping_b.activity_id == UUID(activities_b[0]["id"])
+    # Historical ids stay as evidence, but the idempotency key is bundle-scoped.
+    assert archive_b.migration_key != "0027_place_visit"
+    assert archive_b.migration_key.startswith(exported["bundle_id"])
+
+    again = _commit(client, headers_b, json.dumps(exported), filename="b.json", fmt="json")
+    assert again.status_code == 200, again.text
+    assert again.json()["imported"] == 0
+    assert (
+        len(
+            db.scalars(
+                select(TimelineMigrationArchive).where(
+                    TimelineMigrationArchive.user_id == user_b_id
+                )
+            ).all()
+        )
+        == 1
+    )
