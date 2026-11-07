@@ -176,36 +176,41 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div
           className={cn(
             "flex items-center gap-3 px-2",
-            collapsed ? "mb-3 justify-center" : "mb-8",
+            collapsed ? "mb-4 flex-col" : "mb-8",
           )}
         >
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-foreground text-background">
             <AzmarkMark className="h-5 w-auto" />
           </div>
           {!collapsed ? (
-            <div className="min-w-0 flex-1">
-              <div className="font-display text-xl font-semibold leading-none tracking-tight">
-                {t("app.name")}
+            <>
+              <div className="min-w-0 flex-1">
+                <div className="font-display text-xl font-semibold leading-none tracking-tight">
+                  {t("app.name")}
+                </div>
+                <div className="mt-1 text-[11px] text-muted-foreground">{t("app.tagline")}</div>
               </div>
-              <div className="mt-1 text-[11px] text-muted-foreground">{t("app.tagline")}</div>
-            </div>
-          ) : null}
-        </div>
-        <div className={cn("flex", collapsed ? "mb-3 justify-center" : "mb-1 justify-end px-2")}>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleCollapsed}
-            title={t(collapsed ? "nav.expand" : "nav.collapse")}
-            aria-label={t(collapsed ? "nav.expand" : "nav.collapse")}
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-          >
-            {collapsed ? (
-              <PanelLeftOpen className="h-4 w-4" />
-            ) : (
-              <PanelLeftClose className="h-4 w-4" />
-            )}
-          </Button>
+              <button
+                type="button"
+                onClick={toggleCollapsed}
+                title={t("nav.collapse")}
+                aria-label={t("nav.collapse")}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground/50 transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <PanelLeftClose className="h-3.5 w-3.5" />
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={toggleCollapsed}
+              title={t("nav.expand")}
+              aria-label={t("nav.expand")}
+              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground/50 transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <PanelLeftOpen className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
         <nav className="flex flex-col gap-1">
           {navItems.map((item) => (
