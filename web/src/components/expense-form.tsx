@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,10 +15,13 @@ import { useAuth } from "@/lib/auth-store";
 import { fromZonedInput, toLocalInput } from "@/lib/datetime";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
 import type {
+  Activity,
   Expense,
   ExpenseCategory,
   ExpenseInput,
   ExpenseSourceType,
+  Hotel,
+  TimelineRecord,
   TripList,
 } from "@/lib/types";
 
@@ -41,6 +44,23 @@ const SOURCE_LABEL_KEYS: Record<ExpenseSourceType, TranslationKey> = {
   hotel: "expenses.sourceType.hotel",
   activity: "expenses.sourceType.activity",
 };
+
+const SOURCE_TYPES: ExpenseSourceType[] = ["transport", "hotel", "activity"];
+
+function transportOptionLabel(record: TimelineRecord): string {
+  const route = [record.origin, record.destination].filter(Boolean).join(" → ");
+  const service = record.service_number || record.carrier || "";
+  return [service, route].filter(Boolean).join(" · ") || record.id;
+}
+
+function hotelOptionLabel(hotel: Hotel): string {
+  return [hotel.hotel, hotel.check_in].filter(Boolean).join(" · ");
+}
+
+function activityOptionLabel(activity: Activity): string {
+  const date = activity.start_at ? activity.start_at.slice(0, 10) : "";
+  return [activity.name, date].filter(Boolean).join(" · ") || activity.id;
+}
 
 interface ExpenseFormProps {
   initial?: Expense;
@@ -108,9 +128,10 @@ function toInput(form: FormState): ExpenseInput {
     description: form.description.trim() || null,
     // A linked expense derives its trip from the source; sending a value would
     // either duplicate the derivation or trip the conflict check (docs §6.3).
+    // Explicit nulls let the update endpoint unbind a previously linked spend.
     ...(linked
       ? { source_type: form.source_type as ExpenseSourceType, source_id: form.source_id }
-      : { trip_id: form.trip_id || null }),
+      : { trip_id: form.trip_id || null, source_type: null, source_id: null }),
     converted_amount: optionalNumber(form.converted_amount),
     converted_currency: form.converted_currency.trim().toUpperCase() || null,
     exchange_rate: optionalNumber(form.exchange_rate),
@@ -142,10 +163,61 @@ export function ExpenseForm({
     toForm(initial, user?.currency ?? "", source, initialTripId),
   );
   const sourceBound = form.source_type !== "" && form.source_id !== "";
+  const sourceIncomplete = form.source_type !== "" && form.source_id === "";
   const { data: trips } = useQuery<TripList>({
     queryKey: ["trips", { page_size: 100 }],
     queryFn: () => api.listTrips({ page_size: 100 }),
   });
+
+  const transportSources = useQuery({
+    queryKey: ["records", { page_size: 100, sort: "newest" }],
+    queryFn: () => api.listRecords({ page_size: 100, sort: "newest" }),
+    enabled: form.source_type === "transport",
+  });
+  const hotelSources = useQuery({
+    queryKey: ["hotels", { page_size: 100, sort: "newest" }],
+    queryFn: () => api.listHotels({ page_size: 100, sort: "newest" }),
+    enabled: form.source_type === "hotel",
+  });
+  const activitySources = useQuery({
+    queryKey: ["activities", { page_size: 100, sort: "newest" }],
+    queryFn: () => api.listActivities({ page_size: 100, sort: "newest" }),
+    enabled: form.source_type === "activity",
+  });
+
+  const sourceOptions = useMemo(() => {
+    if (form.source_type === "transport") {
+      return (transportSources.data?.items ?? []).map((record) => ({
+        id: record.id,
+        label: transportOptionLabel(record),
+      }));
+    }
+    if (form.source_type === "hotel") {
+      return (hotelSources.data?.items ?? []).map((hotel) => ({
+        id: hotel.id,
+        label: hotelOptionLabel(hotel),
+      }));
+    }
+    if (form.source_type === "activity") {
+      return (activitySources.data?.items ?? []).map((activity) => ({
+        id: activity.id,
+        label: activityOptionLabel(activity),
+      }));
+    }
+    return [];
+  }, [
+    form.source_type,
+    transportSources.data,
+    hotelSources.data,
+    activitySources.data,
+  ]);
+
+  const sourceLoading =
+    (form.source_type === "transport" && transportSources.isLoading) ||
+    (form.source_type === "hotel" && hotelSources.isLoading) ||
+    (form.source_type === "activity" && activitySources.isLoading);
+  const currentSourceMissing =
+    form.source_id !== "" && !sourceOptions.some((option) => option.id === form.source_id);
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -173,6 +245,50 @@ export function ExpenseForm({
               ))}
             </Select>
           </Field>
+          <Field label={t("expenses.source")}>
+            <Select
+              value={form.source_type}
+              onChange={(e) => {
+                const next = e.target.value as ExpenseSourceType | "";
+                setForm((prev) => ({ ...prev, source_type: next, source_id: "" }));
+                onDirtyChange?.(true);
+              }}
+            >
+              <option value="">{t("expenses.sourceNone")}</option>
+              {SOURCE_TYPES.map((sourceType) => (
+                <option key={sourceType} value={sourceType}>
+                  {t(SOURCE_LABEL_KEYS[sourceType])}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          {form.source_type !== "" ? (
+            <div className="sm:col-span-2">
+              <Field label={t("expenses.sourceRecord")}>
+                <Select
+                  value={form.source_id}
+                  disabled={sourceLoading}
+                  onChange={(e) => set("source_id", e.target.value)}
+                >
+                  <option value="">
+                    {sourceLoading
+                      ? t("expenses.sourceLoading")
+                      : sourceOptions.length > 0
+                        ? t("expenses.sourceSelectPlaceholder")
+                        : t("expenses.sourceEmpty")}
+                  </option>
+                  {currentSourceMissing ? (
+                    <option value={form.source_id}>{t("expenses.sourceCurrent")}</option>
+                  ) : null}
+                  {sourceOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+          ) : null}
           <Field label={t("expenses.trip")}>
             {sourceBound ? (
               <div className="flex h-10 items-center rounded-lg border border-border bg-muted/40 px-3 text-sm text-muted-foreground">
@@ -189,6 +305,9 @@ export function ExpenseForm({
               </Select>
             )}
           </Field>
+          {sourceIncomplete ? (
+            <p className="text-xs text-danger sm:col-span-2">{t("expenses.sourceRequired")}</p>
+          ) : null}
           <Field label={t("expenses.amount")}>
             <Input
               required
@@ -221,11 +340,6 @@ export function ExpenseForm({
               />
             </Field>
           </div>
-          {sourceBound ? (
-            <div className="rounded-lg bg-muted/40 px-3 py-2 text-xs text-muted-foreground sm:col-span-2">
-              {t("expenses.source")}: {t(SOURCE_LABEL_KEYS[form.source_type as ExpenseSourceType])}
-            </div>
-          ) : null}
           <div className="mt-2 border-t border-border pt-4 sm:col-span-2">
             <p className="text-xs font-medium text-muted-foreground">
               {t("expenses.conversionTitle")}
@@ -272,7 +386,7 @@ export function ExpenseForm({
             {t("common.cancel")}
           </Button>
         ) : null}
-        <Button type="submit" disabled={submitting}>
+        <Button type="submit" disabled={submitting || sourceIncomplete}>
           {submitting ? t("common.loading") : t("common.save")}
         </Button>
       </div>
