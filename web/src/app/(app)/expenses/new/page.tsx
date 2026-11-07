@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import type { ExpenseInput, ExpenseSourceType } from "@/lib/types";
+import { uuid } from "@/lib/uuid";
 
 const SOURCE_TYPES: ExpenseSourceType[] = ["transport", "hotel", "activity"];
 
@@ -41,7 +42,7 @@ function NewExpenseContent() {
       // the key never pins the first (rejected) request (docs §4.3).
       const payload = JSON.stringify(data);
       if (!submitKey.current || submitKey.current.payload !== payload) {
-        submitKey.current = { key: crypto.randomUUID(), payload };
+        submitKey.current = { key: uuid(), payload };
       }
       return api.createExpense(data, submitKey.current.key);
     },

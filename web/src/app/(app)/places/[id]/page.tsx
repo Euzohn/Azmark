@@ -18,6 +18,7 @@ import { api } from "@/lib/api";
 import { fromZonedInput } from "@/lib/datetime";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
 import type { Place, PlaceInput, TripList } from "@/lib/types";
+import { uuid } from "@/lib/uuid";
 
 function PlaceDetail() {
   const { id } = useParams<{ id: string }>();
@@ -89,7 +90,7 @@ function PlaceDetail() {
   const addToTrip = useMutation({
     mutationFn: () => {
       if (!visitKey.current) {
-        visitKey.current = crypto.randomUUID();
+        visitKey.current = uuid();
       }
       return api.addTripItem(
         tripId,
