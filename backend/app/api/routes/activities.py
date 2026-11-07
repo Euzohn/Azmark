@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, s
 
 from app.api.deps import (
     get_activity_service,
+    get_attachment_service,
     get_audit_service,
     get_current_user,
 )
@@ -24,6 +25,7 @@ from app.services.activity import (
     ActivityTripAssignmentError,
     InvalidActivityWindowError,
 )
+from app.services.attachment import AttachmentService
 from app.services.audit import AuditService
 from app.services.idempotency import (
     IdempotencyConflictError,
@@ -167,12 +169,16 @@ def delete_activity(
     request: Request,
     current_user: User = Depends(get_current_user),
     service: ActivityService = Depends(get_activity_service),
+    attachments: AttachmentService = Depends(get_attachment_service),
     audit: AuditService = Depends(get_audit_service),
 ) -> None:
     try:
         service.delete_activity(user_id=current_user.id, activity_id=activity_id, commit=False)
     except ActivityNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from None
+    objects = attachments.stage_delete_for_resource(
+        user_id=current_user.id, resource_type="activity", resource_id=activity_id
+    )
     audit.log(
         action=AuditAction.DELETE_RECORD,
         user_id=current_user.id,
@@ -180,3 +186,4 @@ def delete_activity(
         resource_id=str(activity_id),
         request=request,
     )
+    attachments.cleanup_staged_objects(objects)

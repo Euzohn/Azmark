@@ -9,8 +9,11 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.attachment import Attachment
+from app.repositories.activity import ActivityRepository
 from app.repositories.attachment import AttachmentRepository
+from app.repositories.hotel import HotelRepository
 from app.repositories.transport import TransportRepository
+from app.services.expense_source import SOURCE_ACTIVITY, SOURCE_HOTEL
 from app.services.storage import (
     StorageError,
     StorageObjectNotFound,
@@ -26,6 +29,10 @@ ALLOWED_RESOURCE_TYPES: dict[str, str] = {
     "train": "train",
     "transport": "other",
 }
+
+# Resource types that live in their own table rather than TransportRecord;
+# existence is checked against Hotel/Activity instead (docs/data-model.md §7).
+STANDALONE_RESOURCE_TYPES: frozenset[str] = frozenset({SOURCE_HOTEL, SOURCE_ACTIVITY})
 
 # Boarding passes, tickets and receipts are images or PDFs (spec #59). SVG and
 # HTML are deliberately excluded because they can execute when rendered.
@@ -95,6 +102,8 @@ class AttachmentService:
         self.db = db
         self.repo = AttachmentRepository(db)
         self.records = TransportRepository(db)
+        self.hotels = HotelRepository(db)
+        self.activities = ActivityRepository(db)
         self.storage = storage
 
     def _ensure_resource(
@@ -104,6 +113,16 @@ class AttachmentService:
         resource_type: str,
         resource_id: uuid.UUID,
     ) -> None:
+        if resource_type in STANDALONE_RESOURCE_TYPES:
+            # Hotel/activity live in their own tables; existence + ownership is
+            # the whole check (there is no "type" discriminator to match).
+            if resource_type == SOURCE_HOTEL:
+                found = self.hotels.get(user_id=user_id, hotel_id=resource_id) is not None
+            else:
+                found = self.activities.get(user_id=user_id, activity_id=resource_id) is not None
+            if not found:
+                raise ResourceNotFoundError
+            return
         expected_type = ALLOWED_RESOURCE_TYPES.get(resource_type)
         if expected_type is None:
             raise UnsupportedResourceTypeError

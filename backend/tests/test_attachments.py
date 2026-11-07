@@ -115,8 +115,12 @@ def test_attachment_validation(client):
     headers = auth_headers(token)
     flight = _flight(client, headers)
 
-    response = _upload(client, headers, "hotel", flight["id"])
+    response = _upload(client, headers, "trip", flight["id"])
     assert response.status_code == 400
+
+    # A supported type pointed at another type's id is a 404, not a 400.
+    response = _upload(client, headers, "hotel", flight["id"])
+    assert response.status_code == 404
 
     response = _upload(client, headers, "train", flight["id"])
     assert response.status_code == 404
@@ -203,5 +207,72 @@ def test_deleting_an_account_removes_attachments(client, db, storage):
         "/api/v1/auth/me/delete", json={"password": "secret123"}, headers=headers
     )
     assert response.status_code == 204, response.text
+    assert storage.objects == {}
+    assert db.scalar(select(func.count()).select_from(Attachment)) == 0
+
+
+def test_hotel_and_activity_attachments(client, db, storage):
+    """Hotels and activities accept attachments like transport records do."""
+    token = register_and_login(client, "attach_stay")["access_token"]
+    headers = auth_headers(token)
+
+    hotel = client.post(
+        "/api/v1/hotels",
+        json={"hotel": "Marina Bay Sands", "check_in": "2026-04-29"},
+        headers=headers,
+    )
+    assert hotel.status_code == 201, hotel.text
+    assert _upload(client, headers, "hotel", hotel.json()["id"]).status_code == 201
+
+    activity = client.post(
+        "/api/v1/activities",
+        json={"name": "Gardens by the Bay", "type": "sightseeing"},
+        headers=headers,
+    )
+    assert activity.status_code == 201, activity.text
+    assert _upload(client, headers, "activity", activity.json()["id"]).status_code == 201
+
+    for resource_type, resource_id in (
+        ("hotel", hotel.json()["id"]),
+        ("activity", activity.json()["id"]),
+    ):
+        listed = client.get(
+            "/api/v1/attachments",
+            params={"resource_type": resource_type, "resource_id": resource_id},
+            headers=headers,
+        )
+        assert listed.status_code == 200, listed.text
+        assert listed.json()["total"] == 1
+
+    assert len(storage.objects) == 2
+
+
+def test_deleting_a_hotel_or_activity_removes_its_attachments(client, db, storage):
+    token = register_and_login(client, "attach_stay_delete")["access_token"]
+    headers = auth_headers(token)
+
+    hotel = client.post(
+        "/api/v1/hotels",
+        json={"hotel": "Marina Bay Sands", "check_in": "2026-04-29"},
+        headers=headers,
+    )
+    assert hotel.status_code == 201, hotel.text
+    assert _upload(client, headers, "hotel", hotel.json()["id"]).status_code == 201
+
+    activity = client.post(
+        "/api/v1/activities",
+        json={"name": "Gardens by the Bay", "type": "sightseeing"},
+        headers=headers,
+    )
+    assert activity.status_code == 201, activity.text
+    assert _upload(client, headers, "activity", activity.json()["id"]).status_code == 201
+
+    assert len(storage.objects) == 2
+
+    assert client.delete(f"/api/v1/hotels/{hotel.json()['id']}", headers=headers).status_code == 204
+    assert client.delete(
+        f"/api/v1/activities/{activity.json()['id']}", headers=headers
+    ).status_code == 204
+
     assert storage.objects == {}
     assert db.scalar(select(func.count()).select_from(Attachment)) == 0
