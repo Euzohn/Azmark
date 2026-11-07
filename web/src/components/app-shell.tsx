@@ -14,6 +14,8 @@ import {
   Map as MapIcon,
   MapPin,
   MoreHorizontal,
+  PanelLeftClose,
+  PanelLeftOpen,
   Receipt,
   StickyNote,
   User,
@@ -94,12 +96,29 @@ const MOBILE_MORE: NavItem[] = [
   { href: "/account", key: "nav.account", icon: User },
 ];
 
+const SIDEBAR_COLLAPSE_KEY = "azmark-sidebar-collapsed";
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { token, user, setUser, clear, hasHydrated } = useAuth();
   const { t } = useI18n();
   const [moreOpen, setMoreOpen] = useState(false);
+  // Read the collapse preference lazily so it is already correct on the first
+  // sidebar render (SSR never reaches the aside: it renders behind the auth
+  // loader), avoiding both a flash and a synchronous setState in an effect.
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(SIDEBAR_COLLAPSE_KEY) === "1";
+  });
+
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      window.localStorage.setItem(SIDEBAR_COLLAPSE_KEY, next ? "1" : "0");
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (!hasHydrated) return;
@@ -148,17 +167,45 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-dvh w-full flex-col md:flex-row">
-      <aside className="hidden bg-card md:sticky md:top-0 md:flex md:h-dvh md:w-56 md:shrink-0 md:flex-col md:gap-1 md:overflow-y-auto md:border-r md:border-border md:px-4 md:py-7 lg:w-60">
-        <div className="mb-8 flex items-center gap-3 px-2">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-foreground text-background">
+      <aside
+        className={cn(
+          "hidden bg-card transition-[width] duration-200 ease-in-out md:sticky md:top-0 md:flex md:h-dvh md:shrink-0 md:flex-col md:gap-1 md:overflow-y-auto md:border-r md:border-border md:py-7",
+          collapsed ? "md:w-[4.5rem] md:px-2" : "md:w-56 md:px-4 lg:w-60",
+        )}
+      >
+        <div
+          className={cn(
+            "flex items-center gap-3 px-2",
+            collapsed ? "mb-3 justify-center" : "mb-8",
+          )}
+        >
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-foreground text-background">
             <AzmarkMark className="h-5 w-auto" />
           </div>
-          <div>
-            <div className="font-display text-xl font-semibold leading-none tracking-tight">
-              {t("app.name")}
+          {!collapsed ? (
+            <div className="min-w-0 flex-1">
+              <div className="font-display text-xl font-semibold leading-none tracking-tight">
+                {t("app.name")}
+              </div>
+              <div className="mt-1 text-[11px] text-muted-foreground">{t("app.tagline")}</div>
             </div>
-            <div className="mt-1 text-[11px] text-muted-foreground">{t("app.tagline")}</div>
-          </div>
+          ) : null}
+        </div>
+        <div className={cn("flex", collapsed ? "mb-3 justify-center" : "mb-1 justify-end px-2")}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleCollapsed}
+            title={t(collapsed ? "nav.expand" : "nav.collapse")}
+            aria-label={t(collapsed ? "nav.expand" : "nav.collapse")}
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          >
+            {collapsed ? (
+              <PanelLeftOpen className="h-4 w-4" />
+            ) : (
+              <PanelLeftClose className="h-4 w-4" />
+            )}
+          </Button>
         </div>
         <nav className="flex flex-col gap-1">
           {navItems.map((item) => (
@@ -167,6 +214,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               item={item}
               active={isNavActive(item.href, pathname)}
               label={t(item.key)}
+              collapsed={collapsed}
             />
           ))}
         </nav>
@@ -180,22 +228,34 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-3 w-3">
               <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.431 9.8 8.207 11.387.6.111.82-.258.82-.576 0-.285-.011-1.04-.017-2.041-3.334.724-4.041-1.61-4.041-1.61-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.084-.731.084-.731 1.205.085 1.84 1.236 1.84 1.236 1.07 1.834 2.807 1.305 3.492.997.108-.775.418-1.305.762-1.604-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .317.219.69.825.57C20.568 21.795 24 17.3 24 12c0-6.627-5.373-12-12-12" />
             </svg>
-            {t("app.github")}
+            {!collapsed ? t("app.github") : null}
           </a>
           <div className="border-t border-border pt-4">
-            <div className="flex items-center gap-3">
+            <div
+              className={cn(
+                "flex items-center gap-3",
+                collapsed ? "justify-center" : undefined,
+              )}
+            >
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-foreground">
                 {identity.slice(0, 2).toUpperCase() || "AZ"}
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium text-foreground">{identity}</div>
-                <div className="truncate text-[11px] text-muted-foreground">@{user?.username}</div>
-              </div>
+              {!collapsed ? (
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium text-foreground">{identity}</div>
+                  <div className="truncate text-[11px] text-muted-foreground">@{user?.username}</div>
+                </div>
+              ) : null}
             </div>
-            <div className="mt-2.5 flex items-center gap-0.5 border-t border-border/60 pt-2">
+            <div
+              className={cn(
+                "mt-2.5 items-center gap-0.5 border-t border-border/60 pt-2",
+                collapsed ? "flex flex-col" : "flex",
+              )}
+            >
               <ThemeToggle />
-              <LanguageToggle />
-              <div className="flex-1" />
+              <LanguageToggle compact={collapsed} />
+              {!collapsed ? <div className="flex-1" /> : null}
               <Button
                 variant="ghost"
                 size="icon"
@@ -310,25 +370,29 @@ function NavLink({
   item,
   active,
   label,
+  collapsed,
 }: {
   item: NavItem;
   active: boolean;
   label: string;
+  collapsed: boolean;
 }) {
   const Icon = item.icon;
   return (
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
+      title={collapsed ? label : undefined}
       className={cn(
-        "flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "flex cursor-pointer items-center rounded-lg py-2.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        collapsed ? "justify-center" : "gap-3 px-3",
         active
           ? "bg-accent text-accent-foreground"
           : "text-muted-foreground hover:bg-muted hover:text-foreground",
       )}
     >
       <Icon className="h-4 w-4" strokeWidth={active ? 2.25 : 1.75} />
-      {label}
+      {!collapsed ? label : null}
     </Link>
   );
 }

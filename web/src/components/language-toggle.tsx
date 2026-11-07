@@ -5,18 +5,20 @@ import { Languages } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 
-export function LanguageToggle() {
+export function LanguageToggle({ compact = false }: { compact?: boolean }) {
   const { locale, setLocale, t } = useI18n();
+  const label = t("common.switchLanguage");
 
   return (
     <Button
       variant="ghost"
-      size="sm"
+      size={compact ? "icon" : "sm"}
       onClick={() => setLocale(locale === "zh-CN" ? "en-US" : "zh-CN")}
-      aria-label={t("common.switchLanguage")}
+      title={label}
+      aria-label={label}
     >
       <Languages className="h-4 w-4" />
-      {locale === "zh-CN" ? "EN" : "中"}
+      {compact ? null : locale === "zh-CN" ? "EN" : "中"}
     </Button>
   );
 }

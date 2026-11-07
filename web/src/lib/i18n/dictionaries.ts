@@ -68,6 +68,8 @@ export const dictionaries = {
     "nav.admin": "管理",
     "nav.more": "更多",
     "nav.moreTitle": "更多",
+    "nav.collapse": "折叠侧边栏",
+    "nav.expand": "展开侧边栏",
 
     "auth.login": "登录",
     "auth.register": "注册",
@@ -1047,6 +1049,8 @@ export const dictionaries = {
     "nav.admin": "Admin",
     "nav.more": "More",
     "nav.moreTitle": "More",
+    "nav.collapse": "Collapse sidebar",
+    "nav.expand": "Expand sidebar",
 
     "auth.login": "Log in",
     "auth.register": "Sign up",
