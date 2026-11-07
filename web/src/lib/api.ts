@@ -217,6 +217,7 @@ export const api = {
     const suffix = query.toString() ? `?${query.toString()}` : "";
     return request<RecordList>(`/records${suffix}`);
   },
+  getRecord: (id: string) => request<Flight>(`/records/${id}`),
   listFlights: (params: FlightFilters = {}) => {
     const query = new URLSearchParams();
     if (params.search) query.set("search", params.search);

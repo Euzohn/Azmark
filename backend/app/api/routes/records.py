@@ -4,12 +4,13 @@ import uuid
 from datetime import date
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.api.deps import get_current_user, get_record_service
 from app.models.user import User
 from app.schemas.record import RecordList
 from app.schemas.status import RecordStatus
+from app.schemas.transport import FlightRead
 from app.services.record import RecordService
 
 router = APIRouter(prefix="/records", tags=["records"])
@@ -49,3 +50,20 @@ def list_records(
         page_size=page_size,
     )
     return RecordList(items=items, total=total, page=page, page_size=page_size)
+
+
+@router.get("/{record_id}", response_model=FlightRead)
+def get_record(
+    record_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    service: RecordService = Depends(get_record_service),
+) -> FlightRead:
+    """Fetch one transport record regardless of its type.
+
+    The expense source card uses this to resolve a linked record's detail
+    route (/flights, /trains or /transports) from its id alone.
+    """
+    record = service.records.get(user_id=current_user.id, record_id=record_id)
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return record

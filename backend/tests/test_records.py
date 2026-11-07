@@ -139,3 +139,36 @@ def test_unified_records_are_user_scoped(client):
     _create_records(client, auth_headers(owner))
 
     assert _list(client, auth_headers(other))["total"] == 0
+
+
+def test_get_single_record_returns_each_transport_type(client):
+    token = register_and_login(client, "records_get")["access_token"]
+    headers = auth_headers(token)
+    flight, train, transport = _create_records(client, headers)
+
+    for expected in (flight, train, transport):
+        response = client.get(f"/api/v1/records/{expected['id']}", headers=headers)
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["id"] == expected["id"]
+        assert body["type"] == expected["type"]
+
+
+def test_get_single_record_is_user_scoped(client):
+    owner = register_and_login(client, "records_get_owner")["access_token"]
+    other = register_and_login(client, "records_get_other")["access_token"]
+    flight, _, _ = _create_records(client, auth_headers(owner))
+
+    response = client.get(f"/api/v1/records/{flight['id']}", headers=auth_headers(other))
+    assert response.status_code == 404
+
+
+def test_get_single_record_unknown_id_returns_404(client):
+    token = register_and_login(client, "records_get_missing")["access_token"]
+    headers = auth_headers(token)
+
+    response = client.get(
+        f"/api/v1/records/{'0' * 8}-{'0' * 4}-{'0' * 4}-{'0' * 4}-{'0' * 12}",
+        headers=headers,
+    )
+    assert response.status_code == 404

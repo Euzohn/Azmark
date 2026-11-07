@@ -1,7 +1,18 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MoreHorizontal, Link2, Pencil, Trash2 } from "lucide-react";
+import {
+  ArrowRight,
+  Bus,
+  CalendarDays,
+  Hotel,
+  Link2,
+  MoreHorizontal,
+  Pencil,
+  Plane,
+  Trash2,
+  TrainFront,
+} from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
@@ -224,6 +235,20 @@ const SOURCE_LABELS: Record<ExpenseSourceType, TranslationKey> = {
   activity: "expenses.sourceType.activity",
 };
 
+/** A linked transport record resolves to one of three detail routes by its
+ *  `type`; fall back to the generic transport icon/label if it is unknown. */
+const TRANSPORT_TYPE: Record<string, { href: string; icon: typeof Plane; key: TranslationKey }> = {
+  flight: { href: "/flights", icon: Plane, key: "records.type.flight" },
+  train: { href: "/trains", icon: TrainFront, key: "records.type.train" },
+  other: { href: "/transports", icon: Bus, key: "records.type.other" },
+};
+
+const SOURCE_ICONS: Record<ExpenseSourceType, typeof Plane> = {
+  transport: Link2,
+  hotel: Hotel,
+  activity: CalendarDays,
+};
+
 function ExpenseSourceCard({
   sourceType,
   sourceId,
@@ -232,20 +257,47 @@ function ExpenseSourceCard({
   sourceId: string;
 }) {
   const { t } = useI18n();
-  const href = sourceHref(sourceType, sourceId);
+  // Transport records live behind three detail routes (/flights, /trains,
+  // /transports), so the card fetches the record to resolve its type and only
+  // links once it knows where to go.
+  const { data: transportRecord } = useQuery({
+    queryKey: ["record", sourceId],
+    queryFn: () => api.getRecord(sourceId),
+    enabled: sourceType === "transport",
+  });
+
+  const directHref = sourceHref(sourceType, sourceId);
+  const resolved =
+    sourceType === "transport" && transportRecord
+      ? TRANSPORT_TYPE[transportRecord.type] ?? null
+      : null;
+  const href = directHref ?? (resolved ? `${resolved.href}/${sourceId}` : null);
+
+  const Icon =
+    sourceType === "transport"
+      ? (resolved?.icon ?? Link2)
+      : (SOURCE_ICONS[sourceType] ?? Link2);
+  const label =
+    sourceType === "transport" && resolved
+      ? t(resolved.key)
+      : t(SOURCE_LABELS[sourceType]);
+
   const content = (
     <>
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-        <Link2 className="h-4 w-4" />
+        <Icon className="h-4 w-4" />
       </span>
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <div className="text-xs text-muted-foreground">{t("expenses.source")}</div>
-        <div className="truncate text-sm font-medium">{t(SOURCE_LABELS[sourceType])}</div>
+        <div className="truncate text-sm font-medium">{label}</div>
       </div>
+      {href ? (
+        <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+      ) : null}
     </>
   );
   const className =
-    "flex items-center gap-3 rounded-xl border border-border bg-card px-5 py-4 transition-colors";
+    "group flex items-center gap-3 rounded-xl border border-border bg-card px-5 py-4 transition-colors";
   return href ? (
     <Link href={href} className={`${className} hover:border-primary/40`}>
       {content}
