@@ -1680,6 +1680,7 @@ export const dictionaries = {
 
     "ai.title": "AI Assistant",
     "ai.placeholder": "Ask me anything about your trips…",
+    "ai.send": "Send",
     "ai.empty": "Your travel assistant",
     "ai.emptyHint": "Ask \"How many Cathay flights?\" or \"Add flight CX659 HKG-SIN 2026-09-26 32A\".",
     "ai.thinking": "Thinking…",
