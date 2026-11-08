@@ -405,9 +405,12 @@ export default function AiChatPage() {
 
   const deleteConversation = useCallback(
     (id: string) => {
+      // Deleting a conversation is irreversible (localStorage only), so both
+      // the header trash and the per-item trash confirm here.
+      if (!window.confirm(t("common.confirmDelete"))) return;
       commit((prev) => removeConversation(prev, id));
     },
-    [commit],
+    [commit, t],
   );
 
   const markProposal = useCallback(

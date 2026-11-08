@@ -172,8 +172,11 @@ function parseStore(raw: string | null): ConversationStore | null {
   try {
     const data = JSON.parse(raw) as Partial<ConversationStore>;
     if (data.version !== 1 || !Array.isArray(data.conversations)) return null;
+    // Prune empty conversations: a "new chat" that was never sent into is
+    // worthless, and keeping it would litter the list forever.
     const conversations = data.conversations.filter(
-      (c): c is Conversation => Boolean(c && typeof c.id === "string"),
+      (c): c is Conversation =>
+        Boolean(c && typeof c.id === "string" && Array.isArray(c.messages) && c.messages.length > 0),
     );
     const activeId =
       data.activeId && conversations.some((c) => c.id === data.activeId)
