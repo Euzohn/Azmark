@@ -758,6 +758,10 @@ export const dictionaries = {
     "ai.imageError": "图片处理失败",
     "ai.defaultImagePrompt": "识别这张截图中的航班/火车信息",
     "ai.newChat": "新对话",
+    "ai.conversations": "对话",
+    "ai.noConversations": "暂无历史对话",
+    "ai.untitledChat": "未命名对话",
+    "ai.deleteChat": "删除对话",
 
     "pending.title": "待确认操作",
     "pending.subtitle": "AI agent 或脚本提交的写入请求，需要你在这里确认才会生效。",
@@ -1739,6 +1743,10 @@ export const dictionaries = {
     "ai.imageError": "Failed to process image",
     "ai.defaultImagePrompt": "Recognize the flight/train info in this screenshot",
     "ai.newChat": "New chat",
+    "ai.conversations": "Conversations",
+    "ai.noConversations": "No conversations yet",
+    "ai.untitledChat": "Untitled chat",
+    "ai.deleteChat": "Delete conversation",
 
     "pending.title": "Pending actions",
     "pending.subtitle": "Writes proposed by an AI agent or script only take effect once you approve them here.",

@@ -9,22 +9,40 @@ import {
   AlertTriangle,
   Bot,
   ImagePlus,
+  PanelLeftOpen,
+  Plus,
   Send,
   Sparkles,
   Trash2,
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { api, ApiError } from "@/lib/api";
 import { buildChatHistory } from "@/lib/ai-history";
+import {
+  activeConversation,
+  appendMessage,
+  createConversation,
+  loadStore,
+  patchMessage,
+  removeConversation,
+  saveStore,
+  sortByUpdated,
+  upsertConversation,
+  type Conversation,
+  type ConversationStore,
+  type StoredMessage,
+} from "@/lib/ai-conversations";
 import { useAuth } from "@/lib/auth-store";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
 import { formatZonedDateTime } from "@/lib/datetime";
+import { uuid } from "@/lib/uuid";
 import type {
   ActivityInput,
   AiProposal,
@@ -39,7 +57,6 @@ import type {
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const HISTORY_KEY = "azmark-ai-chat-history";
 const MAX_IMAGE_DIMENSION = 1920;
 const IMAGE_QUALITY = 0.85;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -52,21 +69,8 @@ const QUICK_PROMPT_KEYS = [
   "ai.quick.timeline",
 ] as const;
 
-interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  image?: string;
-  proposals?: AiProposal[];
-  error?: string;
-  streaming?: boolean;
-}
-
-let _msgId = 0;
-function nextId(): string {
-  _msgId += 1;
-  return `msg-${_msgId}-${Date.now()}`;
-}
+/** A rendered turn. Images and streaming state are tracked separately (not persisted). */
+type ChatMessage = StoredMessage;
 
 function fileToCompressedDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -269,39 +273,22 @@ function formatProposalData(
   }
 }
 
-function loadHistory(): ChatMessage[] {
-  try {
-    const raw = localStorage.getItem(HISTORY_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw) as ChatMessage[];
-  } catch {
-    return [];
-  }
-}
-
-function saveHistory(messages: ChatMessage[]) {
-  try {
-    const serializable = messages.map((m) => ({
-      ...m,
-      image: undefined,
-      streaming: undefined,
-    }));
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(serializable));
-  } catch {
-    // localStorage quota exceeded
-  }
-}
 
 export default function AiChatPage() {
   const { t } = useI18n();
   const { token } = useAuth();
   const queryClient = useQueryClient();
 
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [store, setStore] = useState<ConversationStore>(() => loadStore());
   const [input, setInput] = useState("");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [streaming, setStreaming] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
+  const [streamingId, setStreamingId] = useState<string | null>(null);
+  const [conversationsOpen, setConversationsOpen] = useState(false);
+
+  // Message images (data URLs) live outside the persisted store to keep
+  // localStorage small; they are per-session and intentionally not durable.
+  const [messageImages, setMessageImages] = useState<Record<string, string>>({});
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -314,20 +301,15 @@ export default function AiChatPage() {
   });
   const configured = aiSettings?.configured ?? false;
 
-  useEffect(() => {
-    setMessages(loadHistory());
-  }, []);
-
-  useEffect(() => {
-    saveHistory(messages);
-  }, [messages]);
-
+  // The store is loaded lazily (see useState initializer) — safe because the
+  // AppShell only renders children after auth hydration, so this never runs on
+  // the server. Persist every change straight back to localStorage.
   useEffect(() => {
     scrollRef.current?.scrollTo({
       top: scrollRef.current.scrollHeight,
       behavior: "smooth",
     });
-  }, [messages, streaming]);
+  }, [store, streamingId]);
 
   useEffect(() => {
     const el = textareaRef.current;
@@ -374,122 +356,168 @@ export default function AiChatPage() {
     [handleImageFile],
   );
 
+  const current = activeConversation(store);
+  const messages: ChatMessage[] = useMemo(() => current?.messages ?? [], [current]);
+
+  // Functional updates read the latest store, so streaming patches accumulate
+  // correctly even though the async send loop captures these callbacks once.
+  const commit = useCallback((updater: (prev: ConversationStore) => ConversationStore) => {
+    setStore(updater);
+  }, []);
+
+  // Persist on every change. The store is loaded lazily in the useState
+  // initializer, so the first run simply rewrites the loaded value.
+  useEffect(() => {
+    saveStore(store);
+  }, [store]);
+
+  const updateActive = useCallback(
+    (fn: (conv: Conversation) => Conversation) => {
+      commit((prev) => ({
+        ...prev,
+        conversations: prev.conversations.map((c) =>
+          c.id === prev.activeId ? fn(c) : c,
+        ),
+      }));
+    },
+    [commit],
+  );
+
+  /** Start a fresh chat; reuses the active one if it is still empty. */
+  const newChat = useCallback(() => {
+    const active = current;
+    if (active && active.messages.length === 0) {
+      setConversationsOpen(false);
+      return;
+    }
+    const fresh = createConversation();
+    commit((prev) => ({ ...upsertConversation(prev, fresh), activeId: fresh.id }));
+    setConversationsOpen(false);
+  }, [commit, current]);
+
+  const selectConversation = useCallback(
+    (id: string) => {
+      commit((prev) => (id !== prev.activeId ? { ...prev, activeId: id } : prev));
+      setConversationsOpen(false);
+    },
+    [commit],
+  );
+
+  const deleteConversation = useCallback(
+    (id: string) => {
+      commit((prev) => removeConversation(prev, id));
+    },
+    [commit],
+  );
+
+  const markProposal = useCallback(
+    (
+      messageId: string,
+      proposalId: string,
+      status: "saved" | "cancelled" | "duplicate",
+      existingRecordId?: string,
+    ) => {
+      updateActive((conv) =>
+        patchMessage(conv, messageId, {
+          proposals: conv.messages
+            .find((m) => m.id === messageId)
+            ?.proposals?.map((p) =>
+              p.id === proposalId ? { ...p, status, existingRecordId } : p,
+            ),
+        }),
+      );
+    },
+    [updateActive],
+  );
+
   const handleSend = useCallback(
     async (text?: string) => {
       const messageText = (text ?? input).trim();
       if (!messageText && !imagePreview) return;
-      if (streaming) return;
+      if (streamingId) return;
 
       const finalText = messageText || t("ai.defaultImagePrompt");
+      const image = imagePreview ?? undefined;
 
       // Prior turns (with proposal outcomes) give the stateless backend enough
       // context to follow up without re-proposing what the user already saved.
       const history = buildChatHistory(messages);
 
       const userMsg: ChatMessage = {
-        id: nextId(),
+        id: uuid(),
         role: "user",
         content: finalText,
-        image: imagePreview ?? undefined,
       };
 
-      const assistantId = nextId();
-      setMessages((prev) => [
-        ...prev,
-        userMsg,
-        {
+      const assistantId = uuid();
+      // Seed the conversation from the active one, or open a brand-new chat
+      // when the user is sending into an empty page. Functional so it builds
+      // on the latest store even if another render happened since the callback
+      // was created.
+      commit((prev) => {
+        const base =
+          prev.conversations.find((c) => c.id === prev.activeId) ?? createConversation();
+        const withUser = appendMessage(base, userMsg);
+        const withAssistant = appendMessage(withUser, {
           id: assistantId,
           role: "assistant",
           content: "",
-          streaming: true,
-        },
-      ]);
+        });
+        return {
+          ...upsertConversation(prev, withAssistant),
+          activeId: withAssistant.id,
+        };
+      });
+      if (image) setMessageImages((prev) => ({ ...prev, [userMsg.id]: image }));
       setInput("");
       setImagePreview(null);
-      setStreaming(true);
+      setStreamingId(assistantId);
 
       try {
         let proposals: AiProposal[] = [];
 
-        for await (const event of api.chatAiStream(finalText, imagePreview, history)) {
+        for await (const event of api.chatAiStream(finalText, image, history)) {
           if (event.type === "text" && event.content) {
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantId
-                  ? { ...m, content: m.content + event.content }
-                  : m,
-              ),
+            updateActive((conv) =>
+              patchMessage(conv, assistantId, {
+                content: (conv.messages.find((m) => m.id === assistantId)?.content ?? "") + event.content,
+              }),
             );
           } else if (event.type === "proposals" && event.proposals) {
             proposals = event.proposals.map((p) => ({
               ...p,
               status: "pending" as const,
             }));
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantId ? { ...m, proposals } : m,
-              ),
-            );
+            updateActive((conv) => patchMessage(conv, assistantId, { proposals }));
           } else if (event.type === "error") {
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantId
-                  ? {
-                      ...m,
-                      error: event.message ?? t("ai.error"),
-                      streaming: false,
-                    }
-                  : m,
-              ),
-            );
-          } else if (event.type === "done") {
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantId ? { ...m, streaming: false } : m,
-              ),
+            updateActive((conv) =>
+              patchMessage(conv, assistantId, {
+                error: event.message ?? t("ai.error"),
+              }),
             );
           }
         }
-
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantId ? { ...m, streaming: false } : m,
-          ),
-        );
       } catch (err) {
-        if (err instanceof ApiError && err.status === 400) {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantId
-                ? {
-                    ...m,
-                    error: err.message,
-                    streaming: false,
-                  }
-                : m,
-            ),
-          );
-        } else {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantId
-                ? {
-                    ...m,
-                    error:
-                      err instanceof Error
-                        ? err.message
-                        : t("ai.error"),
-                    streaming: false,
-                  }
-                : m,
-            ),
-          );
-        }
+        const message =
+          err instanceof ApiError && err.status === 400
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : t("ai.error");
+        updateActive((conv) => patchMessage(conv, assistantId, { error: message }));
       } finally {
-        setStreaming(false);
+        setStreamingId(null);
       }
     },
-    [input, imagePreview, messages, streaming, t],
+    [
+      commit,
+      imagePreview,
+      input,
+      messages,
+      streamingId,
+      t,
+      updateActive,
+    ],
   );
 
   const invalidateAll = () => {
@@ -637,46 +665,23 @@ export default function AiChatPage() {
               );
               return;
             }
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: nextId(),
+            updateActive((conv) =>
+              appendMessage(conv, {
+                id: uuid(),
                 role: "assistant",
                 content: "",
                 error: t("records.createFailed"),
-              },
-            ]);
+              }),
+            );
           },
         },
       );
     }
   };
 
-  const markProposal = (
-    messageId: string,
-    proposalId: string,
-    status: "saved" | "cancelled" | "duplicate",
-    existingRecordId?: string,
-  ) => {
-    setMessages((prev) =>
-      prev.map((msg) =>
-        msg.id === messageId
-          ? {
-              ...msg,
-              proposals: msg.proposals?.map((p) =>
-                p.id === proposalId
-                  ? { ...p, status, existingRecordId }
-                  : p,
-              ),
-            }
-          : msg,
-      ),
-    );
-  };
-
-  const clearHistory = () => {
-    setMessages([]);
-    localStorage.removeItem(HISTORY_KEY);
+  const clearCurrentChat = () => {
+    if (!current) return;
+    deleteConversation(current.id);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -690,22 +695,52 @@ export default function AiChatPage() {
   };
 
   return (
-    <div className="flex h-[calc(100dvh-8rem)] flex-col gap-4 md:h-[calc(100dvh-4rem)]">
+    <div className="flex h-[calc(100dvh-8rem)] w-full flex-col gap-4 md:h-[calc(100dvh-4rem)] md:flex-row">
+      <ConversationList
+        store={store}
+        activeId={store.activeId}
+        onSelect={selectConversation}
+        onDelete={deleteConversation}
+        onNew={newChat}
+        className="hidden md:flex"
+      />
+      <div className="flex min-w-0 flex-1 flex-col gap-4">
       <PageHeader
         title={t("ai.title")}
         actions={
-          messages.length > 0 ? (
+          <>
             <Button
-              variant="ghost"
-              size="icon"
-              onClick={clearHistory}
-              title={t("ai.clearHistory")}
-              aria-label={t("ai.clearHistory")}
-              className="h-9 w-9 text-muted-foreground hover:text-danger"
+              variant="outline"
+              className="h-9 md:hidden"
+              onClick={() => setConversationsOpen(true)}
+              title={t("ai.conversations")}
+              aria-label={t("ai.conversations")}
             >
-              <Trash2 className="h-4 w-4" />
+              <PanelLeftOpen className="h-4 w-4" />
             </Button>
-          ) : null
+            <Button
+              variant="outline"
+              onClick={newChat}
+              title={t("ai.newChat")}
+              aria-label={t("ai.newChat")}
+              className="h-9"
+            >
+              <Plus className="h-4 w-4" />
+              <span className="hidden sm:inline">{t("ai.newChat")}</span>
+            </Button>
+            {current && current.messages.length > 0 ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={clearCurrentChat}
+                title={t("ai.deleteChat")}
+                aria-label={t("ai.deleteChat")}
+                className="h-9 w-9 text-muted-foreground hover:text-danger"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            ) : null}
+          </>
         }
       />
 
@@ -770,11 +805,14 @@ export default function AiChatPage() {
                         : "bg-accent text-accent-foreground",
                   )}
                 >
-                  {msg.role === "user" && msg.image ? (
-                    <ChatImage src={msg.image} className="mb-2 max-h-48 w-auto rounded-lg" />
+                  {msg.role === "user" && messageImages[msg.id] ? (
+                    <ChatImage
+                      src={messageImages[msg.id]}
+                      className="mb-2 max-h-48 w-auto rounded-lg"
+                    />
                   ) : null}
 
-                  {msg.role === "assistant" && msg.streaming && !msg.content ? (
+                  {msg.role === "assistant" && streamingId === msg.id && !msg.content ? (
                     <div className="flex items-center gap-1 py-1">
                       <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.3s]" />
                       <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.15s]" />
@@ -851,7 +889,7 @@ export default function AiChatPage() {
                 variant="ghost"
                 size="icon"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={streaming}
+                disabled={Boolean(streamingId)}
                 title={t("ai.attachHint")}
                 aria-label={t("ai.attachHint")}
                 className="h-10 w-10 text-muted-foreground hover:text-foreground"
@@ -865,7 +903,7 @@ export default function AiChatPage() {
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
                 placeholder={t("ai.placeholder")}
-                disabled={streaming}
+                disabled={Boolean(streamingId)}
                 rows={1}
                 className="min-h-10 flex-1 resize-none rounded-xl border border-border bg-card px-3.5 py-2 text-sm text-foreground outline-none transition-colors duration-150 placeholder:text-muted-foreground/80 focus:border-primary/50 focus:ring-2 focus:ring-ring/25 disabled:opacity-50"
               />
@@ -873,7 +911,7 @@ export default function AiChatPage() {
                 type="button"
                 size="icon"
                 onClick={() => void handleSend()}
-                disabled={streaming || (!input.trim() && !imagePreview)}
+                disabled={Boolean(streamingId) || (!input.trim() && !imagePreview)}
               >
                 <Send className="h-4 w-4" />
               </Button>
@@ -881,6 +919,22 @@ export default function AiChatPage() {
           </div>
         </>
       )}
+      </div>
+
+      <BottomSheet
+        open={conversationsOpen}
+        onClose={() => setConversationsOpen(false)}
+        title={t("ai.conversations")}
+      >
+        <ConversationList
+          store={store}
+          activeId={store.activeId}
+          onSelect={selectConversation}
+          onDelete={deleteConversation}
+          onNew={newChat}
+          className="flex"
+        />
+      </BottomSheet>
     </div>
   );
 }
@@ -895,6 +949,100 @@ function ChatImage({
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img src={src} alt="" className={className} />
+  );
+}
+
+/**
+ * Conversation switcher shared by the desktop sidebar and the mobile sheet.
+ * Shows the newest activity first; each row is a titled button with a delete
+ * affordance, and the active conversation is highlighted.
+ */
+function ConversationList({
+  store,
+  activeId,
+  onSelect,
+  onDelete,
+  onNew,
+  className,
+}: {
+  store: ConversationStore;
+  activeId: string | null;
+  onSelect: (id: string) => void;
+  onDelete: (id: string) => void;
+  onNew: () => void;
+  className?: string;
+}) {
+  const { t, locale } = useI18n();
+  const conversations = sortByUpdated(store.conversations);
+
+  return (
+    <aside
+      className={cn(
+        "w-72 shrink-0 flex-col gap-2 overflow-y-auto rounded-2xl border border-border bg-card/50 p-3",
+        className,
+      )}
+    >
+      <div className="flex items-center justify-between px-1">
+        <span className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground/80">
+          {t("ai.conversations")}
+        </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onNew}
+          title={t("ai.newChat")}
+          aria-label={t("ai.newChat")}
+          className="h-8 text-xs"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          {t("ai.newChat")}
+        </Button>
+      </div>
+
+      {conversations.length === 0 ? (
+        <p className="px-2 py-6 text-center text-xs text-muted-foreground">
+          {t("ai.noConversations")}
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {conversations.map((conversation) => {
+            const active = conversation.id === activeId;
+            return (
+              <li key={conversation.id} className="group relative">
+                <button
+                  type="button"
+                  onClick={() => onSelect(conversation.id)}
+                  aria-current={active ? "true" : undefined}
+                  title={conversation.title || t("ai.untitledChat")}
+                  className={cn(
+                    "w-full cursor-pointer rounded-lg px-3 py-2 pr-9 text-left transition-colors",
+                    active
+                      ? "bg-accent text-accent-foreground"
+                      : "text-foreground hover:bg-muted",
+                  )}
+                >
+                  <span className="block truncate text-sm font-medium">
+                    {conversation.title || t("ai.untitledChat")}
+                  </span>
+                  <span className="block truncate text-[11px] text-muted-foreground">
+                    {formatZonedDateTime(conversation.updatedAt, locale, null)}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDelete(conversation.id)}
+                  aria-label={t("ai.deleteChat")}
+                  title={t("ai.deleteChat")}
+                  className="absolute right-1 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground/50 transition-colors hover:bg-muted hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </aside>
   );
 }
 
