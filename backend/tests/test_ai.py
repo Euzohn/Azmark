@@ -658,8 +658,56 @@ def test_create_transport_proposal_preserves_all_inferred_fields(client, monkeyp
     )
     assert response.status_code == 200
     prop = response.json()["proposals"][0]
+    # Times are re-anchored to UTC at the proposal boundary (same instant); every
+    # other field is preserved verbatim.
+    from datetime import datetime
+
+    time_fields = {"departure_time", "arrival_time"}
     for key, value in data.items():
+        if key in time_fields:
+            continue
         assert prop["data"][key] == value
+    for key in time_fields:
+        assert datetime.fromisoformat(prop["data"][key]) == datetime.fromisoformat(data[key])
+
+
+def test_compact_record_renders_times_in_local_zone():
+    """Read tools must show the LLM the wall clock the user sees, not raw UTC,
+    so an echoed value survives re-anchoring on a later write."""
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+
+    from app.services.ai_tools import _compact_record
+
+    record = SimpleNamespace(
+        id="x",
+        type="flight",
+        origin="SZX",
+        destination="PVG",
+        service_number="ZH9531",
+        carrier=None,
+        airline_code=None,
+        departure_time=datetime(2026, 5, 1, 2, 5, tzinfo=UTC),
+        arrival_time=None,
+        departure_timezone="Asia/Shanghai",
+        arrival_timezone="Asia/Shanghai",
+        status="completed",
+        distance=None,
+        cabin_class=None,
+        seat=None,
+        departure_terminal=None,
+        departure_gate=None,
+        arrival_terminal=None,
+        arrival_gate=None,
+        aircraft_model=None,
+        train_type=None,
+        carriage=None,
+        seat_type=None,
+        price=None,
+        currency=None,
+    )
+    payload = _compact_record(record)
+    assert payload["departure_time"] == "2026-05-01T10:05:00+08:00"
 
 
 def test_create_train_proposal_keeps_train_type(client, monkeypatch):

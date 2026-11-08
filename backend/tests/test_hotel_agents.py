@@ -482,3 +482,21 @@ def test_chat_update_transport_proposal_normalizes_record_type(client, monkeypat
             {"record_type": raw, "record_id": "x", "data": {"seat": "1A"}}
         )
         assert prop.record_type == expected, f"input {raw!r} -> {prop.record_type!r}"
+
+
+def test_update_transport_proposal_reanchors_wall_clock():
+    """The web chat approval PATCHes straight to REST, bypassing the MCP gate,
+    so the proposal builder itself must repair a wrong offset."""
+    from app.services.ai_tools import _update_transport_proposal
+
+    prop = _update_transport_proposal(
+        {
+            "record_type": "flight",
+            "record_id": "x",
+            "data": {
+                "departure_time": "2026-05-01T10:05:00+00:00",
+                "departure_timezone": "Asia/Shanghai",
+            },
+        }
+    )
+    assert prop.data["departure_time"] == "2026-05-01T02:05:00+00:00"

@@ -17,9 +17,10 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, datetime
+from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-__all__ = ["normalize_timezone", "in_timezone"]
+__all__ = ["normalize_timezone", "in_timezone", "localize_transport_times"]
 
 
 def in_timezone(value: datetime, timezone: str | None) -> datetime:
@@ -117,3 +118,72 @@ def normalize_timezone(value: str | None) -> str | None:
             return _etc_gmt(hh if sign == "+" else -hh)
 
     return text
+
+
+#: Scheduled/actual times on a transport record and the zone that labels them.
+#: Actual departure shares the departure zone; actual arrival the arrival zone.
+_TRANSPORT_TIME_FIELDS: tuple[tuple[str, str], ...] = (
+    ("departure_time", "departure_timezone"),
+    ("arrival_time", "arrival_timezone"),
+    ("actual_departure_time", "departure_timezone"),
+    ("actual_arrival_time", "arrival_timezone"),
+)
+
+
+def _reanchor(value: object, zone_name: object) -> str | None:
+    """Interpret a value's wall clock in ``zone_name``; return a UTC ISO string.
+
+    Returns ``None`` when the value cannot be re-anchored (blank, date-only,
+    unparseable, or no valid zone) so the caller leaves it untouched.
+    """
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str):
+        text = value.strip()
+        # A bare date (no "T") has no wall-clock time to re-anchor.
+        if not text or "T" not in text:
+            return None
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    else:
+        return None
+
+    if not isinstance(zone_name, str):
+        return None
+    zone = normalize_timezone(zone_name)
+    if not zone:
+        return None
+    try:
+        tz = ZoneInfo(zone)
+    except (ZoneInfoNotFoundError, ValueError):
+        return None
+
+    # Drop any offset the model supplied and treat the wall clock as local to
+    # the named zone. This both repairs a wrong (usually +00:00) offset and is
+    # idempotent when the offset was already correct.
+    wall = parsed.replace(tzinfo=None)
+    return wall.replace(tzinfo=tz).astimezone(UTC).isoformat()
+
+
+def localize_transport_times(data: dict[str, Any]) -> dict[str, Any]:
+    """Normalise transport times to UTC using their IANA ``*_timezone`` fields.
+
+    LLMs are told to emit location-local ISO instants but routinely write the
+    wall-clock time with a ``+00:00`` offset while filling ``departure_timezone``
+    / ``arrival_timezone`` correctly. Re-anchoring the wall clock in the named
+    zone discards that bad offset and recomputes the UTC instant, which is what
+    the database stores. Values without a usable paired timezone are ignored.
+    """
+    if not isinstance(data, dict):
+        return data
+    result = dict(data)
+    for time_key, zone_key in _TRANSPORT_TIME_FIELDS:
+        raw = result.get(time_key)
+        if raw is None:
+            continue
+        reanchored = _reanchor(raw, result.get(zone_key))
+        if reanchored is not None:
+            result[time_key] = reanchored
+    return result

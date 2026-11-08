@@ -16,6 +16,7 @@ from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.timezones import localize_transport_times
 from app.models.pending_action import PendingAction, PendingActionKind, PendingActionStatus
 from app.models.user import utcnow
 from app.schemas.activity import ActivityCreate, ActivityUpdate
@@ -86,6 +87,10 @@ _UPDATE_SCHEMAS = {
     "place": PlaceUpdate,
     "activity": ActivityUpdate,
 }
+
+#: Record types whose times are anchored by an IANA ``*_timezone`` field; agent
+#: arguments for these are re-anchored before validation (see ``timezones``).
+_TRANSPORT_TYPES = frozenset({"flight", "train", "other"})
 
 _SERVICES = {
     "flight": FlightService,
@@ -185,6 +190,8 @@ def validate_create(record_type: str, data: dict[str, Any]) -> dict[str, Any]:
         )
     if not isinstance(data, dict):
         raise InvalidProposalError([{"field": "data", "message": "must be an object"}])
+    if record_type in _TRANSPORT_TYPES:
+        data = localize_transport_times(data)
     try:
         return schema.model_validate(data).model_dump(mode="json")
     except ValidationError as exc:
@@ -204,6 +211,8 @@ def validate_update(record_type: str, record_id: str, data: dict[str, Any]) -> d
         parsed_id = uuid.UUID(str(record_id))
     except (TypeError, ValueError):
         raise InvalidProposalError([{"field": "record_id", "message": "must be a UUID"}]) from None
+    if record_type in _TRANSPORT_TYPES:
+        data = localize_transport_times(data)
     try:
         patch = schema.model_validate(data).model_dump(mode="json", exclude_unset=True)
     except ValidationError as exc:

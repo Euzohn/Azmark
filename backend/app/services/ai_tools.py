@@ -19,6 +19,7 @@ from enum import StrEnum
 from sqlalchemy.orm import Session
 
 from app.core.redact import redact_exception
+from app.core.timezones import in_timezone, localize_transport_times
 from app.schemas.ai import AiProposal
 from app.services import reference
 from app.services.dashboard import DashboardService
@@ -34,7 +35,12 @@ class ToolPermission(StrEnum):
 
 
 def _compact_record(record) -> dict:
-    """Serialize a record for the LLM — never includes sensitive fields (#45/#96)."""
+    """Serialize a record for the LLM — never includes sensitive fields (#45/#96).
+
+    Times are rendered in the record's own zone so the model sees the same wall
+    clock the user sees. If it echoes a value back in an update, re-anchoring it
+    at the write gate is then idempotent instead of corrupting the instant.
+    """
     return {
         "id": str(record.id),
         "type": record.type,
@@ -43,8 +49,16 @@ def _compact_record(record) -> dict:
         "service_number": record.service_number,
         "carrier": record.carrier,
         "airline_code": getattr(record, "airline_code", None),
-        "departure_time": record.departure_time.isoformat() if record.departure_time else None,
-        "arrival_time": record.arrival_time.isoformat() if record.arrival_time else None,
+        "departure_time": (
+            in_timezone(record.departure_time, record.departure_timezone).isoformat()
+            if record.departure_time
+            else None
+        ),
+        "arrival_time": (
+            in_timezone(record.arrival_time, record.arrival_timezone).isoformat()
+            if record.arrival_time
+            else None
+        ),
         "status": record.status,
         "distance_km": float(record.distance) if record.distance else None,
         "cabin_class": getattr(record, "cabin_class", None),
@@ -533,11 +547,14 @@ def _infer_status(data: dict) -> str | None:
 def _fill_inferred_fields(record_type: str, data: object) -> dict:
     """Server-side safety net for fields the LLM may have omitted.
 
-    Only fills missing values — never overrides what the LLM provided.
+    Fills missing values only. One deliberate exception: transport times are
+    re-anchored to their IANA zone so a wrong offset cannot corrupt the instant.
     """
     if not isinstance(data, dict):
         return {}
-    data = dict(data)
+    # Re-anchor first so status inference and the proposal summary both use the
+    # corrected instant; the LLM often writes wall-clock time with +00:00.
+    data = localize_transport_times(data)
 
     if not data.get("status"):
         status = _infer_status(data)
@@ -669,12 +686,17 @@ def _update_transport_proposal(args: dict) -> AiProposal:
 
     Normalizes the record_type so the frontend can dispatch safely: anything
     outside {flight, train, other} collapses to "other" instead of leaking an
-    unknown value into the proposal.
+    unknown value into the proposal. Provided times are re-anchored to their
+    paired timezone here because the frontend PATCHes them straight to the REST
+    update endpoint, bypassing the MCP validation gate.
     """
     raw = args.get("record_type") or args.get("type") or "other"
     record_type = raw if raw in {"flight", "train", "other"} else "other"
+    localized = dict(args)
+    if isinstance(localized.get("data"), dict):
+        localized["data"] = localize_transport_times(localized["data"])
     return _update_proposal(
-        args, action="update_transport", record_type=record_type, label=record_type
+        localized, action="update_transport", record_type=record_type, label=record_type
     )
 
 

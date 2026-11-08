@@ -475,3 +475,66 @@ def test_activity_unknown_place_fails_at_confirm(client, db):
     action = db.scalar(select(PendingAction).where(PendingAction.id == uuid.UUID(action_id)))
     assert action.status == PendingActionStatus.FAILED
     assert db.scalar(select(Activity)) is None  # never a silent partial write
+
+
+# -- timezone re-anchoring at the MCP write gate ------------------------------
+# Agents estimate offsets poorly; the gate trusts the wall clock + IANA zone.
+
+
+def _dt(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def test_validate_create_reanchors_wall_clock():
+    from app.services.pending_action import validate_create
+
+    payload = validate_create(
+        "flight",
+        {
+            "origin": "SZX",
+            "destination": "PVG",
+            "departure_time": "2026-05-01T10:05:00+00:00",  # wrong offset
+            "departure_timezone": "Asia/Shanghai",
+        },
+    )
+    assert _dt(payload["departure_time"]) == datetime(2026, 5, 1, 2, 5, tzinfo=UTC)
+
+
+def test_validate_create_reanchoring_is_idempotent():
+    from app.services.pending_action import validate_create
+
+    payload = validate_create(
+        "flight",
+        {
+            "origin": "SZX",
+            "destination": "PVG",
+            "departure_time": "2026-05-01T10:05:00+08:00",  # already correct
+            "departure_timezone": "Asia/Shanghai",
+        },
+    )
+    assert _dt(payload["departure_time"]) == datetime(2026, 5, 1, 2, 5, tzinfo=UTC)
+
+
+def test_validate_update_reanchors_wall_clock():
+    from app.services.pending_action import validate_update
+
+    result = validate_update(
+        "train",
+        str(uuid.uuid4()),
+        {
+            "departure_time": "2026-05-01T10:05:00+00:00",
+            "departure_timezone": "Asia/Shanghai",
+        },
+    )
+    assert _dt(result["data"]["departure_time"]) == datetime(2026, 5, 1, 2, 5, tzinfo=UTC)
+
+
+def test_validate_create_leaves_non_transport_untouched():
+    from app.services.pending_action import validate_create
+
+    # A hotel has no transport time fields; re-anchoring is a no-op.
+    payload = validate_create(
+        "hotel",
+        {"hotel": "Ryokan", "check_in": "2026-05-01", "check_out": "2026-05-02"},
+    )
+    assert payload["check_in"] == "2026-05-01"
