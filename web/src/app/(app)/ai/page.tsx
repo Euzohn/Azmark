@@ -726,7 +726,7 @@ export default function AiChatPage() {
               onClick={newChat}
               title={t("ai.newChat")}
               aria-label={t("ai.newChat")}
-              className="h-9"
+              className="h-9 md:hidden"
             >
               <Plus className="h-4 w-4" />
               <span className="hidden sm:inline">{t("ai.newChat")}</span>
@@ -763,7 +763,7 @@ export default function AiChatPage() {
           <div
             ref={scrollRef}
             onPaste={handlePaste}
-            className="flex flex-1 flex-col gap-4 overflow-y-auto rounded-2xl border border-border bg-card/50 p-4"
+            className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto py-4"
           >
             {messages.length === 0 ? (
               <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center gap-4 text-center">
@@ -856,7 +856,7 @@ export default function AiChatPage() {
             ))}
           </div>
 
-          <div className="mx-auto flex w-full max-w-3xl flex-col gap-2">
+          <div className="mx-auto flex w-full max-w-3xl flex-col gap-2 border-t border-border/60 pb-1 pt-3">
             {imagePreview && (
               <div className="relative inline-flex items-center gap-2 self-start">
                 <ChatImage src={imagePreview} className="h-16 w-16 rounded-lg border border-border object-cover" />
@@ -981,26 +981,24 @@ function ConversationList({
   return (
     <aside
       className={cn(
-        "w-72 shrink-0 flex-col gap-2 overflow-y-auto rounded-2xl border border-border bg-card/50 p-3",
+        "flex w-full shrink-0 flex-col gap-3 overflow-y-auto rounded-2xl border border-border bg-card/50 p-3 md:w-64",
         className,
       )}
     >
-      <div className="flex items-center justify-between px-1">
-        <span className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground/80">
-          {t("ai.conversations")}
-        </span>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onNew}
-          title={t("ai.newChat")}
-          aria-label={t("ai.newChat")}
-          className="h-8 text-xs"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          {t("ai.newChat")}
-        </Button>
-      </div>
+      <Button
+        variant="outline"
+        onClick={onNew}
+        title={t("ai.newChat")}
+        aria-label={t("ai.newChat")}
+        className="h-9 w-full shrink-0"
+      >
+        <Plus className="h-4 w-4" />
+        {t("ai.newChat")}
+      </Button>
+
+      <span className="px-1 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground/80">
+        {t("ai.conversations")}
+      </span>
 
       {conversations.length === 0 ? (
         <p className="px-2 py-6 text-center text-xs text-muted-foreground">
