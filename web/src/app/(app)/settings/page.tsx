@@ -428,8 +428,24 @@ export function SettingsPanel({
             onSubmit={(event) => {
               event.preventDefault();
               setAiSaved(false);
-              if (!aiForm.provider || !aiForm.model) return;
-              saveAi.mutate(aiForm);
+              // The form starts empty and falls back to the saved settings for
+              // display, so merge those values back in — otherwise editing only
+              // one field (e.g. temperature) fails the provider/model check.
+              const provider = aiForm.provider || aiSettings?.provider || "";
+              const model = aiForm.model || aiSettings?.model || "";
+              if (!provider || !model) return;
+              saveAi.mutate({
+                ...aiForm,
+                provider,
+                model,
+                base_url: aiForm.base_url || aiSettings?.base_url || "",
+                temperature:
+                  aiForm.temperature ||
+                  (aiSettings?.temperature != null ? String(aiSettings.temperature) : ""),
+                context_limit:
+                  aiForm.context_limit ||
+                  (aiSettings?.context_limit != null ? String(aiSettings.context_limit) : ""),
+              });
             }}
           >
             <div>
@@ -481,7 +497,10 @@ export function SettingsPanel({
                 step="0.1"
                 min="0"
                 max="2"
-                value={aiForm.temperature}
+                value={
+                  aiForm.temperature ||
+                  (aiSettings?.temperature != null ? String(aiSettings.temperature) : "")
+                }
                 onChange={(e) => setAiForm({ ...aiForm, temperature: e.target.value })}
                 placeholder="0.3"
               />
@@ -492,7 +511,10 @@ export function SettingsPanel({
                 type="number"
                 step="1000"
                 min="1000"
-                value={aiForm.context_limit}
+                value={
+                  aiForm.context_limit ||
+                  (aiSettings?.context_limit != null ? String(aiSettings.context_limit) : "")
+                }
                 onChange={(e) => setAiForm({ ...aiForm, context_limit: e.target.value })}
                 placeholder="8000"
               />
