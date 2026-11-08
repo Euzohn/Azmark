@@ -8,6 +8,7 @@ import {
 import {
   AlertTriangle,
   Bot,
+  ChevronRight,
   ImagePlus,
   PanelLeftOpen,
   Plus,
@@ -71,6 +72,40 @@ const QUICK_PROMPT_KEYS = [
 
 /** A rendered turn. Images and streaming state are tracked separately (not persisted). */
 type ChatMessage = StoredMessage;
+
+/** Collapsible chain-of-thought block shown above an assistant reply. */
+function ReasoningBlock({
+  text,
+  streaming,
+  label,
+}: {
+  text: string;
+  streaming: boolean;
+  label: string;
+}) {
+  const [open, setOpen] = useState(streaming);
+  return (
+    <div className="mb-2 overflow-hidden rounded-lg border border-border/60 bg-background/40">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="flex w-full items-center gap-1.5 px-3 py-2 text-left text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+        aria-expanded={open}
+      >
+        <ChevronRight
+          className={cn("h-3.5 w-3.5 shrink-0 transition-transform", open && "rotate-90")}
+        />
+        <span>{label}</span>
+        {streaming ? <span className="animate-pulse">…</span> : null}
+      </button>
+      {open ? (
+        <div className="max-h-64 overflow-y-auto whitespace-pre-wrap border-t border-border/60 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+          {text}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function fileToCompressedDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -480,7 +515,15 @@ export default function AiChatPage() {
         let proposals: AiProposal[] = [];
 
         for await (const event of api.chatAiStream(finalText, image, history)) {
-          if (event.type === "text" && event.content) {
+          if (event.type === "reasoning" && event.content) {
+            updateActive((conv) =>
+              patchMessage(conv, assistantId, {
+                reasoning:
+                  (conv.messages.find((m) => m.id === assistantId)?.reasoning ?? "") +
+                  event.content,
+              }),
+            );
+          } else if (event.type === "text" && event.content) {
             updateActive((conv) =>
               patchMessage(conv, assistantId, {
                 content: (conv.messages.find((m) => m.id === assistantId)?.content ?? "") + event.content,
@@ -815,7 +858,18 @@ export default function AiChatPage() {
                     />
                   ) : null}
 
-                  {msg.role === "assistant" && streamingId === msg.id && !msg.content ? (
+                  {msg.role === "assistant" && msg.reasoning ? (
+                    <ReasoningBlock
+                      text={msg.reasoning}
+                      streaming={streamingId === msg.id && !msg.content}
+                      label={t("ai.reasoning")}
+                    />
+                  ) : null}
+
+                  {msg.role === "assistant" &&
+                  streamingId === msg.id &&
+                  !msg.content &&
+                  !msg.reasoning ? (
                     <div className="flex items-center gap-1 py-1">
                       <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.3s]" />
                       <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.15s]" />

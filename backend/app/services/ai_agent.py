@@ -363,12 +363,15 @@ class AiAgentService:
         messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
         for turn in history or []:
             if turn.role == "assistant":
-                messages.append(
-                    {
-                        "role": "assistant",
-                        "content": AiAgentService._assistant_history_content(turn),
-                    }
-                )
+                assistant_message: dict[str, Any] = {
+                    "role": "assistant",
+                    "content": AiAgentService._assistant_history_content(turn),
+                }
+                # Thinking-mode tool calls require the prior chain of thought to
+                # be echoed back or the provider rejects the request (400).
+                if turn.reasoning:
+                    assistant_message["reasoning_content"] = turn.reasoning
+                messages.append(assistant_message)
             else:
                 messages.append({"role": "user", "content": turn.content})
         messages.append({"role": "user", "content": user_content})
@@ -379,9 +382,10 @@ class AiAgentService:
         *,
         content: str,
         tool_calls: list,
+        reasoning: str = "",
     ) -> dict[str, Any]:
         """Build the assistant message with tool calls (OpenAI format)."""
-        return {
+        message: dict[str, Any] = {
             "role": "assistant",
             "content": content,
             "tool_calls": [
@@ -396,6 +400,11 @@ class AiAgentService:
                 for tc in tool_calls
             ],
         }
+        # DeepSeek's thinking mode wants the reasoning echoed back alongside a
+        # tool-call turn; omitting it makes the next request fail.
+        if reasoning:
+            message["reasoning_content"] = reasoning
+        return message
 
     @staticmethod
     def _tool_result_msg(*, tool_call_id: str, result: Any) -> dict[str, Any]:
@@ -482,6 +491,7 @@ class AiAgentService:
             system=system, message=message, image=image, history=history
         )
         proposals: list[AiProposal] = []
+        reasoning_parts: list[str] = []
 
         for _step in range(MAX_TOOL_STEPS):
             try:
@@ -495,16 +505,25 @@ class AiAgentService:
                 return AiChatResponse(
                     reply=f"(LLM error: {exc})",
                     proposals=proposals,
+                    reasoning="".join(reasoning_parts),
                 )
+
+            if resp.reasoning:
+                reasoning_parts.append(resp.reasoning)
 
             if not resp.tool_calls:
                 return AiChatResponse(
                     reply=resp.content or "",
                     proposals=proposals,
+                    reasoning="".join(reasoning_parts),
                 )
 
             messages.append(
-                self._assistant_msg(content=resp.content or "", tool_calls=resp.tool_calls)
+                self._assistant_msg(
+                    content=resp.content or "",
+                    tool_calls=resp.tool_calls,
+                    reasoning=resp.reasoning or "",
+                )
             )
 
             had_pending = await self._process_tool_calls(
@@ -522,13 +541,18 @@ class AiAgentService:
                         temperature=temperature,
                     )
                 except LLMProviderError:
-                    return AiChatResponse(reply="", proposals=proposals)
+                    return AiChatResponse(
+                        reply="", proposals=proposals, reasoning="".join(reasoning_parts)
+                    )
+                if resp.reasoning:
+                    reasoning_parts.append(resp.reasoning)
                 return AiChatResponse(
                     reply=resp.content or "",
                     proposals=proposals,
+                    reasoning="".join(reasoning_parts),
                 )
 
-        return AiChatResponse(reply="", proposals=proposals)
+        return AiChatResponse(reply="", proposals=proposals, reasoning="".join(reasoning_parts))
 
     # ------------------------------------------------------------------
     #  Streaming chat
@@ -548,6 +572,7 @@ class AiAgentService:
         """Stream agent chat as NDJSON-serialisable dicts.
 
         Yields:
+        - ``{"type": "reasoning", "content": "..."}`` — chain-of-thought delta
         - ``{"type": "text", "content": "..."}``    — text delta
         - ``{"type": "proposals", "proposals": [...]}`` — proposals
         - ``{"type": "done"}``                       — stream complete
@@ -565,6 +590,7 @@ class AiAgentService:
 
         for _step in range(MAX_TOOL_STEPS):
             content_parts: list[str] = []
+            reasoning_parts: list[str] = []
             step_tool_calls: list = []
 
             try:
@@ -573,6 +599,9 @@ class AiAgentService:
                     tools=tool_schemas(),
                     temperature=temperature,
                 ):
+                    if delta.reasoning:
+                        reasoning_parts.append(delta.reasoning)
+                        yield {"type": "reasoning", "content": delta.reasoning}
                     if delta.content:
                         content_parts.append(delta.content)
                         yield {"type": "text", "content": delta.content}
@@ -591,6 +620,7 @@ class AiAgentService:
                 self._assistant_msg(
                     content="".join(content_parts) or "",
                     tool_calls=step_tool_calls,
+                    reasoning="".join(reasoning_parts),
                 )
             )
 
@@ -608,6 +638,8 @@ class AiAgentService:
                         tools=tool_schemas(),
                         temperature=temperature,
                     ):
+                        if delta.reasoning:
+                            yield {"type": "reasoning", "content": delta.reasoning}
                         if delta.content:
                             yield {"type": "text", "content": delta.content}
                 except LLMProviderError:

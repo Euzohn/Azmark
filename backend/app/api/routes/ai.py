@@ -67,6 +67,7 @@ async def chat_stream(
     """Stream AI chat as NDJSON (one JSON object per line).
 
     Events:
+    - ``{"type":"reasoning","content":"..."}`` — chain-of-thought delta
     - ``{"type":"text","content":"..."}``    — partial text
     - ``{"type":"proposals","proposals":[...]}`` — proposals
     - ``{"type":"done"}``                     — stream complete

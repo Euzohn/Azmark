@@ -35,6 +35,7 @@ export interface StoredMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
+  reasoning?: string;
   proposals?: AiProposal[];
   error?: string;
 }

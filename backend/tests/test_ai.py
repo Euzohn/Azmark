@@ -2,7 +2,7 @@
 
 import json
 
-from app.providers.llm import LLMProvider, LLMResponse, LLMToolCall
+from app.providers.llm import LLMProvider, LLMResponse, LLMToolCall, StreamDelta
 from app.services.ai_tools import TOOLS, ToolPermission
 from tests.conftest import auth_headers, register_and_login
 
@@ -22,6 +22,25 @@ class _ScriptedProvider(LLMProvider):
         resp = self._responses[self.calls]
         self.calls += 1
         return resp
+
+
+class _ScriptedStreamingProvider(LLMProvider):
+    """Streams scripted deltas and records the messages each call received."""
+
+    def __init__(self, script: list[list[StreamDelta]]) -> None:
+        self._script = script
+        self.calls = 0
+        self.seen_messages: list[list[dict]] = []
+
+    async def chat(self, *, messages, tools=None, temperature=None) -> LLMResponse:
+        raise AssertionError("streaming path must not call chat()")
+
+    async def chat_stream(self, *, messages, tools=None, temperature=None):
+        self.seen_messages.append([dict(message) for message in messages])
+        deltas = self._script[self.calls]
+        self.calls += 1
+        for delta in deltas:
+            yield delta
 
 
 FLIGHT = {
@@ -1108,3 +1127,90 @@ def test_chat_rejects_oversized_history(client):
         "/api/v1/ai/chat", json={"message": "hi", "history": history}, headers=headers
     )
     assert response.status_code == 422
+
+
+# -- streaming + thinking-mode reasoning -------------------------------------
+
+
+def test_chat_stream_emits_reasoning_deltas(client, monkeypatch):
+    token = register_and_login(client, "ai_reason_stream")["access_token"]
+    headers = auth_headers(token)
+    _configure_ai(client, headers)
+
+    from app.services import ai_agent as agent_mod
+
+    fake = _ScriptedStreamingProvider(
+        [[StreamDelta(reasoning="先想一下"), StreamDelta(content="你好")]]
+    )
+    monkeypatch.setattr(
+        agent_mod.AiAgentService,
+        "_build_provider",
+        lambda self, user_id: fake,
+    )
+
+    response = client.post("/api/v1/ai/chat/stream", json={"message": "hi"}, headers=headers)
+    assert response.status_code == 200
+    events = [json.loads(line) for line in response.text.splitlines() if line.strip()]
+
+    reasoning = "".join(e["content"] for e in events if e["type"] == "reasoning")
+    text = "".join(e["content"] for e in events if e["type"] == "text")
+    assert reasoning == "先想一下"
+    assert text == "你好"
+    assert events[-1]["type"] == "done"
+
+
+def test_chat_stream_passes_reasoning_back_with_tool_calls(client, monkeypatch):
+    """Thinking mode requires the reasoning to ride along with a tool-call turn,
+    otherwise the next provider request is rejected (400)."""
+    token = register_and_login(client, "ai_reason_tools")["access_token"]
+    headers = auth_headers(token)
+    _configure_ai(client, headers)
+
+    from app.services import ai_agent as agent_mod
+
+    tool_call = LLMToolCall(id="call_1", name="search_records", arguments={"query": ""})
+    fake = _ScriptedStreamingProvider(
+        [
+            [StreamDelta(reasoning="I should search"), StreamDelta(tool_calls=[tool_call])],
+            [StreamDelta(reasoning="Now answer"), StreamDelta(content="Done")],
+        ]
+    )
+    monkeypatch.setattr(
+        agent_mod.AiAgentService,
+        "_build_provider",
+        lambda self, user_id: fake,
+    )
+
+    response = client.post(
+        "/api/v1/ai/chat/stream", json={"message": "find flights"}, headers=headers
+    )
+    assert response.status_code == 200
+    events = [json.loads(line) for line in response.text.splitlines() if line.strip()]
+    assert "".join(e["content"] for e in events if e["type"] == "reasoning") == (
+        "I should searchNow answer"
+    )
+
+    second_messages = fake.seen_messages[1]
+    assistant = next(m for m in second_messages if m.get("role") == "assistant")
+    assert assistant["reasoning_content"] == "I should search"
+
+
+def test_chat_returns_reasoning(client, monkeypatch):
+    token = register_and_login(client, "ai_reason_chat")["access_token"]
+    headers = auth_headers(token)
+    _configure_ai(client, headers)
+
+    from app.services import ai_agent as agent_mod
+
+    fake = _ScriptedProvider([LLMResponse(content="Hi", reasoning="thinking it over")])
+    monkeypatch.setattr(
+        agent_mod.AiAgentService,
+        "_build_provider",
+        lambda self, user_id: fake,
+    )
+
+    response = client.post("/api/v1/ai/chat", json={"message": "hi"}, headers=headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["reply"] == "Hi"
+    assert body["reasoning"] == "thinking it over"

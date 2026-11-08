@@ -10,6 +10,7 @@ import type { AiHistoryMessage } from "@/lib/types";
 export interface ChatHistorySource {
   role: "user" | "assistant";
   content: string;
+  reasoning?: string;
   error?: string;
   streaming?: boolean;
   proposals?: Array<{
@@ -24,6 +25,8 @@ export interface ChatHistorySource {
 export const MAX_HISTORY_TURNS = 12;
 /** Per-message cap. The backend accepts up to 4000; keep headroom for safety. */
 export const MAX_HISTORY_CONTENT = 2000;
+/** Keep reasoning in history for continuity, but never resend a novel. */
+export const MAX_HISTORY_REASONING = 8000;
 
 export function buildChatHistory(
   messages: ChatHistorySource[],
@@ -48,9 +51,17 @@ export function buildChatHistory(
 
     // A proposal-only assistant turn has no text but is still meaningful.
     if (!content && !proposals) continue;
-    turns.push(
-      proposals ? { role: message.role, content, proposals } : { role: message.role, content },
-    );
+
+    const reasoning =
+      message.role === "assistant" && message.reasoning
+        ? message.reasoning.slice(0, MAX_HISTORY_REASONING)
+        : undefined;
+
+    const turn: AiHistoryMessage = proposals
+      ? { role: message.role, content, proposals }
+      : { role: message.role, content };
+    if (reasoning) turn.reasoning = reasoning;
+    turns.push(turn);
   }
   return turns.slice(-Math.max(0, limit));
 }

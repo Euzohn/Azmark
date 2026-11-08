@@ -31,6 +31,9 @@ class AiHistoryMessage(BaseModel):
     role: Literal["user", "assistant"]
     content: str = Field(max_length=4000)
     proposals: list[AiHistoryProposalOutcome] | None = None
+    #: Chain of thought from a prior assistant turn. DeepSeek requires it to be
+    #: echoed back when tools are in play, so it round-trips through the client.
+    reasoning: str | None = Field(default=None, max_length=20000)
 
 
 class AiChatRequest(BaseModel):
@@ -67,3 +70,5 @@ class AiProposal(BaseModel):
 class AiChatResponse(BaseModel):
     reply: str = ""
     proposals: list[AiProposal] = Field(default_factory=list)
+    #: Chain of thought for the final turn (streaming path emits it as deltas).
+    reasoning: str = ""

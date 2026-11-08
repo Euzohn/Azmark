@@ -29,17 +29,21 @@ class LLMToolCall:
 class LLMResponse:
     content: str | None = None
     tool_calls: list[LLMToolCall] = field(default_factory=list)
+    reasoning: str | None = None
 
 
 @dataclass
 class StreamDelta:
     """A chunk from a streaming response.
 
-    ``content`` is a text fragment yielded incrementally. ``tool_calls`` is
-    set only on the final delta when the response contained tool calls.
+    ``content`` is a text fragment yielded incrementally. ``reasoning`` carries
+    a chain-of-thought fragment when the model runs in thinking mode.
+    ``tool_calls`` is set only on the final delta when the response contained
+    tool calls.
     """
 
     content: str = ""
+    reasoning: str = ""
     tool_calls: list[LLMToolCall] | None = None
 
 
@@ -138,6 +142,9 @@ class OpenAICompatibleProvider(LLMProvider):
             raise LLMProviderError("LLM returned an unreadable response") from exc
 
         content = message.get("content")
+        # DeepSeek (thinking mode) returns the chain of thought in
+        # ``reasoning_content``; some compatible gateways use ``reasoning``.
+        reasoning = message.get("reasoning_content") or message.get("reasoning")
         tool_calls: list[LLMToolCall] = []
         for call in message.get("tool_calls") or []:
             arguments = call.get("function", {}).get("arguments", "{}")
@@ -152,7 +159,11 @@ class OpenAICompatibleProvider(LLMProvider):
                     arguments=parsed,
                 )
             )
-        return LLMResponse(content=content or None, tool_calls=tool_calls)
+        return LLMResponse(
+            content=content or None,
+            tool_calls=tool_calls,
+            reasoning=reasoning if isinstance(reasoning, str) and reasoning else None,
+        )
 
     async def chat_stream(
         self,
@@ -196,6 +207,10 @@ class OpenAICompatibleProvider(LLMProvider):
                     content = delta.get("content")
                     if content:
                         yield StreamDelta(content=content)
+
+                    reasoning = delta.get("reasoning_content") or delta.get("reasoning")
+                    if isinstance(reasoning, str) and reasoning:
+                        yield StreamDelta(reasoning=reasoning)
 
                     for tc in delta.get("tool_calls") or []:
                         idx = tc.get("index", 0)

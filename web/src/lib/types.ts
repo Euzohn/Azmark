@@ -1014,6 +1014,7 @@ export interface AiHistoryMessage {
   role: "user" | "assistant";
   content: string;
   proposals?: AiHistoryProposalOutcome[];
+  reasoning?: string;
 }
 
 export interface AiChatResponse {
@@ -1022,7 +1023,7 @@ export interface AiChatResponse {
 }
 
 export interface AiStreamEvent {
-  type: "text" | "proposals" | "done" | "error";
+  type: "reasoning" | "text" | "proposals" | "done" | "error";
   content?: string;
   proposals?: AiProposal[];
   message?: string;
