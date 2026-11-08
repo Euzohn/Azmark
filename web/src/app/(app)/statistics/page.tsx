@@ -116,6 +116,29 @@ function money(value: number | string, currency: string, locale: string): string
   }
 }
 
+/** Bare amount in the report currency — used where the currency is already labelled. */
+function amountFull(value: number, locale: string): string {
+  if (!Number.isFinite(value)) return "—";
+  try {
+    return new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(value);
+  } catch {
+    return String(value);
+  }
+}
+
+/** Compact amount for a tight slot (the donut's 144px centre). */
+function amountCompact(value: number, locale: string): string {
+  if (!Number.isFinite(value)) return "—";
+  try {
+    return new Intl.NumberFormat(locale, {
+      notation: "compact",
+      maximumFractionDigits: 2,
+    }).format(value);
+  } catch {
+    return amountFull(value, locale);
+  }
+}
+
 interface BarListProps {
   items: BreakdownItem[];
   total: number;
@@ -551,8 +574,11 @@ export default function StatisticsPage() {
                 <div className="grid gap-4 lg:grid-cols-3">
                   {categoryItems.length > 0 ? (
                     <Card className="animate-fade-in-up">
-                      <CardHeader>
+                      <CardHeader className="flex-row items-center justify-between">
                         <CardTitle>{t("stats.expenseByCategory")}</CardTitle>
+                        <span className="text-xs tabular-nums text-muted-foreground">
+                          {currency}
+                        </span>
                       </CardHeader>
                       <CardContent>
                         <DonutChart
@@ -562,7 +588,8 @@ export default function StatisticsPage() {
                           }))}
                           ariaLabel={t("stats.expenseByCategory")}
                           centerLabel={t("stats.expenseTotal")}
-                          formatValue={(value) => money(value, currency, locale)}
+                          formatValue={(value) => amountFull(value, locale)}
+                          formatCenter={(value) => amountCompact(value, locale)}
                         />
                       </CardContent>
                     </Card>

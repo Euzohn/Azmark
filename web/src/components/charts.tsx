@@ -102,6 +102,8 @@ interface DonutChartProps {
   /** Text shown under the number in the middle of the ring. */
   centerLabel: string;
   formatValue?: (value: number) => string;
+  /** The centre number sits in a fixed 144px ring, so it may need a shorter form than the legend. */
+  formatCenter?: (value: number) => string;
   formatLabel?: (label: string) => string;
   className?: string;
 }
@@ -111,11 +113,13 @@ export function DonutChart({
   ariaLabel,
   centerLabel,
   formatValue = (value) => String(value),
+  formatCenter,
   formatLabel = (label) => label,
   className,
 }: DonutChartProps) {
   const items = data.filter((item) => item.value > 0);
   const total = items.reduce((sum, item) => sum + item.value, 0);
+  const centerValue = (formatCenter ?? formatValue)(total);
   const segments = items.map((item, index) => {
     const portion = (item.value / Math.max(total, 1)) * 100;
     const gap = portion > 3 ? 1.4 : 0;
@@ -167,8 +171,8 @@ export function DonutChart({
           })}
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5">
-          <span className="font-display text-2xl font-semibold tabular-nums text-foreground">
-            {formatValue(total)}
+          <span className="max-w-full px-2 font-display text-2xl font-semibold tabular-nums text-foreground">
+            {centerValue}
           </span>
           <span className="max-w-[5.5rem] text-center text-[10px] leading-3 text-muted-foreground">
             {centerLabel}
@@ -187,7 +191,7 @@ export function DonutChart({
             <span className="min-w-0 flex-1 truncate text-muted-foreground">
               {formatLabel(item.label)}
             </span>
-            <span className="shrink-0 tabular-nums font-medium text-foreground">
+            <span className="max-w-[6.5rem] shrink-0 truncate tabular-nums font-medium text-foreground">
               {formatValue(item.value)}
             </span>
             <span className="w-9 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
