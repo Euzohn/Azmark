@@ -18,6 +18,7 @@ from enum import StrEnum
 
 from sqlalchemy.orm import Session
 
+from app.core.redact import redact_exception
 from app.schemas.ai import AiProposal
 from app.services import reference
 from app.services.dashboard import DashboardService
@@ -304,7 +305,7 @@ async def _lookup_flight(db: Session, user_id: uuid.UUID, args: dict) -> dict:
             date=flight_date,
         )
     except Exception as exc:  # noqa: BLE001
-        logger.warning("AI tool lookup_flight raised: %r", exc)
+        logger.warning("AI tool lookup_flight raised: %s", redact_exception(exc))
         return {"error": "flight lookup failed"}
     result = merged.result
     sources_payload = [
@@ -415,7 +416,7 @@ async def _lookup_train(db: Session, user_id: uuid.UUID, args: dict) -> dict:
     try:
         results = await provider.search(query, max_results=6)
     except Exception as exc:  # noqa: BLE001
-        logger.warning("AI tool lookup_train search failed: %r", exc)
+        logger.warning("AI tool lookup_train search failed: %s", redact_exception(exc))
         return {"error": "search_failed", "hint": "Ask the user for the arrival time."}
 
     return {
@@ -468,7 +469,7 @@ async def _search_web(db: Session, user_id: uuid.UUID, args: dict) -> dict:
     try:
         results = await provider.search(query, max_results=max_results)
     except Exception as exc:  # noqa: BLE001
-        logger.warning("AI tool search_web failed: %r", exc)
+        logger.warning("AI tool search_web failed: %s", redact_exception(exc))
         return {
             "error": "search_failed",
             "hint": "Web search failed. Answer from your own knowledge where possible.",

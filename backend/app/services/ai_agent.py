@@ -21,6 +21,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.core.redact import redact_exception
 from app.core.timezones import in_timezone
 from app.providers.llm import LLMProvider, LLMProviderError, build_llm_provider
 from app.schemas.ai import AiChatResponse, AiHistoryMessage, AiProposal
@@ -435,7 +436,7 @@ class AiAgentService:
                 try:
                     result = await tool.read(self.db, user_id, tc.arguments)
                 except Exception as exc:  # noqa: BLE001
-                    logger.warning("AI tool %s raised: %r", tc.name, exc)
+                    logger.warning("AI tool %s raised: %s", tc.name, redact_exception(exc))
                     result = {"error": "tool execution failed"}
                 messages.append(self._tool_result_msg(tool_call_id=tc.id, result=result))
             elif tool.proposal is not None:

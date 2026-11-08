@@ -17,6 +17,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 import app.providers as providers
+from app.core.redact import redact_exception
 from app.core.timezones import normalize_timezone
 from app.providers.base import FlightLookupResult
 from app.schemas.flight_lookup import FlightLookupResponse
@@ -311,7 +312,7 @@ class FlightEnrichmentService:
                 },
             )
         except Exception as exc:  # noqa: BLE001 - provenance must not break lookups
-            logger.warning("FlightLookup: could not record data source: %r", exc)
+            logger.warning("FlightLookup: could not record data source: %s", redact_exception(exc))
 
     async def lookup(
         self,
@@ -344,9 +345,9 @@ class FlightEnrichmentService:
                     remote = await provider_obj.lookup(number, date=date)
                 except Exception as exc:
                     logger.warning(
-                        "FlightLookup: provider %s raised %r for %s — local fallback",
+                        "FlightLookup: provider %s raised %s for %s — local fallback",
                         name,
-                        exc,
+                        redact_exception(exc),
                         number,
                     )
                     remote = None
@@ -413,10 +414,10 @@ class FlightEnrichmentService:
             remote = await provider_obj.lookup(number, date=date)
         except Exception as exc:  # noqa: BLE001 - one bad source must not break the rest
             logger.warning(
-                "%s: provider %s raised %r for %s — skipped",
+                "%s: provider %s raised %s for %s — skipped",
                 log_label,
                 name,
-                exc,
+                redact_exception(exc),
                 number,
             )
             return name, None, None

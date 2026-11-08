@@ -30,6 +30,7 @@ from dataclasses import dataclass
 import httpx
 
 from app.core.config import settings
+from app.core.redact import redact_secrets
 from app.utils.geo import gcj02_to_wgs84
 
 logger = logging.getLogger(__name__)
@@ -135,7 +136,12 @@ class GeocodeProvider:
                     found = await self._search_with(name, client, query, limit)
                 except GeocodeUnavailableError as exc:
                     failures.append(f"{name}: {exc}")
-                    logger.warning("Geocode: %s unavailable for %r: %s", name, query, exc)
+                    logger.warning(
+                        "Geocode: %s unavailable for %r: %s",
+                        name,
+                        query,
+                        redact_secrets(str(exc)),
+                    )
                     continue
                 reachable = True
                 results.extend(found)
@@ -176,7 +182,10 @@ class GeocodeProvider:
             response.raise_for_status()
             return response.json()
         except (httpx.HTTPError, ValueError) as exc:
-            raise GeocodeUnavailableError(str(exc)) from exc
+            # Amap passes its key as a `key=` query param, so `str(exc)` may
+            # embed the plaintext key in the request URL. Mask before it can
+            # propagate into any log line (spec #45, #96).
+            raise GeocodeUnavailableError(redact_secrets(str(exc))) from exc
 
     def _accept_language(self) -> str | None:
         if not self.language:
