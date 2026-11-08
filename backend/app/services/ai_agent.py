@@ -248,9 +248,11 @@ Activity. The same place may be visited more than once — search the trip's \
 activities first and only skip when this is the same event being retried.
 - create_activity / update_activity / delete_activity: activities DO belong to \
 a trip (trip_id) and may reference a place (place_id). Pass name (required) and \
-type (sightseeing/dining/shopping/culture/outdoor/event/visit/other), start_at/end_at, \
+type (sightseeing/theme_park/museum/culture/outdoor/sports/dining/shopping/\
+entertainment/event/experience/wellness/visit/other), start_at/end_at, \
 price, currency, notes; resolve place_id with search_places and trip_id with \
-list_trips rather than guessing. end_at must not be before start_at. When the \
+list_trips rather than guessing. end_at must not be before start_at. Theme \
+parks such as Disneyland or Universal belong to type theme_park, not sightseeing. When the \
 user says they visited or will visit a place, create an activity linked to that \
 place (and a trip when one is named).
 - Never invent trip_id, place_id or record ids: resolve them with list_trips, \

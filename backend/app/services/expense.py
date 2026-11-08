@@ -5,6 +5,7 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.timezones import in_timezone
 from app.models.activity import Activity
 from app.models.expense import Expense
 from app.models.hotel import Hotel
@@ -12,7 +13,14 @@ from app.models.transport_record import TransportRecord
 from app.models.user import utcnow
 from app.repositories.expense import ExpenseRepository
 from app.repositories.trip import TripRepository
-from app.schemas.expense import ExpenseCurrencyTotal, ExpenseSummary
+from app.schemas.expense import (
+    EXPENSE_CATEGORIES,
+    ExpenseBreakdownItem,
+    ExpenseCurrencyBreakdown,
+    ExpenseCurrencyTotal,
+    ExpenseStatistics,
+    ExpenseSummary,
+)
 from app.services.expense_source import SOURCE_ACTIVITY, SOURCE_HOTEL, SOURCE_TRANSPORT
 from app.services.idempotency import IdempotencyResultGoneError, IdempotencyService
 from app.services.write_lock import lock_user_writes
@@ -46,6 +54,171 @@ def summarize_expenses(expenses: list[Expense], report_currency: str) -> Expense
         unconverted=[
             ExpenseCurrencyTotal(currency=currency, amount=amount)
             for currency, amount in sorted(buckets.items())
+        ],
+    )
+
+
+# Buckets whose order is fixed by the vocabulary, not by amount. Unknown or
+# imported categories still show up, sorted alphabetically after these.
+_CATEGORY_ORDER: tuple[str, ...] = EXPENSE_CATEGORIES
+_SOURCE_ORDER: tuple[str, ...] = ("transport", "hotel", "activity", "manual")
+TOP_TRIPS = 8
+
+_QUANTUM = Decimal("0.01")
+
+
+def report_amount(expense: Expense, report_currency: str) -> Decimal | None:
+    """The expense's value in the report currency, or ``None`` if unconvertible."""
+    if expense.currency == report_currency:
+        return expense.amount
+    if expense.converted_currency == report_currency and expense.converted_amount is not None:
+        return expense.converted_amount
+    return None
+
+
+class _Buckets:
+    """label -> [converted amount, converted count, unconverted count]."""
+
+    def __init__(self) -> None:
+        self._entries: dict[str, list] = {}
+
+    def add(self, label: str, amount: Decimal | None) -> None:
+        entry = self._entries.setdefault(label, [ZERO, 0, 0])
+        if amount is None:
+            entry[2] += 1
+        else:
+            entry[0] += amount
+            entry[1] += 1
+
+    def items(
+        self, order: tuple[str, ...] | None = None, *, chronological: bool = False
+    ) -> list[ExpenseBreakdownItem]:
+        labels = list(self._entries)
+        if chronological:
+            # "YYYY-MM" / "YYYY" sort lexicographically into calendar order.
+            labels.sort()
+        elif order is not None:
+
+            def sort_key(label: str) -> tuple[int, str]:
+                # Known labels keep vocabulary order; unknown ones follow.
+                return (order.index(label) if label in order else len(order), label)
+
+            labels.sort(key=sort_key)
+        else:
+            labels.sort(
+                key=lambda label: (
+                    -self._entries[label][0],
+                    -self._entries[label][1],
+                    label,
+                )
+            )
+        return [
+            ExpenseBreakdownItem(
+                label=label,
+                amount=self._entries[label][0].quantize(_QUANTUM),
+                count=self._entries[label][1],
+                unconverted_count=self._entries[label][2],
+            )
+            for label in labels
+        ]
+
+
+def build_expense_statistics(
+    expenses: list[Expense],
+    report_currency: str,
+    *,
+    trip_names: dict[uuid.UUID, str] | None = None,
+) -> ExpenseStatistics:
+    """Aggregate whole-history spend for the statistics page (spec #28).
+
+    Everything is normalised to the report currency with :func:`summarize_expenses`'s
+    rule: an expense counts only when it is already in the report currency or
+    carries a matching conversion. Unconvertible spend keeps its own total and
+    is flagged per bucket rather than silently dropped. Monthly buckets follow
+    ``occurred_at`` in UTC (the stored instant; expenses have no location zone
+    of their own).
+    """
+    names = trip_names or {}
+    categories = _Buckets()
+    months = _Buckets()
+    years = _Buckets()
+    sources = _Buckets()
+    trips = _Buckets()
+    currencies: dict[str, list] = {}
+    unconverted: dict[str, Decimal] = {}
+
+    total = ZERO
+    converted_count = 0
+    unconverted_count = 0
+    largest = ZERO
+
+    for expense in expenses:
+        amount = report_amount(expense, report_currency)
+        if amount is None:
+            unconverted_count += 1
+            unconverted[expense.currency] = unconverted.get(expense.currency, ZERO) + expense.amount
+        else:
+            converted_count += 1
+            total += amount
+            largest = max(largest, amount)
+
+        bucket = currencies.setdefault(expense.currency, [ZERO, 0, ZERO])
+        bucket[0] += expense.amount
+        bucket[1] += 1
+        if amount is not None:
+            bucket[2] += amount
+
+        categories.add(expense.category or "other", amount)
+
+        if expense.occurred_at is not None:
+            moment = in_timezone(expense.occurred_at, "UTC")
+            months.add(moment.strftime("%Y-%m"), amount)
+            years.add(moment.strftime("%Y"), amount)
+
+        sources.add(expense.source_type or "manual", amount)
+
+        if expense.trip_id is not None:
+            label = str(expense.trip_id)
+            trips.add(label, amount)
+        else:
+            trips.add("", amount)
+
+    currency_items = [
+        ExpenseCurrencyBreakdown(
+            currency=currency,
+            amount=bucket[0].quantize(_QUANTUM),
+            count=bucket[1],
+            converted_amount=bucket[2].quantize(_QUANTUM) if bucket[2] else None,
+            converted_currency=report_currency if bucket[2] else None,
+        )
+        for currency, bucket in currencies.items()
+    ]
+    currency_items.sort(key=lambda item: (-(item.converted_amount or item.amount), item.currency))
+
+    trip_items = trips.items()
+    for item in trip_items:
+        if item.label:
+            item.name = names.get(uuid.UUID(item.label))
+
+    average = (total / converted_count).quantize(_QUANTUM) if converted_count else ZERO
+
+    return ExpenseStatistics(
+        report_currency=report_currency,
+        total=total.quantize(_QUANTUM),
+        count=len(expenses),
+        converted_count=converted_count,
+        unconverted_count=unconverted_count,
+        average=average,
+        largest=largest.quantize(_QUANTUM),
+        by_category=categories.items(_CATEGORY_ORDER),
+        by_month=months.items(chronological=True),
+        by_year=years.items(chronological=True),
+        by_source_type=sources.items(_SOURCE_ORDER),
+        by_trip=trip_items[:TOP_TRIPS],
+        by_currency=currency_items,
+        unconverted=[
+            ExpenseCurrencyTotal(currency=currency, amount=amount)
+            for currency, amount in sorted(unconverted.items())
         ],
     )
 

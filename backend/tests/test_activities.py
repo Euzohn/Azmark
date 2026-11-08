@@ -331,3 +331,25 @@ def test_audit_log(client):
     actions = {e["action"] for e in entries if e["resource_type"] == "activity"}
     assert "create_record" in actions
     assert "delete_record" in actions
+
+
+def test_activity_type_vocabulary(client):
+    """Every documented type round-trips; theme parks are a first-class type."""
+    from app.schemas.activity import ACTIVITY_TYPES
+
+    headers = _headers(client, "activity_types")
+    for activity_type in ACTIVITY_TYPES:
+        resp = client.post(
+            "/api/v1/activities",
+            json={"name": f"Type {activity_type}", "type": activity_type},
+            headers=headers,
+        )
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["type"] == activity_type
+
+    unknown = client.post(
+        "/api/v1/activities",
+        json={"name": "Water park", "type": "waterpark"},
+        headers=headers,
+    )
+    assert unknown.status_code == 422

@@ -125,3 +125,48 @@ class ExpenseSummary(BaseModel):
     converted_count: int
     unconverted_count: int
     unconverted: list[ExpenseCurrencyTotal]
+
+
+class ExpenseBreakdownItem(BaseModel):
+    """One spend bucket normalised to the report currency.
+
+    ``amount`` only sums the expenses that could be converted; ``count`` is how
+    many contributed to it and ``unconverted_count`` how many were left out,
+    so the UI can flag a bucket whose amount understates what was really spent
+    instead of silently dropping the remainder.
+    """
+
+    label: str
+    name: str | None = None
+    amount: Decimal
+    count: int
+    unconverted_count: int = 0
+
+
+class ExpenseCurrencyBreakdown(BaseModel):
+    """Original-currency total plus the portion that is convertible."""
+
+    currency: str
+    amount: Decimal
+    count: int
+    converted_amount: Decimal | None = None
+    converted_currency: str | None = None
+
+
+class ExpenseStatistics(BaseModel):
+    """Whole-history spend aggregates for the statistics page (spec #28)."""
+
+    report_currency: str
+    total: Decimal
+    count: int
+    converted_count: int
+    unconverted_count: int
+    average: Decimal
+    largest: Decimal
+    by_category: list[ExpenseBreakdownItem]
+    by_month: list[ExpenseBreakdownItem]
+    by_year: list[ExpenseBreakdownItem]
+    by_source_type: list[ExpenseBreakdownItem]
+    by_trip: list[ExpenseBreakdownItem]
+    by_currency: list[ExpenseCurrencyBreakdown]
+    unconverted: list[ExpenseCurrencyTotal]

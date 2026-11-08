@@ -12,22 +12,34 @@ from app.schemas.place import PlaceSummary
 # column stays a permissive String(40) for future/imported values.
 ActivityType = Literal[
     "sightseeing",
-    "dining",
-    "shopping",
+    "theme_park",
+    "museum",
     "culture",
     "outdoor",
+    "sports",
+    "dining",
+    "shopping",
+    "entertainment",
     "event",
+    "experience",
+    "wellness",
     "visit",
     "other",
 ]
 
 ACTIVITY_TYPES: tuple[str, ...] = (
     "sightseeing",
-    "dining",
-    "shopping",
+    "theme_park",
+    "museum",
     "culture",
     "outdoor",
+    "sports",
+    "dining",
+    "shopping",
+    "entertainment",
     "event",
+    "experience",
+    "wellness",
     "visit",
     "other",
 )

@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.core.redact import redact_exception
 from app.core.timezones import in_timezone, localize_transport_times
+from app.schemas.activity import ACTIVITY_TYPES as _ACTIVITY_TYPE_VALUES
 from app.schemas.ai import AiProposal
 from app.services import reference
 from app.services.dashboard import DashboardService
@@ -121,6 +122,7 @@ async def _get_statistics(db: Session, user_id: uuid.UUID, _args: dict) -> dict:
         "by_cabin": [item.model_dump() for item in stats.by_cabin],
         "by_train_operator": [item.model_dump() for item in stats.by_train_operator],
         "by_train_type": [item.model_dump() for item in stats.by_train_type],
+        "expenses": _compact_expense_statistics(stats.expense_stats),
     }
 
 
@@ -759,9 +761,7 @@ _PLACE_TYPES = frozenset(
         "other",
     }
 )
-_ACTIVITY_TYPES = frozenset(
-    {"sightseeing", "dining", "shopping", "culture", "outdoor", "event", "visit", "other"}
-)
+_ACTIVITY_TYPES = frozenset(_ACTIVITY_TYPE_VALUES)
 
 
 def _normalize_choice(value: object, allowed: frozenset[str], default: str) -> str:
@@ -845,6 +845,45 @@ def _compact_expense_summary(summary) -> dict:
         "unconverted": [
             {"currency": item.currency, "amount": float(item.amount)}
             for item in summary.unconverted
+        ],
+    }
+
+
+def _compact_expense_statistics(stats) -> dict:
+    return {
+        "report_currency": stats.report_currency,
+        "total": float(stats.total),
+        "count": stats.count,
+        "converted_count": stats.converted_count,
+        "unconverted_count": stats.unconverted_count,
+        "by_category": [
+            {
+                "label": item.label,
+                "amount": float(item.amount),
+                "count": item.count,
+                "unconverted_count": item.unconverted_count,
+            }
+            for item in stats.by_category
+        ],
+        "by_month": [
+            {"label": item.label, "amount": float(item.amount), "count": item.count}
+            for item in stats.by_month
+        ],
+        "by_trip": [
+            {
+                "trip_id": item.label or None,
+                "name": item.name,
+                "amount": float(item.amount),
+                "count": item.count,
+            }
+            for item in stats.by_trip
+        ],
+        "by_currency": [
+            {"currency": item.currency, "amount": float(item.amount), "count": item.count}
+            for item in stats.by_currency
+        ],
+        "unconverted": [
+            {"currency": item.currency, "amount": float(item.amount)} for item in stats.unconverted
         ],
     }
 
@@ -2267,11 +2306,12 @@ TOOLS: dict[str, ToolDef] = {
     "create_activity": ToolDef(
         name="create_activity",
         description=(
-            "Propose recording an activity (sightseeing, dining, shopping, culture, "
-            "outdoor, event, visit). Nothing is saved until the user confirms. Pass name "
-            "(required) and type; optionally start_at / end_at (ISO 8601 with "
-            "offset), price, currency, notes, place_id (an existing place — resolve "
-            "with search_places) and trip_id (resolve with list_trips). The "
+            "Propose recording an activity. Nothing is saved until the user "
+            "confirms. Pass name (required) and type (one of "
+            + ", ".join(sorted(_ACTIVITY_TYPES))
+            + "); optionally start_at / end_at (ISO 8601 with offset), price, "
+            "currency, notes, place_id (an existing place — resolve with "
+            "search_places) and trip_id (resolve with list_trips). The "
             "end time must not be before the start time."
         ),
         parameters={

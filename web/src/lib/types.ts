@@ -378,6 +378,41 @@ export interface ExpenseSummary {
   unconverted: ExpenseCurrencyTotal[];
 }
 
+/** One spend bucket normalised to the report currency. */
+export interface ExpenseBreakdownItem {
+  label: string;
+  name?: string | null;
+  amount: string;
+  count: number;
+  unconverted_count: number;
+}
+
+/** Original-currency total plus the portion convertible to the report currency. */
+export interface ExpenseCurrencyBreakdown {
+  currency: string;
+  amount: string;
+  count: number;
+  converted_amount?: string | null;
+  converted_currency?: string | null;
+}
+
+export interface ExpenseStatistics {
+  report_currency: string;
+  total: string;
+  count: number;
+  converted_count: number;
+  unconverted_count: number;
+  average: string;
+  largest: string;
+  by_category: ExpenseBreakdownItem[];
+  by_month: ExpenseBreakdownItem[];
+  by_year: ExpenseBreakdownItem[];
+  by_source_type: ExpenseBreakdownItem[];
+  by_trip: ExpenseBreakdownItem[];
+  by_currency: ExpenseCurrencyBreakdown[];
+  unconverted: ExpenseCurrencyTotal[];
+}
+
 export interface ExpenseList {
   items: Expense[];
   total: number;
@@ -483,11 +518,17 @@ export interface PlaceList {
 
 export type ActivityType =
   | "sightseeing"
-  | "dining"
-  | "shopping"
+  | "theme_park"
+  | "museum"
   | "culture"
   | "outdoor"
+  | "sports"
+  | "dining"
+  | "shopping"
+  | "entertainment"
   | "event"
+  | "experience"
+  | "wellness"
   | "visit"
   | "other";
 
@@ -950,6 +991,7 @@ export interface StatisticsRead {
   by_train_class: BreakdownItem[];
   by_train_seat_type: BreakdownItem[];
   expense_summary: ExpenseSummary;
+  expense_stats: ExpenseStatistics;
 }
 
 export interface MapPoint {

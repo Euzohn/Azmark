@@ -69,6 +69,22 @@ const ALLIANCE_KEYS: Record<string, TranslationKey> = {
   oneworld: "alliance.oneworld",
 };
 
+const EXPENSE_CATEGORY_KEYS: Record<string, TranslationKey> = {
+  transport: "expenses.category.transport",
+  accommodation: "expenses.category.accommodation",
+  food: "expenses.category.food",
+  shopping: "expenses.category.shopping",
+  entertainment: "expenses.category.entertainment",
+  other: "expenses.category.other",
+};
+
+const EXPENSE_SOURCE_KEYS: Record<string, TranslationKey> = {
+  transport: "stats.source.transport",
+  hotel: "stats.source.hotel",
+  activity: "stats.source.activity",
+  manual: "stats.source.manual",
+};
+
 const VISIBLE_ROWS = 8;
 
 function translateLabel(
@@ -82,6 +98,22 @@ function translateLabel(
 
 function share(value: number, total: number): string {
   return `${Math.round((value / Math.max(total, 1)) * 100)}%`;
+}
+
+/** Locale-aware money, always with the ISO code so currencies stay unambiguous. */
+function money(value: number | string, currency: string, locale: string): string {
+  const amount = typeof value === "string" ? Number(value) : value;
+  if (!Number.isFinite(amount)) return `${value} ${currency}`;
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency,
+      currencyDisplay: "code",
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return `${amount.toLocaleString(locale)} ${currency}`;
+  }
 }
 
 interface BarListProps {
@@ -125,6 +157,60 @@ function BarList({ items, total, renderLeading, renderLabel, formatLabel }: BarL
               <div
                 className="h-full rounded-full bg-gradient-to-r from-primary to-[#96670c] transition-all duration-500"
                 style={{ width: `${(item.count / max) * 100}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+interface AmountItem {
+  label: string;
+  name?: string | null;
+  amount: number;
+  count: number;
+  unconverted_count?: number;
+}
+
+interface AmountListProps {
+  items: AmountItem[];
+  currency: string;
+  renderLabel?: (item: AmountItem) => React.ReactNode;
+}
+
+/** Bar list where the metric is money rather than a count (spec #28). */
+function AmountList({ items, currency, renderLabel }: AmountListProps) {
+  const { t, locale } = useI18n();
+  const max = Math.max(1, ...items.map((item) => item.amount));
+  const total = items.reduce((sum, item) => sum + item.amount, 0);
+
+  return (
+    <div className="flex flex-col gap-3">
+      {items.map((item) => (
+        <div key={item.label} className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="truncate text-sm font-medium">
+                {renderLabel ? renderLabel(item) : (item.name || item.label)}
+                {item.count > 0 ? (
+                  <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                    {t("stats.expenseCountShort", { count: item.count })}
+                  </span>
+                ) : null}
+              </span>
+              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                <span className="font-medium text-foreground">
+                  {money(item.amount, currency, locale)}
+                </span>
+                <span className="ml-1.5 text-[10px]">{share(item.amount, total)}</span>
+              </span>
+            </div>
+            <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-primary to-[#96670c] transition-all duration-500"
+                style={{ width: `${(item.amount / max) * 100}%` }}
               />
             </div>
           </div>
@@ -254,6 +340,7 @@ function buildSection(
 export default function StatisticsPage() {
   const { t, locale } = useI18n();
   const [selectedYear, setSelectedYear] = useState<string | null>(null);
+  const [spendYear, setSpendYear] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["statistics"],
@@ -326,9 +413,40 @@ export default function StatisticsPage() {
     }))
     .filter((group) => group.sections.length > 0);
 
-  const spend = data?.expense_summary;
-  const hasSpend = (spend?.converted_count ?? 0) + (spend?.unconverted_count ?? 0) > 0;
-  const showStats = Boolean(data && (journeys > 0 || hasSpend));
+  const expense = data?.expense_stats;
+  const currency = expense?.report_currency ?? "CNY";
+  const hasExpense = (expense?.count ?? 0) > 0;
+  const showStats = Boolean(data && (journeys > 0 || hasExpense));
+
+  const spendYears = useMemo(
+    () =>
+      Array.from(new Set((expense?.by_month ?? []).map((item) => item.label.slice(0, 4)))).sort(),
+    [expense],
+  );
+  const spendMonthAmounts = useMemo(
+    () => new Map((expense?.by_month ?? []).map((item) => [item.label, Number(item.amount)])),
+    [expense],
+  );
+  const activeSpendYear =
+    spendYear && spendYears.includes(spendYear) ? spendYear : spendYears.at(-1);
+  const spendMonthData: ChartDatum[] = activeSpendYear
+    ? Array.from({ length: 12 }, (_, index) => {
+        const key = `${activeSpendYear}-${String(index + 1).padStart(2, "0")}`;
+        return { label: key, value: spendMonthAmounts.get(key) ?? 0 };
+      })
+    : [];
+  const categoryItems: AmountItem[] = (expense?.by_category ?? []).map((item) => ({
+    ...item,
+    amount: Number(item.amount),
+  }));
+  const sourceItems: AmountItem[] = (expense?.by_source_type ?? []).map((item) => ({
+    ...item,
+    amount: Number(item.amount),
+  }));
+  const tripItems: AmountItem[] = (expense?.by_trip ?? []).map((item) => ({
+    ...item,
+    amount: Number(item.amount),
+  }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -370,58 +488,184 @@ export default function StatisticsPage() {
             </CardContent>
           </Card>
 
-          <Card className="animate-fade-in-up">
-            <CardHeader className="flex-row items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <BarChart3 className="h-4 w-4 text-primary" />
-                <CardTitle>{t("stats.expenseTitle")}</CardTitle>
-              </div>
-              {spend ? (
-                <span className="text-xs text-muted-foreground">
-                  {t("stats.expenseReportCurrency", { currency: spend.report_currency })}
-                </span>
-              ) : null}
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-              {spend && hasSpend ? (
-                <>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3">
-                    <Stat
-                      label={t("stats.expenseTotal")}
-                      value={`${spend.converted_total} ${spend.report_currency}`}
-                    />
-                    <Stat
-                      label={t("stats.expenseConvertedCount")}
-                      value={spend.converted_count}
-                    />
-                    <Stat
-                      label={t("stats.expenseUnconvertedCount")}
-                      value={spend.unconverted_count}
-                    />
-                  </div>
-                  {spend.unconverted.length > 0 ? (
-                    <ul className="flex flex-wrap gap-2">
-                      {spend.unconverted.map((item) => (
-                        <li
-                          key={item.currency}
-                          className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground"
-                        >
-                          {item.currency} {item.amount}
-                        </li>
-                      ))}
-                    </ul>
+          <section id="stats-expense" className="flex scroll-mt-24 flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                {t("stats.expenseTitle")}
+              </h2>
+              <span className="text-xs text-muted-foreground">
+                {t("stats.expenseReportCurrency", { currency })}
+              </span>
+            </div>
+
+            {expense && hasExpense ? (
+              <>
+                <Card className="animate-fade-in-up">
+                  <CardHeader className="flex-row items-center justify-between">
+                    <CardTitle>{t("stats.expenseOverview")}</CardTitle>
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                      {t("stats.expenseCountShort", { count: expense.count })}
+                    </span>
+                  </CardHeader>
+                  <CardContent className="flex flex-col gap-4">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-4">
+                      <Stat
+                        label={t("stats.expenseTotal")}
+                        value={money(expense.total, currency, locale)}
+                      />
+                      <Stat
+                        label={t("stats.expenseAverage")}
+                        value={money(expense.average, currency, locale)}
+                      />
+                      <Stat
+                        label={t("stats.expenseLargest")}
+                        value={money(expense.largest, currency, locale)}
+                      />
+                      <Stat label={t("stats.expenseUnconvertedCount")} value={expense.unconverted_count} />
+                    </div>
+                    {expense.unconverted.length > 0 ? (
+                      <div className="flex flex-col gap-1.5">
+                        <ul className="flex flex-wrap gap-2">
+                          {expense.unconverted.map((item) => (
+                            <li
+                              key={item.currency}
+                              className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground"
+                            >
+                              {item.currency} {item.amount}
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="text-[11px] text-muted-foreground">
+                          {t("stats.expenseUnconvertedHint")}
+                        </p>
+                      </div>
+                    ) : null}
+                    {expense.converted_count === 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        {t("stats.expenseAllUnconverted")}
+                      </p>
+                    ) : null}
+                  </CardContent>
+                </Card>
+
+                <div className="grid gap-4 lg:grid-cols-3">
+                  {categoryItems.length > 0 ? (
+                    <Card className="animate-fade-in-up">
+                      <CardHeader>
+                        <CardTitle>{t("stats.expenseByCategory")}</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <DonutChart
+                          data={categoryItems.map((item) => ({
+                            label: translate(EXPENSE_CATEGORY_KEYS)(item.label),
+                            value: item.amount,
+                          }))}
+                          ariaLabel={t("stats.expenseByCategory")}
+                          centerLabel={t("stats.expenseTotal")}
+                          formatValue={(value) => money(value, currency, locale)}
+                        />
+                      </CardContent>
+                    </Card>
                   ) : null}
-                  {spend.converted_count === 0 ? (
-                    <p className="text-xs text-muted-foreground">
-                      {t("stats.expenseAllUnconverted")}
-                    </p>
+
+                  <Card className="animate-fade-in-up lg:col-span-2">
+                    <CardHeader className="flex-row flex-wrap items-center justify-between gap-3">
+                      <CardTitle>{t("stats.expenseMonthly")}</CardTitle>
+                      {spendYears.length > 1 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {[...spendYears].reverse().map((year) => (
+                            <button
+                              key={year}
+                              type="button"
+                              onClick={() => setSpendYear(year)}
+                              className={
+                                year === activeSpendYear
+                                  ? "rounded-full bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground"
+                                  : "rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                              }
+                            >
+                              {year}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs tabular-nums text-muted-foreground">
+                          {activeSpendYear}
+                        </span>
+                      )}
+                    </CardHeader>
+                    <CardContent>
+                      <ColumnChart
+                        data={spendMonthData}
+                        ariaLabel={t("stats.expenseMonthly")}
+                        formatLabel={monthLabel(locale)}
+                        formatValue={(value) => money(value, currency, locale)}
+                      />
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {sourceItems.length > 1 ? (
+                    <Card className="animate-fade-in-up">
+                      <CardHeader>
+                        <CardTitle>{t("stats.expenseBySource")}</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <AmountList
+                          items={sourceItems}
+                          currency={currency}
+                          renderLabel={(item) => translate(EXPENSE_SOURCE_KEYS)(item.label)}
+                        />
+                      </CardContent>
+                    </Card>
                   ) : null}
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground">{t("stats.expenseEmpty")}</p>
-              )}
-            </CardContent>
-          </Card>
+
+                  {(expense.by_currency?.length ?? 0) > 0 ? (
+                    <Card className="animate-fade-in-up">
+                      <CardHeader>
+                        <CardTitle>{t("stats.expenseByCurrency")}</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <AmountList
+                          items={(expense.by_currency ?? []).map((item) => ({
+                            label: item.currency,
+                            amount: Number(item.amount),
+                            count: item.count,
+                          }))}
+                          currency={currency}
+                        />
+                      </CardContent>
+                    </Card>
+                  ) : null}
+
+                  {tripItems.length > 0 ? (
+                    <Card className="animate-fade-in-up">
+                      <CardHeader className="flex-row items-center justify-between">
+                        <CardTitle>{t("stats.expenseByTrip")}</CardTitle>
+                        <span className="text-xs text-muted-foreground">
+                          {t("stats.expenseTopTrips")}
+                        </span>
+                      </CardHeader>
+                      <CardContent>
+                        <AmountList
+                          items={tripItems}
+                          currency={currency}
+                          renderLabel={(item) => item.name || t("expenses.tripNone")}
+                        />
+                      </CardContent>
+                    </Card>
+                  ) : null}
+                </div>
+              </>
+            ) : (
+              <Card className="animate-fade-in-up">
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">{t("stats.expenseEmpty")}</p>
+                </CardContent>
+              </Card>
+            )}
+          </section>
 
           {groups.length > 1 ? (
             <nav className="flex flex-wrap gap-2" aria-label={t("stats.jumpTo")}>

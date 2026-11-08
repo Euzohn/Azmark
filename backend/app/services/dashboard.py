@@ -32,7 +32,7 @@ from app.schemas.dashboard import (
     StatisticsTotals,
 )
 from app.services import reference
-from app.services.expense import summarize_expenses
+from app.services.expense import build_expense_statistics, summarize_expenses
 from app.utils.geo import haversine_km
 
 
@@ -275,9 +275,12 @@ class DashboardService:
 
         user = self.db.get(User, user_id)
         report_currency = (user.currency if user else None) or "CNY"
-        expense_summary = summarize_expenses(
-            self.expenses.list_for_user(user_id=user_id), report_currency
+        expenses = self.expenses.list_for_user(user_id=user_id)
+        trip_names = dict(
+            self.db.execute(select(Trip.id, Trip.name).where(Trip.user_id == user_id)).all()
         )
+        expense_summary = summarize_expenses(expenses, report_currency)
+        expense_stats = build_expense_statistics(expenses, report_currency, trip_names=trip_names)
 
         return StatisticsRead(
             totals=StatisticsTotals(
@@ -305,6 +308,7 @@ class DashboardService:
             by_train_class=self._ranked(train_classes),
             by_train_seat_type=self._ranked(train_seat_types),
             expense_summary=expense_summary,
+            expense_stats=expense_stats,
         )
 
     @staticmethod

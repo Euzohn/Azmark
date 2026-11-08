@@ -23,11 +23,17 @@ import type {
 
 const TYPES: ActivityType[] = [
   "sightseeing",
-  "dining",
-  "shopping",
+  "theme_park",
+  "museum",
   "culture",
   "outdoor",
+  "sports",
+  "dining",
+  "shopping",
+  "entertainment",
   "event",
+  "experience",
+  "wellness",
   "visit",
   "other",
 ];

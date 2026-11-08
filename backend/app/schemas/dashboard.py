@@ -7,7 +7,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict
 
-from app.schemas.expense import ExpenseSummary
+from app.schemas.expense import ExpenseStatistics, ExpenseSummary
 
 
 class DashboardRecord(BaseModel):
@@ -88,6 +88,9 @@ class StatisticsRead(BaseModel):
     by_train_seat_type: list[BreakdownItem]
     # Spend is reported in the user's currency; unconverted buckets stay separate.
     expense_summary: ExpenseSummary
+    # Richer spend aggregates (category / month / trip / currency) for the
+    # statistics page. ``expense_summary`` is kept for the compact trip view.
+    expense_stats: ExpenseStatistics
 
 
 class MapPoint(BaseModel):
