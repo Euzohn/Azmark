@@ -22,6 +22,11 @@ class AuditLog(Base):
     resource_type: Mapped[str | None] = mapped_column(String(40))
     resource_id: Mapped[str | None] = mapped_column(String(64))
     meta: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON)
+    # Client network address (spec #47, as authorised by the product owner for
+    # self-hosted traceability). ``ip`` is the raw address as seen by the server
+    # (honouring X-Forwarded-For behind a proxy); ``ip_hash`` is its salted hash,
+    # kept as a stable pseudonymous key for indexed correlation.
+    ip: Mapped[str | None] = mapped_column(String(64))
     ip_hash: Mapped[str | None] = mapped_column(String(64))
     # Correlation context (spec #47). request_id groups every audit row that one
     # HTTP request produced; user_agent is a sanitised, truncated client hint.

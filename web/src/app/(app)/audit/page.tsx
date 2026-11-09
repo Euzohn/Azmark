@@ -29,18 +29,18 @@ function shortToken(value: string | null | undefined, length = 8): string {
 }
 
 /**
- * One cell combining the three tracing signals (spec #47): a salted IP-hash
- * prefix, the sanitised client hint and the request correlation id. Raw values
- * are never shown — the IP is hashed server-side, the UA is already sanitised.
+ * One cell combining the tracing signals (spec #47): the raw client IP, the
+ * sanitised client hint and the request correlation id. The raw address is shown
+ * for self-hosted traceability; the UA is already sanitised server-side.
  */
 function AuditClientCell({ log }: { log: AuditLog }) {
   const { t } = useI18n();
   const ua = log.user_agent;
   return (
     <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
-      <span className="font-mono" title={t("audit.ipHash")}>
-        <span className="text-muted-foreground/70">{t("audit.ipHashShort")}</span>{" "}
-        {shortToken(log.ip_hash)}
+      <span className="font-mono" title={t("audit.ip")}>
+        <span className="text-muted-foreground/70">{t("audit.ipShort")}</span>{" "}
+        {log.ip || "—"}
       </span>
       {ua ? (
         <span className="max-w-[220px] truncate" title={ua}>

@@ -57,6 +57,7 @@ class AuditService:
             resource_type=resource_type,
             resource_id=resource_id,
             meta=self._with_actor(meta, request),
+            ip=client_ip(request) if request is not None else None,
             ip_hash=hash_ip(client_ip(request)) if request is not None else None,
             user_agent=client_user_agent(request) if request is not None else None,
             request_id=request_id(request) if request is not None else None,
@@ -88,6 +89,7 @@ class AuditService:
         user_id: uuid.UUID | None = None,
         action: str | None = None,
         request_id: str | None = None,
+        ip: str | None = None,
     ) -> tuple[list[AuditLog], int]:
         """Cross-user audit trail for admins (spec #5, #47)."""
         conditions = []
@@ -97,6 +99,8 @@ class AuditService:
             conditions.append(AuditLog.action == action)
         if request_id:
             conditions.append(AuditLog.request_id == request_id)
+        if ip:
+            conditions.append(AuditLog.ip == ip)
 
         count_stmt = select(func.count()).select_from(AuditLog)
         stmt = select(AuditLog)

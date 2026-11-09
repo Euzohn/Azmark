@@ -311,9 +311,10 @@ def test_create_proposal_audit_carries_request_context(client):
     entries = client.get("/api/v1/audit-logs", headers=headers).json()["items"]
     entry = next(e for e in entries if e["action"] == "create_pending_action")
     # Even though there is no REST handler, the ASGI request context is threaded
-    # through the tool call: a salted IP hash, a sanitised client hint and the
-    # correlation id all land on the row.
-    assert entry["ip_hash"], "the MCP request's client IP should be hashed"
+    # through the tool call: the client IP (raw + hash), a sanitised client hint
+    # and the correlation id all land on the row.
+    assert entry["ip"], "the MCP request's client IP should be stored"
+    assert entry["ip_hash"], "the address should also be hashed"
     assert entry["user_agent"], "the MCP client's user-agent should be captured"
     assert entry["request_id"], "the request id should correlate this row"
     # The actor is still attributed to the personal access token, not just an IP.

@@ -133,8 +133,27 @@ def test_audit_rows_carry_request_context(client):
 
     entry = audit_row(client, headers, "create_record")
     assert entry["request_id"] == "trace-test-0001"
-    assert entry["ip_hash"], "a request with a client must be hashed into ip_hash"
+    # Raw address is stored for traceability, plus its salted hash as a stable key.
+    assert entry["ip"] == "testclient"
+    assert entry["ip_hash"], "the address is also hashed into ip_hash"
     assert entry["user_agent"], "the client hint is captured for tracing"
+
+
+def test_forwarded_ip_is_recorded(client):
+    """Behind a proxy the X-Forwarded-For client is the address that gets stored."""
+    token = register_and_login(client, "audit_fwd")["access_token"]
+    headers = {**auth_headers(token), "X-Forwarded-For": "203.0.113.7"}
+
+    client.post(
+        "/api/v1/flights",
+        json={"origin": "HKG", "destination": "SIN", "service_number": "CX659"},
+        headers=headers,
+    )
+
+    entry = audit_row(client, headers, "create_record")
+    assert entry["ip"] == "203.0.113.7"
+    # The hash is of the forwarded address, not the proxy hop.
+    assert entry["ip_hash"] != entry["ip"]
 
 
 def test_client_supplied_request_id_must_be_safe(client):

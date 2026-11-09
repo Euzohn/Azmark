@@ -69,11 +69,17 @@ def list_logs(
     user_id: uuid.UUID | None = None,
     action: str | None = None,
     request_id: str | None = None,
+    ip: str | None = None,
     _: User = Depends(get_current_admin),
     audit: AuditService = Depends(get_audit_service),
 ) -> AdminAuditLogList:
     items, total = audit.list_all(
-        page=page, page_size=page_size, user_id=user_id, action=action, request_id=request_id
+        page=page,
+        page_size=page_size,
+        user_id=user_id,
+        action=action,
+        request_id=request_id,
+        ip=ip,
     )
     return AdminAuditLogList(
         items=[
@@ -84,6 +90,7 @@ def list_logs(
                 resource_type=item.resource_type,
                 resource_id=item.resource_id,
                 meta=item.meta,
+                ip=item.ip,
                 ip_hash=item.ip_hash,
                 user_agent=item.user_agent,
                 request_id=item.request_id,

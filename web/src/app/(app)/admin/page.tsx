@@ -320,11 +320,11 @@ export default function AdminPage({ embedded = false }: { embedded?: boolean } =
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
-                            <span className="font-mono" title={t("audit.ipHash")}>
+                            <span className="font-mono" title={t("audit.ip")}>
                               <span className="text-muted-foreground/70">
-                                {t("audit.ipHashShort")}
+                                {t("audit.ipShort")}
                               </span>{" "}
-                              {log.ip_hash ? log.ip_hash.slice(0, 8) : "—"}
+                              {log.ip || "—"}
                             </span>
                             {log.user_agent ? (
                               <span className="max-w-[200px] truncate" title={log.user_agent}>
