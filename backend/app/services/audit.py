@@ -16,6 +16,25 @@ def client_ip(request: Request) -> str | None:
     return request.client.host if request.client else None
 
 
+def client_user_agent(request: Request) -> str | None:
+    """Sanitised client hint for tracing (spec #47, #96).
+
+    Strips control characters (blocks header/log injection) and truncates, so a
+    hostile client cannot smuggle newlines into stored audit rows. Not a secret,
+    but never trusted verbatim.
+    """
+    raw = request.headers.get("user-agent")
+    if not raw:
+        return None
+    cleaned = "".join(ch for ch in raw.strip() if ch.isprintable())
+    return cleaned[:200] or None
+
+
+def request_id(request: Request) -> str | None:
+    """Opaque correlation id stamped on the request by ``RequestContextMiddleware``."""
+    return getattr(request.state, "request_id", None)
+
+
 class AuditService:
     """Records important actions (spec #47). Never log sensitive raw values (#45, #96)."""
 
@@ -39,6 +58,8 @@ class AuditService:
             resource_id=resource_id,
             meta=self._with_actor(meta, request),
             ip_hash=hash_ip(client_ip(request)) if request is not None else None,
+            user_agent=client_user_agent(request) if request is not None else None,
+            request_id=request_id(request) if request is not None else None,
         )
         self.db.add(entry)
         self.db.commit()
@@ -66,6 +87,7 @@ class AuditService:
         page_size: int = 50,
         user_id: uuid.UUID | None = None,
         action: str | None = None,
+        request_id: str | None = None,
     ) -> tuple[list[AuditLog], int]:
         """Cross-user audit trail for admins (spec #5, #47)."""
         conditions = []
@@ -73,6 +95,8 @@ class AuditService:
             conditions.append(AuditLog.user_id == user_id)
         if action:
             conditions.append(AuditLog.action == action)
+        if request_id:
+            conditions.append(AuditLog.request_id == request_id)
 
         count_stmt = select(func.count()).select_from(AuditLog)
         stmt = select(AuditLog)

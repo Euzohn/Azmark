@@ -114,7 +114,11 @@ async def _call_tool(ctx: Any, params: CallToolRequestParams) -> CallToolResult:
         try:
             with mcp_db.session_scope() as db:
                 payload: Any = handle_write(
-                    db=db, identity=identity, name=name, arguments=arguments
+                    db=db,
+                    identity=identity,
+                    name=name,
+                    arguments=arguments,
+                    request=getattr(ctx, "request", None),
                 )
         except Exception:  # noqa: BLE001 - agent-facing errors never leak internals
             logger.exception("MCP write tool %s failed", name)

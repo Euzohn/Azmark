@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
 from app.core.config import settings
+from app.core.request_context import RequestContextMiddleware
 from app.mcp.server import MCPMount
 from app.services.admin import bootstrap_admin_from_env
 
@@ -32,6 +33,9 @@ def create_app() -> FastAPI:
             yield
 
     app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)
+    # Stamps a correlation id on every request so audit rows can be grouped (#47).
+    # Wraps both REST routes and the MCP mount.
+    app.add_middleware(RequestContextMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,

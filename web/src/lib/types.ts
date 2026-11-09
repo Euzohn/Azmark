@@ -697,6 +697,12 @@ export interface AuditLog {
   resource_type: string | null;
   resource_id: string | null;
   meta: Record<string, unknown> | null;
+  /** Salted hash of the client IP — never a raw address (spec #47). */
+  ip_hash: string | null;
+  /** Sanitised client hint. */
+  user_agent: string | null;
+  /** Opaque id correlating every audit row one request produced. */
+  request_id: string | null;
   created_at: string;
 }
 
@@ -764,6 +770,12 @@ export interface AdminAuditLog {
   resource_type: string | null;
   resource_id: string | null;
   meta: Record<string, unknown> | null;
+  /** Salted hash of the client IP — never a raw address (spec #47). */
+  ip_hash: string | null;
+  /** Sanitised client hint. */
+  user_agent: string | null;
+  /** Opaque id correlating every audit row one request produced. */
+  request_id: string | null;
   created_at: string;
 }
 

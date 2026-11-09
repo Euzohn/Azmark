@@ -303,6 +303,23 @@ def test_audit_trail_attributes_token(client):
     assert create_entry["meta"]["record_type"] == "flight"
 
 
+def test_create_proposal_audit_carries_request_context(client):
+    """MCP rides the same HTTP transport, so the proposal audit records where it came from (#47)."""
+    secret, headers = _make_write_token(client, "pa_ctx")
+    _propose_create(client, secret)
+
+    entries = client.get("/api/v1/audit-logs", headers=headers).json()["items"]
+    entry = next(e for e in entries if e["action"] == "create_pending_action")
+    # Even though there is no REST handler, the ASGI request context is threaded
+    # through the tool call: a salted IP hash, a sanitised client hint and the
+    # correlation id all land on the row.
+    assert entry["ip_hash"], "the MCP request's client IP should be hashed"
+    assert entry["user_agent"], "the MCP client's user-agent should be captured"
+    assert entry["request_id"], "the request id should correlate this row"
+    # The actor is still attributed to the personal access token, not just an IP.
+    assert entry["meta"]["actor"]["id"]
+
+
 # -- new entity types (trip/expense/note/place/activity) ----------------------
 # The same "propose, then a human confirms" rule covers every record type, not
 # just transport and hotel.

@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { AUDIT_ACTION_LABELS } from "@/lib/audit-actions";
 import { useI18n } from "@/lib/i18n";
+import type { AuditLog } from "@/lib/types";
 
 function formatDateTime(value: string, locale: string): string {
   const date = new Date(value);
@@ -20,6 +21,40 @@ function formatDateTime(value: string, locale: string): string {
     minute: "2-digit",
     second: "2-digit",
   });
+}
+
+/** Shorten a tracing token (ip hash / request id) to a stable, copy-friendly prefix. */
+function shortToken(value: string | null | undefined, length = 8): string {
+  return value ? value.slice(0, length) : "—";
+}
+
+/**
+ * One cell combining the three tracing signals (spec #47): a salted IP-hash
+ * prefix, the sanitised client hint and the request correlation id. Raw values
+ * are never shown — the IP is hashed server-side, the UA is already sanitised.
+ */
+function AuditClientCell({ log }: { log: AuditLog }) {
+  const { t } = useI18n();
+  const ua = log.user_agent;
+  return (
+    <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+      <span className="font-mono" title={t("audit.ipHash")}>
+        <span className="text-muted-foreground/70">{t("audit.ipHashShort")}</span>{" "}
+        {shortToken(log.ip_hash)}
+      </span>
+      {ua ? (
+        <span className="max-w-[220px] truncate" title={ua}>
+          {ua}
+        </span>
+      ) : null}
+      {log.request_id ? (
+        <span className="font-mono text-[10px] text-muted-foreground/60" title={log.request_id}>
+          <span className="text-muted-foreground/50">{t("audit.request")}</span>{" "}
+          {shortToken(log.request_id, 12)}
+        </span>
+      ) : null}
+    </div>
+  );
 }
 
 export default function AuditPage({ embedded = false }: { embedded?: boolean } = {}) {
@@ -57,11 +92,12 @@ export default function AuditPage({ embedded = false }: { embedded?: boolean } =
 
       {data && data.items.length > 0 ? (
         <div className="overflow-x-auto rounded-2xl border border-border bg-card animate-fade-in-up">
-          <table className="w-full min-w-[480px] text-left text-sm">
+          <table className="w-full min-w-[640px] text-left text-sm">
             <thead className="bg-muted/70 text-xs uppercase tracking-wider text-muted-foreground">
               <tr>
                 <th className="px-5 py-3 font-semibold">{t("audit.action")}</th>
                 <th className="px-5 py-3 font-semibold">{t("audit.resource")}</th>
+                <th className="px-5 py-3 font-semibold">{t("audit.client")}</th>
                 <th className="px-5 py-3 font-semibold">{t("audit.time")}</th>
               </tr>
             </thead>
@@ -73,6 +109,9 @@ export default function AuditPage({ embedded = false }: { embedded?: boolean } =
                     <td className="px-5 py-3 font-medium">{label ? t(label) : log.action}</td>
                     <td className="px-5 py-3 text-muted-foreground">
                       {log.resource_type ? `${log.resource_type}` : "-"}
+                    </td>
+                    <td className="px-5 py-3">
+                      <AuditClientCell log={log} />
                     </td>
                     <td className="px-5 py-3 text-muted-foreground">
                       {formatDateTime(log.created_at, locale)}

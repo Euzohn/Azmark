@@ -23,6 +23,10 @@ class AuditLog(Base):
     resource_id: Mapped[str | None] = mapped_column(String(64))
     meta: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON)
     ip_hash: Mapped[str | None] = mapped_column(String(64))
+    # Correlation context (spec #47). request_id groups every audit row that one
+    # HTTP request produced; user_agent is a sanitised, truncated client hint.
+    user_agent: Mapped[str | None] = mapped_column(String(200))
+    request_id: Mapped[str | None] = mapped_column(String(64), index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False, index=True
     )

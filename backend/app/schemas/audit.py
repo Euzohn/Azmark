@@ -13,6 +13,11 @@ class AuditLogRead(BaseModel):
     resource_type: str | None
     resource_id: str | None
     meta: dict[str, Any] | None
+    # Tracing context (spec #47). ip_hash is a salted hash — never a raw IP;
+    # request_id groups the rows one request produced.
+    ip_hash: str | None
+    user_agent: str | None
+    request_id: str | None
     created_at: datetime
 
 

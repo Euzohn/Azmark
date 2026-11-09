@@ -68,10 +68,13 @@ def list_logs(
     page_size: int = Query(default=50, ge=1, le=200),
     user_id: uuid.UUID | None = None,
     action: str | None = None,
+    request_id: str | None = None,
     _: User = Depends(get_current_admin),
     audit: AuditService = Depends(get_audit_service),
 ) -> AdminAuditLogList:
-    items, total = audit.list_all(page=page, page_size=page_size, user_id=user_id, action=action)
+    items, total = audit.list_all(
+        page=page, page_size=page_size, user_id=user_id, action=action, request_id=request_id
+    )
     return AdminAuditLogList(
         items=[
             AdminAuditLogRead(
@@ -81,6 +84,9 @@ def list_logs(
                 resource_type=item.resource_type,
                 resource_id=item.resource_id,
                 meta=item.meta,
+                ip_hash=item.ip_hash,
+                user_agent=item.user_agent,
+                request_id=item.request_id,
                 created_at=item.created_at,
             )
             for item in items

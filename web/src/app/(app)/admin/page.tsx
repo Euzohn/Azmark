@@ -294,12 +294,13 @@ export default function AdminPage({ embedded = false }: { embedded?: boolean } =
 
           {logsQuery.data && logsQuery.data.items.length > 0 ? (
             <div className="overflow-x-auto rounded-xl border border-border">
-              <table className="w-full min-w-[640px] text-left text-sm">
+              <table className="w-full min-w-[760px] text-left text-sm">
                 <thead className="bg-muted/70 text-xs uppercase tracking-wider text-muted-foreground">
                   <tr>
                     <th className="px-4 py-3 font-semibold">{t("audit.action")}</th>
                     <th className="px-4 py-3 font-semibold">{t("admin.logUser")}</th>
                     <th className="px-4 py-3 font-semibold">{t("audit.resource")}</th>
+                    <th className="px-4 py-3 font-semibold">{t("audit.client")}</th>
                     <th className="px-4 py-3 font-semibold">{t("audit.time")}</th>
                   </tr>
                 </thead>
@@ -316,6 +317,32 @@ export default function AdminPage({ embedded = false }: { embedded?: boolean } =
                         </td>
                         <td className="px-4 py-3 text-muted-foreground">
                           {log.resource_type || "—"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+                            <span className="font-mono" title={t("audit.ipHash")}>
+                              <span className="text-muted-foreground/70">
+                                {t("audit.ipHashShort")}
+                              </span>{" "}
+                              {log.ip_hash ? log.ip_hash.slice(0, 8) : "—"}
+                            </span>
+                            {log.user_agent ? (
+                              <span className="max-w-[200px] truncate" title={log.user_agent}>
+                                {log.user_agent}
+                              </span>
+                            ) : null}
+                            {log.request_id ? (
+                              <span
+                                className="font-mono text-[10px] text-muted-foreground/60"
+                                title={log.request_id}
+                              >
+                                <span className="text-muted-foreground/50">
+                                  {t("audit.request")}
+                                </span>{" "}
+                                {log.request_id.slice(0, 12)}
+                              </span>
+                            ) : null}
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-muted-foreground">
                           {formatDateTime(log.created_at)}

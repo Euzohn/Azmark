@@ -48,6 +48,9 @@ class AdminAuditLogRead(BaseModel):
     resource_type: str | None
     resource_id: str | None
     meta: dict[str, Any] | None
+    ip_hash: str | None
+    user_agent: str | None
+    request_id: str | None
     created_at: datetime
 
 

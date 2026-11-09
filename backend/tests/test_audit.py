@@ -1,6 +1,7 @@
 from sqlalchemy import select
 
 from app.models.audit_log import AuditLog
+from app.services.audit import client_user_agent
 from tests.conftest import auth_headers, register_and_login
 
 
@@ -101,3 +102,77 @@ def test_audit_does_not_store_sensitive_values(client):
     payload = response.text
     assert "ABC123" not in payload
     assert "1234567890" not in payload
+
+
+def audit_row(client, headers, action: str) -> dict:
+    """Read back the single `action` row from the user-scoped audit endpoint.
+
+    Going through the API (not the DB) also proves the tracing fields are
+    actually serialised and returned, not just written.
+    """
+    response = client.get("/api/v1/audit-logs?page_size=50", headers=headers)
+    assert response.status_code == 200, response.text
+    items = [item for item in response.json()["items"] if item["action"] == action]
+    assert items, f"expected an audited {action}"
+    return items[0]
+
+
+def test_audit_rows_carry_request_context(client):
+    """Every row records *which* request made it (spec #47 tracing)."""
+    token = register_and_login(client, "audit_ctx")["access_token"]
+    headers = {**auth_headers(token), "X-Request-Id": "trace-test-0001"}
+
+    response = client.post(
+        "/api/v1/flights",
+        json={"origin": "HKG", "destination": "SIN", "service_number": "CX659"},
+        headers=headers,
+    )
+    assert response.status_code == 201, response.text
+    # The correlation id is echoed back and stored on the row it identifies.
+    assert response.headers["x-request-id"] == "trace-test-0001"
+
+    entry = audit_row(client, headers, "create_record")
+    assert entry["request_id"] == "trace-test-0001"
+    assert entry["ip_hash"], "a request with a client must be hashed into ip_hash"
+    assert entry["user_agent"], "the client hint is captured for tracing"
+
+
+def test_client_supplied_request_id_must_be_safe(client):
+    """A hostile X-Request-Id is ignored, never stored verbatim (#96)."""
+    token = register_and_login(client, "audit_badid")["access_token"]
+    headers = {**auth_headers(token), "X-Request-Id": "bad id\r\nX-Evil: yes"}
+
+    response = client.post(
+        "/api/v1/flights",
+        json={"origin": "HKG", "destination": "SIN", "service_number": "CX659"},
+        headers=headers,
+    )
+    assert response.status_code == 201, response.text
+
+    entry = audit_row(client, headers, "create_record")
+    # Rejected: a server-generated id is used instead, with no injected newline.
+    assert entry["request_id"]
+    assert entry["request_id"] != "bad id\r\nX-Evil: yes"
+    assert "\r" not in entry["request_id"] and "\n" not in entry["request_id"]
+    # The echoed header is the server-generated id, not the injected one.
+    assert response.headers["x-request-id"] == entry["request_id"]
+
+
+def test_user_agent_is_sanitised_before_storage():
+    """Control characters are stripped so UA cannot inject into rows/logs (#96)."""
+    from starlette.requests import Request
+
+    raw = "Mozilla/5.0\r\nX-Injected: yes\x00more"
+    request = Request(
+        {"type": "http", "headers": [(b"user-agent", raw.encode("latin-1"))], "method": "GET"}
+    )
+    cleaned = client_user_agent(request)
+    assert cleaned == "Mozilla/5.0X-Injected: yesmore"
+    assert "\r" not in cleaned and "\n" not in cleaned and "\x00" not in cleaned
+
+
+def test_user_agent_absent_is_none():
+    from starlette.requests import Request
+
+    request = Request({"type": "http", "headers": [], "method": "GET"})
+    assert client_user_agent(request) is None

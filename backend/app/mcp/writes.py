@@ -12,6 +12,7 @@ from typing import Any
 
 from mcp.types import Tool
 from sqlalchemy.orm import Session
+from starlette.requests import Request
 
 from app.mcp.auth import MCPIdentity
 from app.models.pending_action import PendingActionKind
@@ -145,7 +146,12 @@ def _status_payload(record) -> dict[str, Any]:
 
 
 def handle_write(
-    *, db: Session, identity: MCPIdentity, name: str, arguments: dict[str, Any]
+    *,
+    db: Session,
+    identity: MCPIdentity,
+    name: str,
+    arguments: dict[str, Any],
+    request: Request | None = None,
 ) -> dict[str, Any]:
     """Validate a write proposal and persist it for human approval."""
     record_type = arguments.get("record_type")
@@ -173,12 +179,14 @@ def handle_write(
         token_id=identity.token_id,
         token_name=identity.token_name,
     )
-    _audit_create(db, identity=identity, record=record)
+    _audit_create(db, identity=identity, record=record, request=request)
     return _pending_payload(record)
 
 
-def _audit_create(db: Session, *, identity: MCPIdentity, record) -> None:
-    """Record who proposed what. MCP has no HTTP request, so no IP hash."""
+def _audit_create(
+    db: Session, *, identity: MCPIdentity, record, request: Request | None = None
+) -> None:
+    """Record who proposed what, plus request context (IP/UA/request id)."""
     from app.models.audit_log import AuditAction
     from app.services.audit import AuditService
 
@@ -196,6 +204,7 @@ def _audit_create(db: Session, *, identity: MCPIdentity, record) -> None:
                 "name": identity.token_name,
             },
         },
+        request=request,
     )
 
 
