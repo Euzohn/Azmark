@@ -132,7 +132,7 @@ openssl rand -hex 32    # SECRET_KEY
 
 `deploy.sh` 会拉取代码 → 备份数据库 → 重建容器 → 执行迁移 → 健康检查 → 清理；若 `git pull` 没有新提交且服务健康，则跳过备份/构建/迁移直接退出（强制重建用 `FORCE_DEPLOY=1 ./deploy.sh`）。完成后浏览器打开 `http://<服务器IP>:3000` → 注册 → 添加航班 → 在「地图」看到大圆航线。
 
-> 直连 3000 时，审计日志的客户端 IP 会是 Docker 网桥地址（如 `172.21.0.1`），因为真实来源在端口映射层就丢了。想记录真实 IP，按 [`docs/reverse-proxy.md`](./docs/reverse-proxy.md) 在前面加一层宿主机 nginx（同时设 `TRUSTED_PROXIES`，并用 `WEB_BIND_IP=127.0.0.1` 收紧端口）。
+> 审计日志的客户端 IP 在 `.env` 设置 `TRUSTED_PROXIES`（填 compose 网络网段）后即可正确记录，直连 3000 也生效——审计由 api 写入，而它的直连 peer 是 web 容器。详见 [`docs/reverse-proxy.md`](./docs/reverse-proxy.md)；想进一步收紧端口、杜绝 XFF 伪造，可再加一层宿主机 nginx。
 
 首个管理员（二选一）：
 
@@ -231,7 +231,7 @@ docker compose exec api python -c "from app.core.db import SessionLocal; from ap
 
 - **端口冲突**：只有 web 对外发布端口（`WEB_PORT`）。宿主机 3000 被占用时改 `WEB_PORT`，并同步 `CORS_ORIGINS`。
 - **配了 nginx 后想禁止绕过**：web 默认对外直连 3000；在 `.env` 设 `WEB_BIND_IP=127.0.0.1` 后只留本机入口，外部必须经反代。
-- **审计日志客户端显示 `172.x`**：直连 3000 时真实 IP 在 Docker 端口映射层就被改写，属预期；按 [`docs/reverse-proxy.md`](./docs/reverse-proxy.md) 加 nginx 并设 `TRUSTED_PROXIES`。
+- **审计日志客户端显示 `172.21.0.x`**：`TRUSTED_PROXIES` 未设置或没填 compose 网段，api 因此不采信 web 容器转发的 XFF；按 [`docs/reverse-proxy.md`](./docs/reverse-proxy.md) 配置后 `docker compose up -d api`。若显示的是 `172.21.0.1`（网关），检查 iptables 是否有非标准 MASQUERADE 规则。
 - **数据库密码特殊字符**：`POSTGRES_PASSWORD` 会被拼进 `DATABASE_URL`，必须 URL 安全（用 `openssl rand -hex 24`）。
 - **改了密码仍认证失败**：Postgres 密码仅在数据卷首次初始化时写入。改 `.env` 后需 `docker compose down -v` 重建（会清库），或 `docker compose exec postgres psql -U azmark -c "ALTER USER azmark WITH PASSWORD '<新密码>';"`。
 - **改了环境变量不生效**：`API_INTERNAL_URL` 是 Next **构建期**注入，改后要 `docker compose build web` 再 `up -d`。

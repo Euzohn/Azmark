@@ -43,9 +43,10 @@ services:
       DATABASE_URL: postgresql+psycopg://azmark:${POSTGRES_PASSWORD:-azmark}@postgres:5432/azmark
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
-      # 可信反代白名单（逗号分隔 CIDR）：仅当直连 peer（request.client.host）
+      # 可信代理白名单（逗号分隔 CIDR）：仅当直连 peer（request.client.host）
       # 命中这些网段时，才信任 X-Forwarded-For 透传的客户端 IP，防伪造。
-      # 加 nginx 前置后填 web 容器所在网段（如 172.21.0.0/16），见 docs。
+      # 审计由 api 写入、其直连 peer 是 web 容器，填 compose 网段
+      # （如 172.21.0.0/16）即可记录真实 IP；详见 docs/reverse-proxy.md。
       TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
       REDIS_URL: redis://redis:6379/0
       S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
@@ -85,9 +86,9 @@ services:
     depends_on:
       - api
     ports:
-      # 默认对外直连（开箱可用）。加了宿主机 nginx 反代后，建议设
-      # WEB_BIND_IP=127.0.0.1 只留本机入口，避免绕过反代直连。
-      # 直连时审计只能记到 Docker 网桥地址，见 docs/reverse-proxy.md。
+      # 默认对外直连（开箱可用）；设 TRUSTED_PROXIES 后审计即记录真实 IP。
+      # 加了宿主机 nginx 反代后，建议设 WEB_BIND_IP=127.0.0.1 只留本机
+      # 入口，杜绝绕过反代伪造 X-Forwarded-For；见 docs/reverse-proxy.md。
       - "${WEB_BIND_IP:-0.0.0.0}:${WEB_PORT:-3000}:3000"
 
   # 备份用的一次性 MinIO 客户端（spec #97）。不随 `docker compose up` 启动，

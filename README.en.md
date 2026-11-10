@@ -132,7 +132,7 @@ openssl rand -hex 32    # SECRET_KEY
 
 `deploy.sh` pulls the code → backs up the database → rebuilds containers → runs migrations → health-checks → cleans up. If `git pull` finds no new commits and the services are healthy, it skips backup / build / migration and exits (force a rebuild with `FORCE_DEPLOY=1 ./deploy.sh`). When it finishes, open `http://<server-ip>:3000` → register → add a flight → watch the great-circle route appear on the map.
 
-> When accessed directly on :3000, the audit log records the Docker bridge address (e.g. `172.21.0.1`) because the real source is rewritten at the port-mapping layer. To record real client IPs, put a host-level nginx in front as described in [`docs/reverse-proxy.md`](./docs/reverse-proxy.md) (also set `TRUSTED_PROXIES` and set `WEB_BIND_IP=127.0.0.1` to lock the port down).
+> The audit log records real client IPs once `TRUSTED_PROXIES` is set in `.env` (to the compose network's subnet), including with direct :3000 access — the audit is written by the api, whose direct peer is the web container. See [`docs/reverse-proxy.md`](./docs/reverse-proxy.md). A host-level nginx can additionally lock the port down and prevent X-Forwarded-For spoofing.
 
 First admin (pick one):
 
@@ -231,7 +231,7 @@ docker compose exec api python -c "from app.core.db import SessionLocal; from ap
 
 - **Port conflicts**: only web publishes a port (`WEB_PORT`). If host port 3000 is taken, change `WEB_PORT` and update `CORS_ORIGINS` to match.
 - **Want to block direct :3000 access after adding nginx**: web publishes 3000 by default; set `WEB_BIND_IP=127.0.0.1` in `.env` so only the local proxy can reach it.
-- **Audit log shows a `172.x` client**: direct :3000 access loses the real IP at the Docker port-mapping layer, so this is expected; add nginx and set `TRUSTED_PROXIES` per [`docs/reverse-proxy.md`](./docs/reverse-proxy.md).
+- **Audit log shows a `172.21.0.x` client**: `TRUSTED_PROXIES` is unset or does not match the compose network, so the api ignores the X-Forwarded-For forwarded by the web container; configure it per [`docs/reverse-proxy.md`](./docs/reverse-proxy.md) and run `docker compose up -d api`. If it shows `172.21.0.1` (the bridge gateway), check iptables for a non-standard MASQUERADE rule.
 - **Special characters in the database password**: `POSTGRES_PASSWORD` is interpolated into `DATABASE_URL` and must be URL-safe (use `openssl rand -hex 24`).
 - **Changed the password but auth still fails**: the Postgres password is only written on first initialization of the data volume. After editing `.env`, either `docker compose down -v` and recreate (wipes the database), or `docker compose exec postgres psql -U azmark -c "ALTER USER azmark WITH PASSWORD '<new-password>';"`.
 - **Changed env vars with no effect**: `API_INTERNAL_URL` is injected at Next **build** time — after changing it, run `docker compose build web` then `up -d`.
