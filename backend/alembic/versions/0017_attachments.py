@@ -41,9 +41,7 @@ def upgrade() -> None:
         sa.UniqueConstraint("storage_key", name="uq_attachments_storage_key"),
     )
     op.create_index(op.f("ix_attachments_user_id"), "attachments", ["user_id"], unique=False)
-    op.create_index(
-        op.f("ix_attachments_created_at"), "attachments", ["created_at"], unique=False
-    )
+    op.create_index(op.f("ix_attachments_created_at"), "attachments", ["created_at"], unique=False)
     op.create_index(
         "ix_attachments_owner_resource",
         "attachments",

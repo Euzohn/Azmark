@@ -270,9 +270,10 @@ def test_deleting_a_hotel_or_activity_removes_its_attachments(client, db, storag
     assert len(storage.objects) == 2
 
     assert client.delete(f"/api/v1/hotels/{hotel.json()['id']}", headers=headers).status_code == 204
-    assert client.delete(
-        f"/api/v1/activities/{activity.json()['id']}", headers=headers
-    ).status_code == 204
+    assert (
+        client.delete(f"/api/v1/activities/{activity.json()['id']}", headers=headers).status_code
+        == 204
+    )
 
     assert storage.objects == {}
     assert db.scalar(select(func.count()).select_from(Attachment)) == 0

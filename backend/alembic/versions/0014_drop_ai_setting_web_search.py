@@ -26,6 +26,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.add_column(
-        "user_ai_settings", sa.Column("web_search", sa.Boolean(), nullable=False)
-    )
+    op.add_column("user_ai_settings", sa.Column("web_search", sa.Boolean(), nullable=False))

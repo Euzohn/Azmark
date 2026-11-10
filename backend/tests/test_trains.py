@@ -153,8 +153,6 @@ def test_train_duplicate_returns_conflict(client):
     assert dup.status_code == 409
     assert dup.json()["detail"]["existing_record"]["service_number"] == "G1"
 
-    forced = client.post(
-        "/api/v1/trains", json=TRAIN, params={"force": "true"}, headers=headers
-    )
+    forced = client.post("/api/v1/trains", json=TRAIN, params={"force": "true"}, headers=headers)
     assert forced.status_code == 201
     assert forced.json()["id"] != first.json()["id"]

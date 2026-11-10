@@ -277,9 +277,7 @@ def test_create_duplicate_returns_conflict(client):
     assert detail["existing_record"]["service_number"] == "CX659"
 
     # Force-create bypasses the check (spec #41 "Keep New").
-    forced = client.post(
-        "/api/v1/flights", json=FLIGHT, params={"force": "true"}, headers=headers
-    )
+    forced = client.post("/api/v1/flights", json=FLIGHT, params={"force": "true"}, headers=headers)
     assert forced.status_code == 201
     assert forced.json()["id"] != first.json()["id"]
 
