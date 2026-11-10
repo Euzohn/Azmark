@@ -12,6 +12,9 @@
 # 若 git pull 没有带来新提交、且 api/web 容器健康，则跳过备份/构建/迁移直接退出。
 # 注意：.env 不在 git 里，改过它需要用 FORCE_DEPLOY=1（或 docker compose up -d --build）。
 #
+# 远端历史被改写（force push）时无法快进：只要工作区没有未提交改动，脚本会
+# 自动 reset --hard 对齐远端上游；有未提交改动则中止，绝不静默丢弃。
+#
 # 前置：docker + compose 插件已安装，当前用户有 docker 权限，目录内已有 .env。
 set -euo pipefail
 
@@ -38,12 +41,40 @@ command -v docker >/dev/null 2>&1 || { err "docker 未安装"; exit 1; }
 docker compose version >/dev/null 2>&1 || { err "docker compose 插件不可用"; exit 1; }
 [ -f .env ] || { err "缺少 .env（首次部署请参照 README 配置后再运行）"; exit 1; }
 
+# 把工作副本推进到远端最新：优先快进，快进不了（远端历史被改写）且工作区
+# 干净时对齐上游。有未提交改动一律中止——服务器上的部署副本不该有本地改动，
+# 真有就必须让维护者自己决定保留还是丢弃，脚本不替它做主。
+sync_with_remote() {
+  if git pull --ff-only --no-rebase; then
+    return 0
+  fi
+
+  warn "  git pull 无法快进：远端历史可能被改写（force push）。"
+  if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+    err "服务器上有未提交的改动，不会自动覆盖："
+    git status --short --untracked-files=no >&2
+    err "保留改动：git stash && $0"
+    err "确认丢弃：git reset --hard origin/$(git symbolic-ref --short HEAD 2>/dev/null || echo main) && $0"
+    return 1
+  fi
+
+  # 变量一律用 ${} 包裹：消息里有全角标点，某些 locale 下 bash 会把它
+  # 算进变量名，配 set -u 就成了 unbound variable。
+  local branch upstream remote
+  branch="$(git symbolic-ref --short HEAD 2>/dev/null || true)"
+  [ -n "${branch}" ] || { err "当前不在分支上（detached HEAD），无法自动对齐远端。"; return 1; }
+  upstream="$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)"
+  [ -n "${upstream}" ] || { err "分支 ${branch} 没有设置上游，无法自动对齐远端。"; return 1; }
+  remote="${upstream%%/*}"
+
+  git fetch "${remote}"
+  git reset --hard "${upstream}"
+  log "  已对齐 ${upstream}: $(git rev-parse --short HEAD)"
+}
+
 log "1/6 拉取最新代码 ($APP_DIR)"
 before_rev="$(git rev-parse HEAD 2>/dev/null || true)"
-if ! git pull --ff-only --no-rebase; then
-  err "git pull 失败：服务器上可能有未提交的改动，请先处理再重试。"
-  exit 1
-fi
+sync_with_remote || exit 1
 after_rev="$(git rev-parse HEAD)"
 
 # 没有新提交 + 服务已在跑 + 健康检查通过：不必再备份/构建/迁移，直接收工。
@@ -100,7 +131,7 @@ docker container prune -f
 ls -1t "$BACKUP_DIR"/azmark-*.sql.gz 2>/dev/null \
   | tail -n +$((KEEP_BACKUPS + 1)) \
   | xargs -r rm -f
-warn "  已清理旧镜像/停止容器；备份保留最近 $KEEP_BACKUPS 份于 $BACKUP_DIR。"
+warn "  已清理旧镜像/停止容器；备份保留最近 ${KEEP_BACKUPS} 份于 ${BACKUP_DIR}。"
 
 log "完成。服务状态："
 docker compose ps
