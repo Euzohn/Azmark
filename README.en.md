@@ -14,6 +14,8 @@
   <img src="https://img.shields.io/badge/FastAPI%20%C2%B7%20Next.js%20%C2%B7%20TypeScript-6B6557" alt="Stack: FastAPI · Next.js · TypeScript">
   &nbsp;
   <img src="https://img.shields.io/badge/PostgreSQL-PostGIS-78816A" alt="PostgreSQL + PostGIS">
+  &nbsp;
+  <a href="https://github.com/Euzohn/Azmark/actions/workflows/ci.yml"><img src="https://github.com/Euzohn/Azmark/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
 **Azmark (行迹)** is an open-source, self-hosted, AI-native personal travel log and data management system. It turns every flight, train ride and journey into a travel logbook that belongs to you alone — the data lives on your own server, with no third-party cloud account in the loop.
@@ -49,17 +51,22 @@ See [`AGENTS.md`](./AGENTS.md) for repository conventions, [`docs/backup.md`](./
 | Trains | Detail, edit, delete, AI / form entry |
 | Other transport | Detail, edit, delete, AI / form entry |
 | Hotels | Stay records (check-in / check-out, room type, encrypted confirmation number, address, price); trip grouping, deduplication, status inference |
+| Places | Saved places (airport / station / city / restaurant etc.) with coordinates and timezone; linked to trips through activities |
+| Activities | Activity records (type, time, place, price, notes); trip members on the timeline |
+| Expenses | Multi-currency expenses with categories and exchange-rate conversion; linkable to transport / hotel / activity or trip, included in expense statistics |
+| Notes | Free-form notes, optionally linked to a trip |
 | Records | Unified records list (flight / train / other): search, type / status / trip / date filters, sorting and pagination |
-| Trips | A trip groups flights, trains and hotel records; ordering within a trip |
-| Attachments | Upload / download / delete boarding passes and receipts per record (S3-compatible storage · MinIO) |
+| Trips | A trip groups flights, trains, hotels and activities, and aggregates its expenses and notes; ordering within a trip |
+| Attachments | Upload / download / delete boarding passes and receipts per record (transport, hotel, activity; S3-compatible storage · MinIO) |
 | Map | Great-circle route visualization (MapLibre GL · OpenFreeMap) |
 | Timeline | Every transport record in chronological order |
 | Dashboard | Key metrics, upcoming departures, recent records across types |
-| Statistics | Flight / train breakdowns, year / month / day distributions (no overlap with dashboard metrics) |
-| Audit log | Login / failure / register / password change / username change / flight & train CRUD; client IP and its salted hash |
+| Statistics | Flight / train breakdowns, year / month / day distributions, expense composition (no overlap with dashboard metrics) |
+| Audit log | Account, records, trips, attachments, AI and import / export actions; client IP and its salted hash |
 | Agent access | Personal access tokens (read / write scopes, revocable, rate-limited per token); scripts and AI agents can call the REST API directly |
 | MCP | MCP server (Streamable HTTP): read-only tools plus write proposals for `write`-scope tokens; Claude / Cursor connect to `/api/v1/mcp` with an access token |
 | Pending actions | Writes submitted by agents via MCP never apply immediately — a user must approve them on the web "Pending" page; the confirm endpoint rejects tokens, so an agent can never approve its own proposal |
+| AI assistant | Chat, natural-language entry / search, tool calling, screenshot extraction (flights / trains / hotel confirmations), pending writes; per-user model settings |
 | i18n | zh-CN / en-US, light / dark / system theme, mobile bottom navigation |
 
 ## Why it's different
@@ -250,8 +257,8 @@ docker compose exec api python -c "from app.core.db import SessionLocal; from ap
 
 ## Roadmap
 
-- **MVP (done)** — accounts; flight / train / other transport records; trips; attachments; map / timeline / dashboard / statistics; audit log; AI chat with natural-language entry (including the confirmation flow); JSON import / export; zh-CN / en-US and mobile adaptation; personal access tokens.
-- **P1 (in progress)** — hotels / stays (done), places, activities, expenses, photos, notes, OCR, boarding-pass parsing.
+- **MVP (done)** — accounts; flight / train / other transport records; trips; attachments; map / timeline / dashboard / statistics; audit log; AI chat with natural-language entry (including the confirmation flow); CSV / JSON import / export; zh-CN / en-US and mobile adaptation; personal access tokens.
+- **P1 (done)** — hotels / stays, places, activities, expenses, notes. Photos / OCR / boarding-pass parsing are not built as separate modules: image extraction is handled by the web AI assistant (images are not persisted; upload them as attachments when they need to be kept).
 - **P2** — email import, automation rules, AI travel journal, Travel Wrapped, advanced OCR, AI photo organization.
 - **P3** — trip collaboration, family accounts, multi-user shared trips, public trip pages, native mobile apps, plugin ecosystem.
 
