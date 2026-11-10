@@ -24,7 +24,7 @@
   <img src="./assets/readme/showcase.svg" width="100%" alt="界面结构示意：大圆航线地图、时间线、按行程归组的记录列表（线框示意，非截图）">
 </p>
 
-仓库开发约定见 [`AGENTS.md`](./AGENTS.md)，备份 / 恢复运维见 [`docs/backup.md`](./docs/backup.md)，MCP 接入见 [`docs/mcp.md`](./docs/mcp.md)。
+仓库开发约定见 [`AGENTS.md`](./AGENTS.md)，备份 / 恢复运维见 [`docs/backup.md`](./docs/backup.md)，MCP 接入见 [`docs/mcp.md`](./docs/mcp.md)，反向代理与审计 IP 见 [`docs/reverse-proxy.md`](./docs/reverse-proxy.md)。
 
 ## 目录
 
@@ -56,7 +56,7 @@
 | 时间线 | 按时间排列全部交通记录 |
 | 总览 | 关键指标、即将出发、跨类型最近记录 |
 | 统计 | 航班/火车明细分组、年份/月份/日期分布（不重复总览指标） |
-| 审计日志 | 登录/失败/注册/改密/改用户名/增改删航班火车；IP 仅存加盐哈希 |
+| 审计日志 | 登录/失败/注册/改密/改用户名/增改删航班火车；记录客户端 IP 及其加盐哈希 |
 | Agent 接入 | 个人访问令牌（read/write 权限、可吊销、按令牌限流）；脚本与 AI agent 可直接调用 REST API |
 | MCP | MCP Server（Streamable HTTP）：只读工具 + `write` scope 令牌的写提案；Claude / Cursor 用访问令牌直连 `/api/v1/mcp` |
 | 待确认操作 | agent 通过 MCP 提交的写入不会立即生效，需用户在网页「待确认」批准；确认接口拒绝令牌，杜绝 agent 自证 |
@@ -131,6 +131,8 @@ openssl rand -hex 32    # SECRET_KEY
 ```
 
 `deploy.sh` 会拉取代码 → 备份数据库 → 重建容器 → 执行迁移 → 健康检查 → 清理；若 `git pull` 没有新提交且服务健康，则跳过备份/构建/迁移直接退出（强制重建用 `FORCE_DEPLOY=1 ./deploy.sh`）。完成后浏览器打开 `http://<服务器IP>:3000` → 注册 → 添加航班 → 在「地图」看到大圆航线。
+
+> 直连 3000 时，审计日志的客户端 IP 会是 Docker 网桥地址（如 `172.21.0.1`），因为真实来源在端口映射层就丢了。想记录真实 IP，按 [`docs/reverse-proxy.md`](./docs/reverse-proxy.md) 在前面加一层宿主机 nginx（同时设 `TRUSTED_PROXIES`，并用 `WEB_BIND_IP=127.0.0.1` 收紧端口）。
 
 首个管理员（二选一）：
 
@@ -228,6 +230,8 @@ docker compose exec api python -c "from app.core.db import SessionLocal; from ap
 <summary>常见坑</summary>
 
 - **端口冲突**：只有 web 对外发布端口（`WEB_PORT`）。宿主机 3000 被占用时改 `WEB_PORT`，并同步 `CORS_ORIGINS`。
+- **配了 nginx 后想禁止绕过**：web 默认对外直连 3000；在 `.env` 设 `WEB_BIND_IP=127.0.0.1` 后只留本机入口，外部必须经反代。
+- **审计日志客户端显示 `172.x`**：直连 3000 时真实 IP 在 Docker 端口映射层就被改写，属预期；按 [`docs/reverse-proxy.md`](./docs/reverse-proxy.md) 加 nginx 并设 `TRUSTED_PROXIES`。
 - **数据库密码特殊字符**：`POSTGRES_PASSWORD` 会被拼进 `DATABASE_URL`，必须 URL 安全（用 `openssl rand -hex 24`）。
 - **改了密码仍认证失败**：Postgres 密码仅在数据卷首次初始化时写入。改 `.env` 后需 `docker compose down -v` 重建（会清库），或 `docker compose exec postgres psql -U azmark -c "ALTER USER azmark WITH PASSWORD '<新密码>';"`。
 - **改了环境变量不生效**：`API_INTERNAL_URL` 是 Next **构建期**注入，改后要 `docker compose build web` 再 `up -d`。
@@ -237,7 +241,7 @@ docker compose exec api python -c "from app.core.db import SessionLocal; from ap
 ## 安全
 
 - 所有用户数据按 `user_id` 服务端隔离，跨用户访问一律 404/403。
-- PNR、票号、证件号等敏感字段加密存储；日志与审计永不输出明文，客户端 IP 仅存加盐哈希。
+- PNR、票号、证件号等敏感字段加密存储；日志与审计永不输出明文，客户端 IP 记录原值与其加盐哈希（用于溯源与稳定关联）。
 - AI 只能通过绑定当前用户的 tool 层操作，禁止直接访问数据库；破坏性操作必须经用户显式确认；网页 / 邮件 / 文件内容一律视为不可信输入，防御 prompt injection。
 - 附件一律经 API 鉴权后流式下载，不暴露存储 bucket。
 - 个人访问令牌默认只读、可随时吊销、按令牌限流。

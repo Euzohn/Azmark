@@ -1,3 +1,4 @@
+import ipaddress
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -30,6 +31,13 @@ class Settings(BaseSettings):
     mcp_enabled: bool = True
 
     cors_origins: str = "http://localhost:3000"
+
+    # Reverse-proxy trust (spec #47). Comma-separated CIDRs of the peers whose
+    # X-Forwarded-For header is trusted. A direct client can forge that header,
+    # so the real client address is only taken from it when the direct peer
+    # (request.client.host) is one of these networks; otherwise the peer address
+    # itself is used. Empty = trust nothing (safest default).
+    trusted_proxies: str = ""
 
     aerodatabox_base_url: str = "https://aerodatabox.p.rapidapi.com"
     aerodatabox_host: str = "aerodatabox.p.rapidapi.com"
@@ -69,6 +77,27 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def trusted_proxy_networks(
+        self,
+    ) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]:
+        """Parse ``trusted_proxies`` into address networks, skipping invalid entries.
+
+        A typo in one CIDR must not take the whole service down, but it *does*
+        silently drop that entry — which is the safe direction, because an
+        untrusted (empty) list means the X-Forwarded-For header is ignored.
+        """
+        networks = []
+        for cidr in self.trusted_proxies.split(","):
+            cidr = cidr.strip()
+            if not cidr:
+                continue
+            try:
+                networks.append(ipaddress.ip_network(cidr, strict=False))
+            except ValueError:
+                continue
+        return tuple(networks)
 
 
 @lru_cache

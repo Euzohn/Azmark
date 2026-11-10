@@ -139,8 +139,12 @@ def test_audit_rows_carry_request_context(client):
     assert entry["user_agent"], "the client hint is captured for tracing"
 
 
-def test_forwarded_ip_is_recorded(client):
-    """Behind a proxy the X-Forwarded-For client is the address that gets stored."""
+def test_forwarded_ip_is_ignored_when_peer_is_untrusted(client):
+    """A forged X-Forwarded-For must not override the real peer (#47, #96).
+
+    ``trusted_proxies`` is empty by default, so the header is not trusted and
+    the direct peer address is what gets stored.
+    """
     token = register_and_login(client, "audit_fwd")["access_token"]
     headers = {**auth_headers(token), "X-Forwarded-For": "203.0.113.7"}
 
@@ -151,9 +155,103 @@ def test_forwarded_ip_is_recorded(client):
     )
 
     entry = audit_row(client, headers, "create_record")
-    assert entry["ip"] == "203.0.113.7"
-    # The hash is of the forwarded address, not the proxy hop.
-    assert entry["ip_hash"] != entry["ip"]
+    assert entry["ip"] == "testclient"
+    # The hash is of the stored address, not the spoofed header.
+    assert entry["ip_hash"] != "203.0.113.7"
+
+
+def _request(client_host: str | None, forwarded: str | None = None):
+    from starlette.requests import Request
+
+    headers = []
+    if forwarded is not None:
+        headers.append((b"x-forwarded-for", forwarded.encode("latin-1")))
+    scope: dict = {"type": "http", "headers": headers, "method": "GET"}
+    if client_host is not None:
+        scope["client"] = (client_host, 12345)
+    return Request(scope)
+
+
+def test_client_ip_trusts_forwarded_header_from_trusted_proxy(monkeypatch):
+    """Behind a whitelisted proxy the first X-Forwarded-For entry is the client."""
+    from app.services.audit import client_ip
+
+    monkeypatch.setattr("app.services.audit.settings.trusted_proxies", "172.21.0.0/16")
+    request = _request("172.21.0.6", "203.0.113.7, 172.21.0.1")
+    assert client_ip(request) == "203.0.113.7"
+
+
+def test_client_ip_ignores_forwarded_header_from_untrusted_peer(monkeypatch):
+    """A peer outside the whitelist cannot spoof the client address."""
+    from app.services.audit import client_ip
+
+    monkeypatch.setattr("app.services.audit.settings.trusted_proxies", "172.21.0.0/16")
+    request = _request("198.51.100.9", "203.0.113.7")
+    assert client_ip(request) == "198.51.100.9"
+
+
+def test_client_ip_uses_peer_when_whitelist_is_empty(monkeypatch):
+    """The default (no configured proxies) never trusts X-Forwarded-For."""
+    from app.services.audit import client_ip
+
+    monkeypatch.setattr("app.services.audit.settings.trusted_proxies", "")
+    request = _request("198.51.100.9", "203.0.113.7")
+    assert client_ip(request) == "198.51.100.9"
+
+
+def test_client_ip_ignores_malformed_forwarded_value(monkeypatch):
+    """A non-IP X-Forwarded-For must not be stored (it would break the insert)."""
+    from app.services.audit import client_ip
+
+    monkeypatch.setattr("app.services.audit.settings.trusted_proxies", "172.21.0.0/16")
+    for bogus in ("not-an-ip", "", " " * 3, "x" * 500, "203.0.113.7:8080"):
+        assert client_ip(_request("172.21.0.6", bogus)) == "172.21.0.6"
+
+
+def test_client_ip_normalises_forwarded_address(monkeypatch):
+    """Valid addresses are canonicalised before storage."""
+    from app.services.audit import client_ip
+
+    monkeypatch.setattr("app.services.audit.settings.trusted_proxies", "172.21.0.0/16")
+    request = _request("172.21.0.6", " 2001:0db8:0:0:0:0:0:1 , 172.21.0.1")
+    assert client_ip(request) == "2001:db8::1"
+
+
+def test_client_ip_ignores_forged_prefix_when_proxy_appends(monkeypatch):
+    """Even with ``$proxy_add_x_forwarded_for`` a forged prefix is not trusted.
+
+    The rightmost untrusted hop is the one our proxy actually saw.
+    """
+    from app.services.audit import client_ip
+
+    monkeypatch.setattr("app.services.audit.settings.trusted_proxies", "172.21.0.0/16")
+    request = _request("172.21.0.6", "1.2.3.4, 203.0.113.7")
+    assert client_ip(request) == "203.0.113.7"
+
+
+def test_client_ip_falls_back_when_every_hop_is_trusted(monkeypatch):
+    """A chain made only of trusted proxies yields no client address."""
+    from app.services.audit import client_ip
+
+    monkeypatch.setattr("app.services.audit.settings.trusted_proxies", "172.21.0.0/16")
+    assert client_ip(_request("172.21.0.6", "172.21.0.5")) == "172.21.0.6"
+
+
+def test_client_ip_is_none_without_a_client(monkeypatch):
+    """No transport peer means no address to record."""
+    from app.services.audit import client_ip
+
+    monkeypatch.setattr("app.services.audit.settings.trusted_proxies", "172.21.0.0/16")
+    assert client_ip(_request(None, "203.0.113.7")) is None
+
+
+def test_trusted_proxy_networks_skips_invalid_entries(monkeypatch):
+    """One bad CIDR must not break parsing; valid ones still apply."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "trusted_proxies", "172.21.0.0/16, not-a-cidr, 10.0.0.0/8")
+    networks = [str(net) for net in settings.trusted_proxy_networks]
+    assert networks == ["172.21.0.0/16", "10.0.0.0/8"]
 
 
 def test_client_supplied_request_id_must_be_safe(client):

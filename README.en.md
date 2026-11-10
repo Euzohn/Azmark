@@ -24,7 +24,7 @@
   <img src="./assets/readme/showcase-en.svg" width="100%" alt="Interface overview: great-circle route map, timeline, and records grouped by trip (schematic wireframe, not screenshots)">
 </p>
 
-See [`AGENTS.md`](./AGENTS.md) for repository conventions, [`docs/backup.md`](./docs/backup.md) for backup / restore operations, and [`docs/mcp.md`](./docs/mcp.md) for MCP integration.
+See [`AGENTS.md`](./AGENTS.md) for repository conventions, [`docs/backup.md`](./docs/backup.md) for backup / restore operations, [`docs/mcp.md`](./docs/mcp.md) for MCP integration, and [`docs/reverse-proxy.md`](./docs/reverse-proxy.md) for reverse proxying and audit client IPs.
 
 ## Table of contents
 
@@ -56,7 +56,7 @@ See [`AGENTS.md`](./AGENTS.md) for repository conventions, [`docs/backup.md`](./
 | Timeline | Every transport record in chronological order |
 | Dashboard | Key metrics, upcoming departures, recent records across types |
 | Statistics | Flight / train breakdowns, year / month / day distributions (no overlap with dashboard metrics) |
-| Audit log | Login / failure / register / password change / username change / flight & train CRUD; client IPs stored as salted hashes only |
+| Audit log | Login / failure / register / password change / username change / flight & train CRUD; client IP and its salted hash |
 | Agent access | Personal access tokens (read / write scopes, revocable, rate-limited per token); scripts and AI agents can call the REST API directly |
 | MCP | MCP server (Streamable HTTP): read-only tools plus write proposals for `write`-scope tokens; Claude / Cursor connect to `/api/v1/mcp` with an access token |
 | Pending actions | Writes submitted by agents via MCP never apply immediately — a user must approve them on the web "Pending" page; the confirm endpoint rejects tokens, so an agent can never approve its own proposal |
@@ -131,6 +131,8 @@ openssl rand -hex 32    # SECRET_KEY
 ```
 
 `deploy.sh` pulls the code → backs up the database → rebuilds containers → runs migrations → health-checks → cleans up. If `git pull` finds no new commits and the services are healthy, it skips backup / build / migration and exits (force a rebuild with `FORCE_DEPLOY=1 ./deploy.sh`). When it finishes, open `http://<server-ip>:3000` → register → add a flight → watch the great-circle route appear on the map.
+
+> When accessed directly on :3000, the audit log records the Docker bridge address (e.g. `172.21.0.1`) because the real source is rewritten at the port-mapping layer. To record real client IPs, put a host-level nginx in front as described in [`docs/reverse-proxy.md`](./docs/reverse-proxy.md) (also set `TRUSTED_PROXIES` and set `WEB_BIND_IP=127.0.0.1` to lock the port down).
 
 First admin (pick one):
 
@@ -228,6 +230,8 @@ docker compose exec api python -c "from app.core.db import SessionLocal; from ap
 <summary>Common pitfalls</summary>
 
 - **Port conflicts**: only web publishes a port (`WEB_PORT`). If host port 3000 is taken, change `WEB_PORT` and update `CORS_ORIGINS` to match.
+- **Want to block direct :3000 access after adding nginx**: web publishes 3000 by default; set `WEB_BIND_IP=127.0.0.1` in `.env` so only the local proxy can reach it.
+- **Audit log shows a `172.x` client**: direct :3000 access loses the real IP at the Docker port-mapping layer, so this is expected; add nginx and set `TRUSTED_PROXIES` per [`docs/reverse-proxy.md`](./docs/reverse-proxy.md).
 - **Special characters in the database password**: `POSTGRES_PASSWORD` is interpolated into `DATABASE_URL` and must be URL-safe (use `openssl rand -hex 24`).
 - **Changed the password but auth still fails**: the Postgres password is only written on first initialization of the data volume. After editing `.env`, either `docker compose down -v` and recreate (wipes the database), or `docker compose exec postgres psql -U azmark -c "ALTER USER azmark WITH PASSWORD '<new-password>';"`.
 - **Changed env vars with no effect**: `API_INTERNAL_URL` is injected at Next **build** time — after changing it, run `docker compose build web` then `up -d`.
@@ -237,7 +241,7 @@ docker compose exec api python -c "from app.core.db import SessionLocal; from ap
 ## Security
 
 - All user data is isolated server-side by `user_id`; cross-user access always returns 404/403.
-- Sensitive fields such as PNR, ticket numbers and credential numbers are encrypted at rest; logs and audit entries never emit plaintext; client IPs are stored as salted hashes only.
+- Sensitive fields such as PNR, ticket numbers and credential numbers are encrypted at rest; logs and audit entries never emit plaintext; client IPs are stored as the raw address plus a salted hash (for traceability and stable correlation).
 - AI operates only through a tool layer bound to the current user and never touches the database directly; destructive operations require explicit user confirmation; web / email / file content is always treated as untrusted input, defending against prompt injection.
 - Attachments always download through the authenticated API stream; the storage bucket is never exposed.
 - Personal access tokens default to read-only, are revocable at any time, and are rate-limited per token.
