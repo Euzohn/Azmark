@@ -7,6 +7,7 @@ import { MapIcon } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
+  ExpressionSpecification,
   GeoJSONSource,
   Map as MLMap,
   MapLayerMouseEvent,
@@ -109,6 +110,22 @@ function routeHref(route: MapRoute): string {
   if (route.type === "train") return `/trains/${route.id}`;
   if (route.type === "other") return `/transports/${route.id}`;
   return `/flights/${route.id}`;
+}
+
+// Zoom interpolation must stay the TOP-LEVEL expression: the style spec
+// forbids nesting ["zoom"] inside "case", and an invalid paint expression
+// makes addLayer throw — which would abort the whole draw. So the hover
+// branch lives inside each interpolate stop's output instead.
+function hoverZoom(hoverValue: number, stops: [number, number][]): ExpressionSpecification {
+  return [
+    "interpolate",
+    ["linear"],
+    ["zoom"],
+    ...stops.flatMap(([zoom, value]): [number, ExpressionSpecification] => [
+      zoom,
+      ["case", ["boolean", ["feature-state", "hover"], false], hoverValue, value],
+    ]),
+  ];
 }
 
 function lineFeature(
@@ -514,19 +531,16 @@ export default function MapPage() {
             "line-color": accent,
             // Thin and faint at world zoom, heavier once you are close enough
             // to read individual routes — keeps dense bundles from turning
-            // into a solid mass.
-            "line-width": [
-              "case",
-              ["boolean", ["feature-state", "hover"], false],
-              4,
-              ["interpolate", ["linear"], ["zoom"], 2, 1, 6, 1.6, 10, 2.4],
-            ],
-            "line-opacity": [
-              "case",
-              ["boolean", ["feature-state", "hover"], false],
-              1,
-              ["interpolate", ["linear"], ["zoom"], 2, 0.45, 7, 0.85],
-            ],
+            // into a solid mass. Hovered routes thicken to a constant width.
+            "line-width": hoverZoom(4, [
+              [2, 1],
+              [6, 1.6],
+              [10, 2.4],
+            ]),
+            "line-opacity": hoverZoom(1, [
+              [2, 0.45],
+              [7, 0.85],
+            ]),
           },
         });
         map.addLayer({
@@ -536,18 +550,15 @@ export default function MapPage() {
           layout: { "line-cap": "butt", "line-join": "round" },
           paint: {
             "line-color": groundColor,
-            "line-width": [
-              "case",
-              ["boolean", ["feature-state", "hover"], false],
-              4,
-              ["interpolate", ["linear"], ["zoom"], 2, 1, 6, 1.5, 10, 2.2],
-            ],
-            "line-opacity": [
-              "case",
-              ["boolean", ["feature-state", "hover"], false],
-              1,
-              ["interpolate", ["linear"], ["zoom"], 2, 0.5, 7, 0.9],
-            ],
+            "line-width": hoverZoom(4, [
+              [2, 1],
+              [6, 1.5],
+              [10, 2.2],
+            ]),
+            "line-opacity": hoverZoom(1, [
+              [2, 0.5],
+              [7, 0.9],
+            ]),
             "line-dasharray": [2, 2],
           },
         });
