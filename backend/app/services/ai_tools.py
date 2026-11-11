@@ -13,7 +13,7 @@ import re
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from enum import StrEnum
 
 from sqlalchemy.orm import Session
@@ -272,6 +272,304 @@ async def _get_trip(db: Session, user_id: uuid.UUID, args: dict) -> dict:
             for attachment in attachments
         ],
     }
+
+
+# -- journal context (spec #88) ----------------------------------------------
+
+# Bounded so a large history cannot blow the model's context window (spec #35).
+# The response reports exact totals next to the sliced lists, so the model can
+# say what it left out instead of pretending the list is complete.
+_JOURNAL_LIMITS = {
+    "records": 50,
+    "hotels": 20,
+    "activities": 30,
+    "places": 30,
+    "notes": 20,
+    "expenses": 50,
+}
+_JOURNAL_NOTE_CHARS = 600
+_JOURNAL_PAGE_SIZE = 100
+
+
+def _journal_list_all(fetch) -> list:
+    """Page through a ``(items, total)`` lister without trusting its page cap."""
+    items: list = []
+    page = 1
+    while page <= 200:
+        batch, total = fetch(page=page, page_size=_JOURNAL_PAGE_SIZE)
+        items.extend(batch)
+        if not batch or len(items) >= total:
+            break
+        page += 1
+    return items
+
+
+def _journal_departure_day(record) -> date | None:
+    """Departure date in the departure timezone (#28/#87 attribution)."""
+    if record.departure_time is None:
+        return None
+    return in_timezone(record.departure_time, record.departure_timezone).date()
+
+
+def _journal_record_city_keys(record) -> set[str]:
+    """City identities an origin/destination resolves to (same as statistics)."""
+    keys: set[str] = set()
+    for place_name in (record.origin, record.destination):
+        if not place_name:
+            continue
+        airport = reference.get_airport_by_iata(place_name)
+        keys.add(
+            reference.airport_city_key(airport) if airport else reference.place_city_key(place_name)
+        )
+    return keys
+
+
+def _journal_place_matches_city(place, city: str, city_key: str) -> bool:
+    label = (place.city or "").strip()
+    if not label:
+        return False
+    return label.casefold() == city.casefold() or reference.place_city_key(label) == city_key
+
+
+def _journal_bundle(
+    *,
+    scope: dict,
+    trip: dict | None,
+    records: list,
+    hotels: list,
+    activities: list,
+    places: list,
+    notes: list,
+    expenses: list,
+    report_currency: str,
+) -> dict:
+    """Serialize one journal context pack. Lists are sliced; totals are exact."""
+    from app.services.expense import summarize_expenses
+
+    records = sorted(
+        records, key=lambda r: (_journal_departure_day(r) is None, _journal_departure_day(r))
+    )
+    hotels = sorted(hotels, key=lambda h: h.check_in)
+    activities = sorted(activities, key=lambda a: (a.start_at is None, a.start_at))
+    dated_expenses = [e for e in expenses if e.occurred_at is not None]
+    expenses = sorted(dated_expenses, key=lambda e: e.occurred_at, reverse=True) + [
+        e for e in expenses if e.occurred_at is None
+    ]
+    notes = sorted(notes, key=lambda n: n.updated_at or n.created_at, reverse=True)
+
+    limits = _JOURNAL_LIMITS
+    note_items = [_compact_note(note) for note in notes[: limits["notes"]]]
+    for item in note_items:
+        content = item.get("content") or ""
+        if len(content) > _JOURNAL_NOTE_CHARS:
+            item["content"] = content[:_JOURNAL_NOTE_CHARS] + "…"
+
+    return {
+        "scope": scope,
+        "trip": trip,
+        "totals": {
+            "records": len(records),
+            "hotels": len(hotels),
+            "activities": len(activities),
+            "places": len(places),
+            "notes": len(notes),
+            "expenses": len(expenses),
+        },
+        "records": [_compact_record(r) for r in records[: limits["records"]]],
+        "hotels": [_compact_hotel(h) for h in hotels[: limits["hotels"]]],
+        "activities": [_compact_activity(a) for a in activities[: limits["activities"]]],
+        "places": [_compact_place(p) for p in places[: limits["places"]]],
+        "notes": note_items,
+        "expenses": [_compact_expense(e) for e in expenses[: limits["expenses"]]],
+        "expense_summary": _compact_expense_summary(summarize_expenses(expenses, report_currency)),
+        "truncated": {
+            "records": len(records) > limits["records"],
+            "hotels": len(hotels) > limits["hotels"],
+            "activities": len(activities) > limits["activities"],
+            "places": len(places) > limits["places"],
+            "notes": len(notes) > limits["notes"],
+            "expenses": len(expenses) > limits["expenses"],
+        },
+        "hint": (
+            "Facts only: write the journal from these fields. Empty lists mean "
+            "nothing was recorded — say so instead of inventing details."
+        ),
+    }
+
+
+async def _generate_trip_summary(db: Session, user_id: uuid.UUID, args: dict) -> dict:
+    """Gather a bounded, sanitized context pack for the AI travel journal (#88).
+
+    Scope is exactly one of ``trip_id`` (one journey), ``year`` (annual
+    report) or ``city`` (city story). Year attribution matches the statistics
+    and Wrapped pages: transport by departure date in the departure timezone,
+    hotels by check-in, activities by local start, expenses by UTC instant.
+    The article itself is written by the chat model from these facts.
+    """
+    from app.models.user import User
+    from app.repositories.transport import TransportRepository
+    from app.services.activity import ActivityService
+    from app.services.expense import ExpenseService
+    from app.services.hotel import HotelService
+    from app.services.note import NoteService
+    from app.services.place import PlaceService
+    from app.services.trip import TripNotFoundError, TripService
+
+    trip_id = args.get("trip_id") or args.get("id")
+    raw_year = args.get("year")
+    city = str(args.get("city") or "").strip()
+    if sum(1 for value in (trip_id, raw_year, city) if value) != 1:
+        return {"error": "provide exactly one of trip_id, year or city"}
+
+    user = db.get(User, user_id)
+    report_currency = (user.currency if user else None) or "CNY"
+    all_records = TransportRepository(db).list_all(user_id=user_id)
+
+    if trip_id:
+        try:
+            parsed_id = uuid.UUID(str(trip_id))
+        except (ValueError, TypeError):
+            return {"error": "invalid trip id"}
+        trip_service = TripService(db)
+        try:
+            trip = trip_service.get_trip(user_id=user_id, trip_id=parsed_id)
+        except TripNotFoundError:
+            return {"error": "trip not found"}
+        hotels = _journal_list_all(
+            lambda **kwargs: HotelService(db).list_hotels(
+                user_id=user_id, trip_id=parsed_id, **kwargs
+            )
+        )
+        activities = _journal_list_all(
+            lambda **kwargs: ActivityService(db).list_activities(
+                user_id=user_id, trip_id=parsed_id, **kwargs
+            )
+        )
+        notes = _journal_list_all(
+            lambda **kwargs: NoteService(db).list_notes(
+                user_id=user_id, trip_id=parsed_id, **kwargs
+            )
+        )
+        # Activities only carry place_id; resolve the referenced places so the
+        # narrative can name them.
+        activity_place_ids = {a.place_id for a in activities if a.place_id}
+        places = [
+            p
+            for p in _journal_list_all(
+                lambda **kwargs: PlaceService(db).list_places(user_id=user_id, **kwargs)
+            )
+            if p.id in activity_place_ids
+        ]
+        return _journal_bundle(
+            scope={"type": "trip", "trip_id": str(parsed_id)},
+            trip=_compact_trip(trip),
+            records=[r for r in all_records if r.trip_id == parsed_id],
+            hotels=hotels,
+            activities=activities,
+            places=places,
+            notes=notes,
+            expenses=trip_service.list_expenses(user_id=user_id, trip_id=parsed_id),
+            report_currency=report_currency,
+        )
+
+    if raw_year is not None:
+        try:
+            year = int(raw_year)
+        except (TypeError, ValueError):
+            return {"error": "year must be an integer"}
+        if year < 1900 or year > 2200:
+            return {"error": "year out of range"}
+        hotels = [
+            h
+            for h in _journal_list_all(
+                lambda **kwargs: HotelService(db).list_hotels(user_id=user_id, **kwargs)
+            )
+            if h.check_in.year == year
+        ]
+        activities = [
+            a
+            for a in _journal_list_all(
+                lambda **kwargs: ActivityService(db).list_activities(user_id=user_id, **kwargs)
+            )
+            if a.start_at is not None and in_timezone(a.start_at, a.timezone).date().year == year
+        ]
+        expenses = [
+            e
+            for e in _journal_list_all(
+                lambda **kwargs: ExpenseService(db).list_expenses(user_id=user_id, **kwargs)
+            )
+            if e.occurred_at is not None and in_timezone(e.occurred_at, "UTC").date().year == year
+        ]
+        # Notes have no date of their own; attach them through trips that
+        # overlap the year so the annual story can quote the user's own words.
+        trips = _journal_list_all(
+            lambda **kwargs: TripService(db).list_trips(user_id=user_id, **kwargs)
+        )
+        year_trip_ids = {
+            t.id
+            for t in trips
+            if (t.start_date or t.end_date) and (t.start_date or t.end_date).year == year
+        }
+        notes = [
+            n
+            for n in _journal_list_all(
+                lambda **kwargs: NoteService(db).list_notes(user_id=user_id, **kwargs)
+            )
+            if n.trip_id in year_trip_ids
+        ]
+        activity_place_ids = {a.place_id for a in activities if a.place_id}
+        places = [
+            p
+            for p in _journal_list_all(
+                lambda **kwargs: PlaceService(db).list_places(user_id=user_id, **kwargs)
+            )
+            if p.id in activity_place_ids
+        ]
+        return _journal_bundle(
+            scope={"type": "year", "year": year},
+            trip=None,
+            records=[
+                r
+                for r in all_records
+                if (day := _journal_departure_day(r)) is not None and day.year == year
+            ],
+            hotels=hotels,
+            activities=activities,
+            places=places,
+            notes=notes,
+            expenses=expenses,
+            report_currency=report_currency,
+        )
+
+    city_key = reference.place_city_key(city)
+    places = [
+        p
+        for p in _journal_list_all(
+            lambda **kwargs: PlaceService(db).list_places(user_id=user_id, **kwargs)
+        )
+        if _journal_place_matches_city(p, city, city_key)
+    ]
+    place_ids = {p.id for p in places}
+    activities = [
+        a
+        for a in _journal_list_all(
+            lambda **kwargs: ActivityService(db).list_activities(user_id=user_id, **kwargs)
+        )
+        if a.place_id in place_ids
+    ]
+    # Hotels and expenses store no city identity, so they stay out of city
+    # scope rather than being guessed from free-text addresses.
+    return _journal_bundle(
+        scope={"type": "city", "city": city},
+        trip=None,
+        records=[r for r in all_records if city_key in _journal_record_city_keys(r)],
+        hotels=[],
+        activities=activities,
+        places=places,
+        notes=[],
+        expenses=[],
+        report_currency=report_currency,
+    )
 
 
 def _flight_source_summary(data) -> dict | None:
@@ -1295,6 +1593,35 @@ TOOLS: dict[str, ToolDef] = {
         },
         permission=ToolPermission.READ,
         read=_get_trip,
+    ),
+    "generate_trip_summary": ToolDef(
+        name="generate_trip_summary",
+        description=(
+            "Gather the user's own facts for an AI-written travel journal: "
+            "transport records, hotel stays, activities, saved places, notes and "
+            "expenses, scoped to exactly one of: one trip (trip_id), one year "
+            "(year) or one city (city). Call it before writing travel memories, "
+            "trip summaries, timelines, city stories or annual travel reports. "
+            "The tool returns facts only — write the article yourself from them, "
+            "and say honestly when a list is empty or truncated. Hotels and "
+            "expenses carry no city identity, so city scope omits them."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "trip_id": {
+                    "type": "string",
+                    "description": "Trip UUID for a single journey (resolve with list_trips)",
+                },
+                "year": {"type": "integer", "minimum": 1900, "maximum": 2200},
+                "city": {
+                    "type": "string",
+                    "description": "City name in Chinese or English (e.g. 东京 / Tokyo)",
+                },
+            },
+        },
+        permission=ToolPermission.READ,
+        read=_generate_trip_summary,
     ),
     "lookup_flight": ToolDef(
         name="lookup_flight",

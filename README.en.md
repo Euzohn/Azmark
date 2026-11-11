@@ -67,7 +67,7 @@ See [`AGENTS.md`](./AGENTS.md) for repository conventions, [`docs/backup.md`](./
 | Agent access | Personal access tokens (read / write scopes, revocable, rate-limited per token); scripts and AI agents can call the REST API directly |
 | MCP | MCP server (Streamable HTTP): read-only tools plus write proposals for `write`-scope tokens; Claude / Cursor connect to `/api/v1/mcp` with an access token |
 | Pending actions | Writes submitted by agents via MCP never apply immediately — a user must approve them on the web "Pending" page; the confirm endpoint rejects tokens, so an agent can never approve its own proposal |
-| AI assistant | Chat, natural-language entry / search, tool calling, screenshot extraction (flights / trains / hotel confirmations), pending writes; per-user model settings |
+| AI assistant | Chat, natural-language entry / search, tool calling, screenshot extraction (flights / trains / hotel confirmations), pending writes, AI travel journal (memories / summaries / timelines / city stories / annual reports); per-user model settings |
 | i18n | zh-CN / en-US, light / dark / system theme, mobile bottom navigation |
 
 ## Why it's different
@@ -260,7 +260,7 @@ docker compose exec api python -c "from app.core.db import SessionLocal; from ap
 
 - **MVP (done)** — accounts; flight / train / other transport records; trips; attachments; map / timeline / dashboard / statistics; audit log; AI chat with natural-language entry (including the confirmation flow); CSV / JSON import / export; zh-CN / en-US and mobile adaptation; personal access tokens.
 - **P1 (done)** — hotels / stays, places, activities, expenses, notes. Photos / OCR / boarding-pass parsing are not built as separate modules: image extraction is handled by the web AI assistant (images are not persisted; upload them as attachments when they need to be kept).
-- **P2** — Travel Wrapped (Year in Review, done); remaining: email import, automation rules, AI travel journal, advanced OCR, AI photo organization.
+- **P2** — Travel Wrapped (Year in Review) and AI travel journal (done); remaining: email import, automation rules, advanced OCR, AI photo organization.
 - **P3** — trip collaboration, family accounts, multi-user shared trips, public trip pages, native mobile apps, plugin ecosystem.
 
 ## Contributing

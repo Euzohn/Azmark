@@ -68,6 +68,7 @@ const QUICK_PROMPT_KEYS = [
   "ai.quick.add",
   "ai.quick.trip",
   "ai.quick.timeline",
+  "ai.quick.journal",
 ] as const;
 
 /** A rendered turn. Images and streaming state are tracked separately (not persisted). */
@@ -315,7 +316,21 @@ export default function AiChatPage() {
   const queryClient = useQueryClient();
 
   const [store, setStore] = useState<ConversationStore>(() => loadStore());
-  const [input, setInput] = useState("");
+  // A trip page can deep-link here with a prefilled request, e.g.
+  // /ai?q=<journal prompt>. Guarded like the wrapped page: the shell renders
+  // after auth hydration, so this never runs on the server.
+  const [input, setInput] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return new URLSearchParams(window.location.search).get("q") ?? "";
+  });
+  // Consume the one-shot deep-link prompt so a refresh does not refill input.
+  useEffect(() => {
+    if (window.location.search.includes("q=")) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("q");
+      window.history.replaceState(null, "", url.toString());
+    }
+  }, []);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
   const [streamingId, setStreamingId] = useState<string | null>(null);

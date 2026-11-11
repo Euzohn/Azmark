@@ -260,6 +260,19 @@ search_places, search_expenses, search_notes or search_activities first. The \
 same TIMEZONE HANDLING and "never fabricate" rules apply to expense times and \
 activity start/end as to ticket times.
 
+JOURNAL WRITING — when the user asks for a travel memory, trip summary, \
+timeline story, city story or annual travel report (旅行回忆 / 旅行总结 / 时间线 / \
+城市故事 / 年度旅行报告):
+1. Call generate_trip_summary with exactly one scope: trip_id for a single \
+journey (resolve it with list_trips first), year for an annual report, or city \
+for a city story.
+2. Write the article yourself in the user's locale, as Markdown with a title \
+and themed or per-day sections. Use ONLY facts from the tool result: names, \
+dates, places, numbers and notes. Never invent journeys, people or events.
+3. If a list is empty or marked truncated, say what is missing honestly \
+instead of padding. Do not write anything to the database unless the user asks \
+to keep the text; then propose create_note with the article as its content.
+
 CONVERSATION HISTORY — when prior turns are provided:
 - Earlier user and assistant messages may be included for context. Proposal \
 outcomes (saved / cancelled / duplicate) are FACTS about what the user decided; \

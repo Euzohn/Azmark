@@ -15,6 +15,7 @@ import {
   Plane,
   Plus,
   RefreshCw,
+  Sparkles,
   Trash2,
   TrainFront,
 } from "lucide-react";
@@ -27,7 +28,7 @@ import { AirportName } from "@/components/airport-name";
 import { FlightStatusBadge, TripStatusBadge } from "@/components/status-badge";
 import { TripExtras } from "@/components/trip-extras";
 import { TripForm } from "@/components/trip-form";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -210,18 +211,29 @@ export default function TripDetailPage() {
             <p className="mt-2 max-w-xl text-sm text-muted-foreground">{data.description}</p>
           ) : null}
         </div>
-        <Button
-          variant="danger"
-          size="sm"
-          onClick={() => {
-            if (window.confirm(t("trips.deleteConfirm"))) {
-              remove.mutate();
-            }
-          }}
-        >
-          <Trash2 className="h-4 w-4" />
-          {t("common.delete")}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href={`/ai?q=${encodeURIComponent(
+              t("trips.aiJournalPrompt", { name: data.name }),
+            )}`}
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            <Sparkles className="h-4 w-4" />
+            {t("trips.aiJournal")}
+          </Link>
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={() => {
+              if (window.confirm(t("trips.deleteConfirm"))) {
+                remove.mutate();
+              }
+            }}
+          >
+            <Trash2 className="h-4 w-4" />
+            {t("common.delete")}
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
