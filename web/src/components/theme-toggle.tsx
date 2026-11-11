@@ -8,7 +8,7 @@ import { useI18n } from "@/lib/i18n";
 
 const ORDER: Theme[] = ["light", "dark", "system"];
 
-export function ThemeToggle() {
+export function ThemeToggle({ className }: { className?: string }) {
   const { theme, setTheme } = useTheme();
   const { t } = useI18n();
 
@@ -23,6 +23,7 @@ export function ThemeToggle() {
       title={label}
       aria-label={label}
       onClick={() => setTheme(next)}
+      className={className}
     >
       <Icon className="h-4 w-4" />
     </Button>

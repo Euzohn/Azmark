@@ -1,11 +1,13 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import {
   Backpack,
   BarChart3,
   BedDouble,
   Bot,
   CalendarDays,
+  ChevronRight,
   ClipboardCheck,
   Home,
   List as ListIcon,
@@ -42,20 +44,42 @@ interface NavItem {
   adminOnly?: boolean;
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard", key: "nav.dashboard", icon: Home },
-  { href: "/trips", key: "nav.trips", icon: Backpack },
-  { href: "/records", key: "nav.records", icon: ListIcon },
-  { href: "/hotels", key: "nav.hotels", icon: BedDouble },
-  { href: "/places", key: "nav.places", icon: MapPin },
-  { href: "/activities", key: "nav.activities", icon: CalendarDays },
-  { href: "/expenses", key: "nav.expenses", icon: Receipt },
-  { href: "/notes", key: "nav.notes", icon: StickyNote },
-  { href: "/ai", key: "nav.ai", icon: Bot },
-  { href: "/pending", key: "nav.pending", icon: ClipboardCheck },
-  { href: "/map", key: "nav.map", icon: MapIcon },
-  { href: "/statistics", key: "nav.stats", icon: BarChart3 },
-  { href: "/account", key: "nav.account", icon: User },
+interface NavGroup {
+  key: TranslationKey;
+  items: NavItem[];
+}
+
+// Grouped by intent instead of one flat 13-item list: see the travels,
+// manage the archive, work with the assistant. Account lives in the footer
+// user card, which is where people expect identity-related settings.
+const NAV_GROUPS: NavGroup[] = [
+  {
+    key: "nav.group.overview",
+    items: [
+      { href: "/dashboard", key: "nav.dashboard", icon: Home },
+      { href: "/map", key: "nav.map", icon: MapIcon },
+      { href: "/statistics", key: "nav.stats", icon: BarChart3 },
+    ],
+  },
+  {
+    key: "nav.group.archive",
+    items: [
+      { href: "/trips", key: "nav.trips", icon: Backpack },
+      { href: "/records", key: "nav.records", icon: ListIcon },
+      { href: "/hotels", key: "nav.hotels", icon: BedDouble },
+      { href: "/places", key: "nav.places", icon: MapPin },
+      { href: "/activities", key: "nav.activities", icon: CalendarDays },
+      { href: "/expenses", key: "nav.expenses", icon: Receipt },
+      { href: "/notes", key: "nav.notes", icon: StickyNote },
+    ],
+  },
+  {
+    key: "nav.group.assistant",
+    items: [
+      { href: "/ai", key: "nav.ai", icon: Bot },
+      { href: "/pending", key: "nav.pending", icon: ClipboardCheck },
+    ],
+  },
 ];
 
 function isNavActive(href: string, pathname: string): boolean {
@@ -112,6 +136,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return window.localStorage.getItem(SIDEBAR_COLLAPSE_KEY) === "1";
   });
 
+  // Live badge for the approval queue. Shares the "pending-actions" key
+  // prefix so confirm/reject on the Pending page refreshes it immediately;
+  // the interval picks up proposals submitted by agents in the meantime.
+  // page_size=1 keeps the payload tiny — only pending_total is used. The key
+  // is user-scoped so switching accounts never flashes the previous user's
+  // count from cache.
+  const { data: pendingData } = useQuery({
+    queryKey: ["pending-actions", "sidebar-badge", user?.id ?? null],
+    queryFn: () => api.listPendingActions({ status: "pending", page_size: 1 }),
+    enabled: !!token && !!user,
+    refetchInterval: 60_000,
+  });
+  const pendingCount = pendingData?.pending_total ?? 0;
+
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
       const next = !prev;
@@ -161,22 +199,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const identity = user?.display_name ?? user?.username ?? "";
   const isAdmin = user?.role === "ADMIN";
-  const navItems = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin);
+  const navGroups = NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => !item.adminOnly || isAdmin),
+  })).filter((group) => group.items.length > 0);
   const mobileMoreItems = MOBILE_MORE.filter((item) => !item.adminOnly || isAdmin);
   const moreActive = MOBILE_MORE.some((item) => isNavActive(item.href, pathname));
+  const accountActive = isNavActive("/account", pathname);
+  const pendingBadgeLabel =
+    pendingCount > 0 ? t("nav.pendingCount", { count: pendingCount }) : undefined;
 
   return (
     <div className="flex min-h-dvh w-full flex-col md:flex-row">
       <aside
         className={cn(
-          "hidden bg-card transition-[width] duration-200 ease-in-out md:sticky md:top-0 md:flex md:h-dvh md:shrink-0 md:flex-col md:gap-1 md:overflow-y-auto md:border-r md:border-border md:py-7",
-          collapsed ? "md:w-[4.5rem] md:px-2" : "md:w-56 md:px-4 lg:w-60",
+          "hidden bg-card transition-[width] duration-200 ease-in-out md:sticky md:top-0 md:flex md:h-dvh md:shrink-0 md:flex-col md:overflow-hidden md:border-r md:border-border",
+          collapsed ? "md:w-[4.5rem] md:px-2" : "md:w-56 md:px-3 lg:w-60",
         )}
       >
+        {/* Brand — fixed while the nav scrolls */}
         <div
           className={cn(
-            "flex items-center gap-3 px-2",
-            collapsed ? "mb-4 flex-col" : "mb-8",
+            "shrink-0",
+            collapsed
+              ? "flex flex-col items-center gap-1.5 px-2 pb-3 pt-6"
+              : "flex items-center gap-3 px-2 pb-4 pt-6",
           )}
         >
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-foreground text-background">
@@ -195,7 +242,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 onClick={toggleCollapsed}
                 title={t("nav.collapse")}
                 aria-label={t("nav.collapse")}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground/50 transition-colors hover:bg-muted hover:text-foreground"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground"
               >
                 <PanelLeftClose className="h-3.5 w-3.5" />
               </button>
@@ -206,72 +253,127 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               onClick={toggleCollapsed}
               title={t("nav.expand")}
               aria-label={t("nav.expand")}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground/50 transition-colors hover:bg-muted hover:text-foreground"
+              className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground"
             >
               <PanelLeftOpen className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
-        <nav className="flex flex-col gap-1">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.href}
-              item={item}
-              active={isNavActive(item.href, pathname)}
-              label={t(item.key)}
-              collapsed={collapsed}
-            />
+
+        {/* Navigation — the only scrolling zone, with a palette-tinted scrollbar */}
+        <nav className="nav-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-3">
+          {navGroups.map((group, index) => (
+            <section key={group.key} aria-label={t(group.key)}>
+              {collapsed ? (
+                index > 0 ? (
+                  <div aria-hidden className="mx-2 my-2 border-t border-border/60" />
+                ) : null
+              ) : (
+                <h2
+                  className={cn(
+                    "px-3 pb-1 text-[11px] font-medium tracking-wide text-muted-foreground/70",
+                    index === 0 ? "pt-1" : "pt-4",
+                  )}
+                >
+                  {t(group.key)}
+                </h2>
+              )}
+              <div className="flex flex-col gap-0.5">
+                {group.items.map((item) => (
+                  <NavLink
+                    key={item.href}
+                    item={item}
+                    active={isNavActive(item.href, pathname)}
+                    label={t(item.key)}
+                    collapsed={collapsed}
+                    badge={item.href === "/pending" ? pendingCount : 0}
+                    badgeLabel={item.href === "/pending" ? pendingBadgeLabel : undefined}
+                  />
+                ))}
+              </div>
+            </section>
           ))}
         </nav>
-        <div className="mt-auto pt-6">
-          <a
-            href="https://github.com/Euzohn/Azmark"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mb-3 flex items-center justify-center gap-1.5 text-xs text-muted-foreground/70 transition-colors hover:text-foreground"
+
+        {/* Identity + utilities — fixed at the bottom */}
+        <div
+          className={cn(
+            "shrink-0 border-t border-border/70 pb-4 pt-3",
+            collapsed ? "px-0" : "px-3",
+          )}
+        >
+          <Link
+            href="/account"
+            aria-current={accountActive ? "page" : undefined}
+            title={collapsed ? t("nav.account") : undefined}
+            className={cn(
+              "group flex items-center gap-3 rounded-xl transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              collapsed ? "justify-center p-1.5" : "px-2 py-2",
+              accountActive ? "bg-accent text-accent-foreground" : "hover:bg-muted/70",
+            )}
           >
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-3 w-3">
-              <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.431 9.8 8.207 11.387.6.111.82-.258.82-.576 0-.285-.011-1.04-.017-2.041-3.334.724-4.041-1.61-4.041-1.61-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.084-.731.084-.731 1.205.085 1.84 1.236 1.84 1.236 1.07 1.834 2.807 1.305 3.492.997.108-.775.418-1.305.762-1.604-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .317.219.69.825.57C20.568 21.795 24 17.3 24 12c0-6.627-5.373-12-12-12" />
-            </svg>
-            {!collapsed ? t("app.github") : null}
-          </a>
-          <div className="border-t border-border pt-4">
-            <div
+            <span
               className={cn(
-                "flex items-center gap-3",
-                collapsed ? "justify-center" : undefined,
+                "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-semibold transition-colors",
+                accountActive ? "bg-primary/15 text-primary" : "bg-muted text-foreground",
               )}
             >
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-foreground">
-                {identity.slice(0, 2).toUpperCase() || "AZ"}
-              </div>
-              {!collapsed ? (
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium text-foreground">{identity}</div>
-                  <div className="truncate text-[11px] text-muted-foreground">@{user?.username}</div>
-                </div>
-              ) : null}
-            </div>
-            <div
+              {identity.slice(0, 2).toUpperCase() || "AZ"}
+            </span>
+            {!collapsed ? (
+              <>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium text-foreground">
+                    {identity}
+                  </span>
+                  <span className="block truncate text-[11px] text-muted-foreground">
+                    @{user?.username}
+                  </span>
+                </span>
+                <ChevronRight
+                  aria-hidden
+                  className="h-4 w-4 shrink-0 text-muted-foreground/50 transition-transform duration-150 group-hover:translate-x-0.5"
+                />
+              </>
+            ) : null}
+          </Link>
+          <div
+            className={cn(
+              "mt-2 items-center",
+              collapsed ? "grid grid-cols-2 justify-items-center" : "flex gap-0.5",
+            )}
+          >
+            <ThemeToggle className={collapsed ? "h-7 w-7" : "h-8 w-8"} />
+            <LanguageToggle compact={collapsed} className={collapsed ? "h-7 w-7" : "h-8"} />
+            <a
+              href="https://github.com/Euzohn/Azmark"
+              target="_blank"
+              rel="noopener noreferrer"
+              title={t("app.github")}
+              aria-label={t("app.github")}
               className={cn(
-                "mt-2.5 items-center gap-0.5 border-t border-border/60 pt-2",
-                collapsed ? "flex flex-col" : "flex",
+                "flex items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                collapsed ? "h-7 w-7" : "h-8 w-8",
               )}
             >
-              <ThemeToggle />
-              <LanguageToggle compact={collapsed} />
-              {!collapsed ? <div className="flex-1" /> : null}
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={logout}
-                title={t("auth.logout")}
-                aria-label={t("auth.logout")}
-                className="h-8 w-8 text-muted-foreground hover:text-danger"
-              >
-                <LogOut className="h-4 w-4" />
-              </Button>
-            </div>
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-3.5 w-3.5">
+                <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.431 9.8 8.207 11.387.6.111.82-.258.82-.576 0-.285-.011-1.04-.017-2.041-3.334.724-4.041-1.61-4.041-1.61-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.084-.731.084-.731 1.205.085 1.84 1.236 1.84 1.236 1.07 1.834 2.807 1.305 3.492.997.108-.775.418-1.305.762-1.604-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .317.219.69.825.57C20.568 21.795 24 17.3 24 12c0-6.627-5.373-12-12-12" />
+              </svg>
+            </a>
+            {!collapsed ? <div className="flex-1" /> : null}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={logout}
+              title={t("auth.logout")}
+              aria-label={t("auth.logout")}
+              className={cn(
+                "text-muted-foreground hover:text-danger",
+                collapsed ? "h-7 w-7" : "h-8 w-8",
+              )}
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
           </div>
         </div>
       </aside>
@@ -376,28 +478,60 @@ function NavLink({
   active,
   label,
   collapsed,
+  badge = 0,
+  badgeLabel,
 }: {
   item: NavItem;
   active: boolean;
   label: string;
   collapsed: boolean;
+  badge?: number;
+  badgeLabel?: string;
 }) {
   const Icon = item.icon;
+  const badgeText = badge > 99 ? "99+" : String(badge);
   return (
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
-      title={collapsed ? label : undefined}
+      title={collapsed ? (badgeLabel ? `${label} · ${badgeLabel}` : label) : undefined}
       className={cn(
-        "flex cursor-pointer items-center rounded-lg py-2.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "relative flex cursor-pointer items-center rounded-lg py-2 text-sm font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.98]",
         collapsed ? "justify-center" : "gap-3 px-3",
         active
           ? "bg-accent text-accent-foreground"
-          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+          : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
       )}
     >
-      <Icon className="h-4 w-4" strokeWidth={active ? 2.25 : 1.75} />
-      {!collapsed ? label : null}
+      {active ? (
+        <span
+          aria-hidden
+          className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-full bg-primary"
+        />
+      ) : null}
+      <Icon
+        className={cn("h-4 w-4 shrink-0", active && "text-primary")}
+        strokeWidth={active ? 2.25 : 1.75}
+      />
+      {!collapsed ? <span className="min-w-0 truncate">{label}</span> : null}
+      {badge > 0 ? (
+        collapsed ? (
+          <span
+            aria-hidden
+            className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-warning px-1 text-[9px] font-bold tabular-nums text-warning-foreground"
+          >
+            {badgeText}
+          </span>
+        ) : (
+          <span
+            aria-hidden
+            className="ml-auto flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-warning/15 px-1.5 text-[10px] font-semibold tabular-nums text-warning"
+          >
+            {badgeText}
+          </span>
+        )
+      ) : null}
+      {badge > 0 && badgeLabel ? <span className="sr-only">{badgeLabel}</span> : null}
     </Link>
   );
 }

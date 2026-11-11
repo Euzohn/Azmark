@@ -70,6 +70,10 @@ export const dictionaries = {
     "nav.moreTitle": "更多",
     "nav.collapse": "折叠侧边栏",
     "nav.expand": "展开侧边栏",
+    "nav.group.overview": "概览",
+    "nav.group.archive": "旅行档案",
+    "nav.group.assistant": "智能助手",
+    "nav.pendingCount": "{count} 个待确认操作",
 
     "auth.login": "登录",
     "auth.register": "注册",
@@ -1129,6 +1133,10 @@ export const dictionaries = {
     "nav.moreTitle": "More",
     "nav.collapse": "Collapse sidebar",
     "nav.expand": "Expand sidebar",
+    "nav.group.overview": "Overview",
+    "nav.group.archive": "Archive",
+    "nav.group.assistant": "Assistant",
+    "nav.pendingCount": "{count} pending actions",
 
     "auth.login": "Log in",
     "auth.register": "Sign up",
