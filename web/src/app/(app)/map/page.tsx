@@ -10,7 +10,6 @@ import type {
   GeoJSONSource,
   Map as MLMap,
   MapLayerMouseEvent,
-  Marker,
   Popup,
   StyleSpecification,
 } from "maplibre-gl";
@@ -25,9 +24,10 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat } from "@/components/ui/stat";
 import { api } from "@/lib/api";
-import { greatCircle, type LonLat } from "@/lib/geo";
+import { clusterByDistance, greatCircle, type LonLat } from "@/lib/geo";
 import { useI18n } from "@/lib/i18n";
 import type { MapRoute, PlaceType } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 // Basemap defaults to OpenFreeMap — a free, keyless, no-watermark vector map.
 // Override per build with:
@@ -46,13 +46,29 @@ const ATTRIBUTION =
 
 type LayerFilter = "all" | "flights" | "ground" | "places" | "hotels";
 
+// Colours mirror the map layers, so the filter row doubles as a legend.
 const LAYER_FILTERS = [
   { value: "all", key: "map.layers.all" },
-  { value: "flights", key: "map.layers.flights" },
-  { value: "ground", key: "map.layers.ground" },
-  { value: "places", key: "map.layers.places" },
-  { value: "hotels", key: "map.layers.hotels" },
-] as const satisfies { value: LayerFilter; key: string }[];
+  { value: "flights", key: "map.layers.flights", dot: "bg-[#b45309] dark:bg-[#e0a737]" },
+  { value: "ground", key: "map.layers.ground", dot: "bg-[#0f766e] dark:bg-[#61b8a8]" },
+  { value: "places", key: "map.layers.places", dot: "bg-[#2563eb] dark:bg-[#7aa2f7]" },
+  { value: "hotels", key: "map.layers.hotels", dot: "bg-[#c66b4e] dark:bg-[#d98a70]" },
+] as const satisfies { value: LayerFilter; key: string; dot?: string }[];
+
+// Stops closer than this collapse into one city-level label below DETAIL_ZOOM
+// (Beijing South / West / main station are ~10 km apart). Above it, individual
+// station names appear and MapLibre's collision detection hides the rest.
+const CLUSTER_RADIUS_KM = 45;
+const DETAIL_ZOOM = 7;
+
+interface StopPoint {
+  point: LonLat;
+  label: string;
+  // City identity used to label a low-zoom cluster. Airports expose both
+  // spellings; stations only carry the Chinese city.
+  cityKey: string | null;
+  degree: number;
+}
 
 function isDarkTheme(theme: string): boolean {
   if (theme === "dark") return true;
@@ -66,6 +82,10 @@ function isDarkTheme(theme: string): boolean {
 function rasterStyle(tiles: string): StyleSpecification {
   return {
     version: 8,
+    // Raster styles carry no glyphs of their own, but the stop labels are
+    // symbol layers. Point them at OpenFreeMap's font server (the same host
+    // as the default vector styles) so text renders under a raster basemap.
+    glyphs: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
     sources: {
       basemap: { type: "raster", tiles: [tiles], tileSize: 256, attribution: ATTRIBUTION },
     },
@@ -123,7 +143,8 @@ export default function MapPage() {
   const mapRef = useRef<MLMap | null>(null);
   const libRef = useRef<typeof import("maplibre-gl") | null>(null);
   const popupRef = useRef<Popup | null>(null);
-  const markersRef = useRef<Marker[]>([]);
+  // Feature-state highlight for the line under the cursor (desktop only).
+  const hoverRef = useRef<{ source: "flights" | "ground"; id: string } | null>(null);
   const interactionsBoundRef = useRef(false);
   const themeRef = useRef(theme);
   const tRef = useRef(t);
@@ -257,8 +278,7 @@ export default function MapPage() {
     return () => {
       cancelled = true;
       interactionsBoundRef.current = false;
-      markersRef.current.forEach((marker) => marker.remove());
-      markersRef.current = [];
+      hoverRef.current = null;
       popupRef.current?.remove();
       popupRef.current = null;
       mapRef.current?.remove();
@@ -286,6 +306,16 @@ export default function MapPage() {
       const showGround = active === "all" || active === "ground";
       const showPlaces = active === "all" || active === "places";
       const showHotels = active === "all" || active === "hotels";
+
+      // A redraw (layer toggle, style swap, locale change) invalidates any
+      // hover highlight — the feature it pointed at may be gone.
+      if (hoverRef.current && map.getSource(hoverRef.current.source)) {
+        map.setFeatureState(
+          { source: hoverRef.current.source, id: hoverRef.current.id },
+          { hover: false },
+        );
+      }
+      hoverRef.current = null;
 
       // Group routes by unordered endpoint pair to detect overlapping arcs.
       // Round-trips (A→B and B→A) and duplicate routes share the same great
@@ -345,22 +375,74 @@ export default function MapPage() {
           })
         : [];
 
-      const endpointMap = new Map<string, LonLat>();
-      for (const route of [...(showFlights ? flightRoutes : []), ...(showGround ? groundRoutes : [])]) {
-        const from = pointOf(route.origin.code, route.origin.lat, route.origin.lon);
-        const to = pointOf(route.destination.code, route.destination.lat, route.destination.lon);
-        if (from && route.origin.code) endpointMap.set(route.origin.code, from);
-        if (to && route.destination.code) endpointMap.set(route.destination.code, to);
+      // One stop per code, with the two label tiers the map needs: airports
+      // keep their IATA code at detail zoom, stations their entered name.
+      const stopMap = new Map<string, StopPoint>();
+      for (const route of [
+        ...(showFlights ? flightRoutes : []),
+        ...(showGround ? groundRoutes : []),
+      ]) {
+        const isAirport = route.type === "flight";
+        for (const end of [route.origin, route.destination]) {
+          const coords = pointOf(end.code, end.lat, end.lon);
+          if (!coords || !end.code) continue;
+          const existing = stopMap.get(end.code);
+          if (existing) {
+            existing.degree += 1;
+            continue;
+          }
+          stopMap.set(end.code, {
+            point: coords,
+            label: end.code,
+            cityKey: isAirport ? (end.city_zh ?? end.city) : end.city,
+            degree: 1,
+          });
+        }
       }
-      const pointFeatures = Array.from(endpointMap.entries()).map(([code, coords]) => ({
+      const stops = Array.from(stopMap.values());
+
+      // Airport city names come in both spellings; reuse them to localise the
+      // Chinese city keys that stations carry.
+      const cityZhToEn = new Map<string, string>();
+      for (const route of routes) {
+        if (route.type !== "flight") continue;
+        for (const end of [route.origin, route.destination]) {
+          if (end.city_zh && end.city) cityZhToEn.set(end.city_zh, end.city);
+        }
+      }
+      const localizedCity = (key: string) =>
+        locale === "zh-CN" ? key : (cityZhToEn.get(key) ?? key);
+
+      // Low-zoom tier: nearby stops collapse into one city label so station
+      // names never pile up at country/province zoom levels.
+      const clusters = clusterByDistance(stops, CLUSTER_RADIUS_KM);
+      const clusterFeatures = clusters.map((cluster) => {
+        const cityKeys = new Set(
+          cluster.members
+            .map((member) => member.cityKey)
+            .filter((key): key is string => key !== null),
+        );
+        const sharedCity = cityKeys.size === 1 ? [...cityKeys][0] : null;
+        const top = [...cluster.members].sort((a, b) => b.degree - a.degree)[0]!;
+        return {
+          type: "Feature" as const,
+          properties: {
+            label: sharedCity ? localizedCity(sharedCity) : top.label,
+            degree: cluster.members.reduce((sum, member) => sum + member.degree, 0),
+          },
+          geometry: { type: "Point" as const, coordinates: cluster.point },
+        };
+      });
+      const stopFeatures = stops.map((stop) => ({
         type: "Feature" as const,
-        properties: { code },
-        geometry: { type: "Point" as const, coordinates: coords },
+        properties: { label: stop.label, degree: stop.degree },
+        geometry: { type: "Point" as const, coordinates: stop.point },
       }));
 
       const flightData = { type: "FeatureCollection" as const, features: flightFeatures };
       const groundData = { type: "FeatureCollection" as const, features: groundFeatures };
-      const pointData = { type: "FeatureCollection" as const, features: pointFeatures };
+      const clusterData = { type: "FeatureCollection" as const, features: clusterFeatures };
+      const stopData = { type: "FeatureCollection" as const, features: stopFeatures };
 
       // Geocoded stays render as pins beside the route lines (spec #10). Their
       // popup data rides in the feature properties so the click handler never
@@ -402,10 +484,25 @@ export default function MapPage() {
       const placeColor = dark ? "#7aa2f7" : "#2563eb";
       const stroke = dark ? "#12161b" : "#f6f7f8";
 
+      const labelColor = dark ? "#e5e7eb" : "#1f2937";
+
       if (!map.getSource("flights")) {
-        map.addSource("flights", { type: "geojson", data: flightData, tolerance: 0 });
-        map.addSource("ground", { type: "geojson", data: groundData, tolerance: 0 });
-        map.addSource("stops", { type: "geojson", data: pointData });
+        // promoteId lets feature-state drive the hover highlight without a
+        // second source: the route id is the feature id.
+        map.addSource("flights", {
+          type: "geojson",
+          data: flightData,
+          tolerance: 0,
+          promoteId: "id",
+        });
+        map.addSource("ground", {
+          type: "geojson",
+          data: groundData,
+          tolerance: 0,
+          promoteId: "id",
+        });
+        map.addSource("stop-clusters", { type: "geojson", data: clusterData });
+        map.addSource("stops", { type: "geojson", data: stopData });
         map.addSource("hotels", { type: "geojson", data: hotelData });
         map.addSource("places", { type: "geojson", data: placeData });
         map.addLayer({
@@ -413,7 +510,24 @@ export default function MapPage() {
           type: "line",
           source: "flights",
           layout: { "line-cap": "round", "line-join": "round" },
-          paint: { "line-color": accent, "line-width": 2, "line-opacity": 0.8 },
+          paint: {
+            "line-color": accent,
+            // Thin and faint at world zoom, heavier once you are close enough
+            // to read individual routes — keeps dense bundles from turning
+            // into a solid mass.
+            "line-width": [
+              "case",
+              ["boolean", ["feature-state", "hover"], false],
+              4,
+              ["interpolate", ["linear"], ["zoom"], 2, 1, 6, 1.6, 10, 2.4],
+            ],
+            "line-opacity": [
+              "case",
+              ["boolean", ["feature-state", "hover"], false],
+              1,
+              ["interpolate", ["linear"], ["zoom"], 2, 0.45, 7, 0.85],
+            ],
+          },
         });
         map.addLayer({
           id: "ground-line",
@@ -422,17 +536,52 @@ export default function MapPage() {
           layout: { "line-cap": "butt", "line-join": "round" },
           paint: {
             "line-color": groundColor,
-            "line-width": 2,
-            "line-opacity": 0.85,
+            "line-width": [
+              "case",
+              ["boolean", ["feature-state", "hover"], false],
+              4,
+              ["interpolate", ["linear"], ["zoom"], 2, 1, 6, 1.5, 10, 2.2],
+            ],
+            "line-opacity": [
+              "case",
+              ["boolean", ["feature-state", "hover"], false],
+              1,
+              ["interpolate", ["linear"], ["zoom"], 2, 0.5, 7, 0.9],
+            ],
             "line-dasharray": [2, 2],
+          },
+        });
+        // Low zoom: one dot per city cluster, sized by how many routes pass
+        // through it, so hubs stand out from one-off stops.
+        map.addLayer({
+          id: "stop-clusters-point",
+          type: "circle",
+          source: "stop-clusters",
+          maxzoom: DETAIL_ZOOM,
+          paint: {
+            "circle-radius": [
+              "interpolate",
+              ["linear"],
+              ["get", "degree"],
+              1,
+              4,
+              6,
+              6.5,
+              20,
+              9,
+            ],
+            "circle-color": accent,
+            "circle-stroke-color": stroke,
+            "circle-stroke-width": 1.5,
           },
         });
         map.addLayer({
           id: "stops-point",
           type: "circle",
           source: "stops",
+          minzoom: DETAIL_ZOOM,
           paint: {
-            "circle-radius": 3.5,
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], DETAIL_ZOOM, 3, 12, 4.5],
             "circle-color": accent,
             "circle-stroke-color": stroke,
             "circle-stroke-width": 1.5,
@@ -458,6 +607,51 @@ export default function MapPage() {
             "circle-color": placeColor,
             "circle-stroke-color": stroke,
             "circle-stroke-width": 1.5,
+          },
+        });
+        // Symbol layers let MapLibre hide colliding labels for us instead of
+        // stacking opaque DOM markers; variable anchors try several sides of
+        // the dot before giving up. Busiest stops win the sort key.
+        map.addLayer({
+          id: "stop-clusters-label",
+          type: "symbol",
+          source: "stop-clusters",
+          maxzoom: DETAIL_ZOOM,
+          layout: {
+            "text-field": ["get", "label"],
+            "text-font": ["Noto Sans Regular"],
+            "text-size": ["interpolate", ["linear"], ["zoom"], 3, 10, DETAIL_ZOOM, 12],
+            "text-variable-anchor": ["top", "bottom", "left", "right"],
+            "text-radial-offset": 0.7,
+            "text-justify": "auto",
+            "text-padding": 2,
+            "symbol-sort-key": ["-", ["get", "degree"]],
+          },
+          paint: {
+            "text-color": labelColor,
+            "text-halo-color": stroke,
+            "text-halo-width": 1.4,
+          },
+        });
+        map.addLayer({
+          id: "stops-label",
+          type: "symbol",
+          source: "stops",
+          minzoom: DETAIL_ZOOM,
+          layout: {
+            "text-field": ["get", "label"],
+            "text-font": ["Noto Sans Regular"],
+            "text-size": 11,
+            "text-variable-anchor": ["top", "bottom", "left", "right"],
+            "text-radial-offset": 0.7,
+            "text-justify": "auto",
+            "text-padding": 3,
+            "symbol-sort-key": ["-", ["get", "degree"]],
+          },
+          paint: {
+            "text-color": labelColor,
+            "text-halo-color": stroke,
+            "text-halo-width": 1.4,
           },
         });
 
@@ -489,15 +683,36 @@ export default function MapPage() {
               .setDOMContent(node)
               .addTo(map);
           };
-          for (const lineLayer of ["flights-line", "ground-line"]) {
-            map.on("click", lineLayer, routePopup);
-            map.on("mouseenter", lineLayer, () => {
+          // Hover highlight: thicken and fully reveal the route under the
+          // cursor, so a single line can be picked out of an overlapping bundle.
+          const clearHover = () => {
+            const hovered = hoverRef.current;
+            if (!hovered) return;
+            map.setFeatureState({ source: hovered.source, id: hovered.id }, { hover: false });
+            hoverRef.current = null;
+          };
+          const bindHover = (
+            lineLayer: "flights-line" | "ground-line",
+            source: "flights" | "ground",
+          ) => {
+            map.on("mousemove", lineLayer, (event) => {
+              const id = event.features?.[0]?.id;
+              if (id === undefined || id === null) return;
+              const next = String(id);
+              if (hoverRef.current?.source === source && hoverRef.current.id === next) return;
+              clearHover();
+              hoverRef.current = { source, id: next };
+              map.setFeatureState({ source, id: next }, { hover: true });
               map.getCanvas().style.cursor = "pointer";
             });
             map.on("mouseleave", lineLayer, () => {
+              clearHover();
               map.getCanvas().style.cursor = "";
             });
-          }
+            map.on("click", lineLayer, routePopup);
+          };
+          bindHover("flights-line", "flights");
+          bindHover("ground-line", "ground");
 
           map.on("click", "hotels-point", (event) => {
             const feature = event.features?.[0];
@@ -577,23 +792,10 @@ export default function MapPage() {
       } else {
         (map.getSource("flights") as GeoJSONSource).setData(flightData);
         (map.getSource("ground") as GeoJSONSource).setData(groundData);
-        (map.getSource("stops") as GeoJSONSource).setData(pointData);
+        (map.getSource("stop-clusters") as GeoJSONSource).setData(clusterData);
+        (map.getSource("stops") as GeoJSONSource).setData(stopData);
         (map.getSource("hotels") as GeoJSONSource).setData(hotelData);
         (map.getSource("places") as GeoJSONSource).setData(placeData);
-      }
-
-      // station / airport code labels
-      markersRef.current.forEach((marker) => marker.remove());
-      markersRef.current = [];
-      for (const [code, coords] of endpointMap.entries()) {
-        const el = document.createElement("div");
-        el.className =
-          "ml-3 rounded-md border border-border bg-card/90 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-foreground shadow-sm";
-        el.textContent = code;
-        const marker = new maplibregl.Marker({ element: el, anchor: "left" })
-          .setLngLat(coords)
-          .addTo(map);
-        markersRef.current.push(marker);
       }
 
       // Fit view from the FULL dataset (not the layer-filtered view) so
@@ -644,7 +846,7 @@ export default function MapPage() {
     return () => {
       map.off("style.load", draw);
     };
-  }, [routes, flightRoutes, groundRoutes, hotels, places, ready, layer]);
+  }, [routes, flightRoutes, groundRoutes, hotels, places, ready, layer, locale]);
 
   const selectedRoute = routes.find((route) => route.id === selectedRouteId);
   const selectedHotel = hotels.find((hotel) => hotel.id === selectedHotelId);
@@ -704,7 +906,14 @@ export default function MapPage() {
                 size="sm"
                 variant={layer === item.value ? "default" : "outline"}
                 onClick={() => setLayer(item.value)}
+                className="gap-1.5"
               >
+                {"dot" in item ? (
+                  <span
+                    aria-hidden
+                    className={cn("h-2 w-2 shrink-0 rounded-full", item.dot)}
+                  />
+                ) : null}
                 {t(item.key)}
               </Button>
             ))}
@@ -758,6 +967,7 @@ export default function MapPage() {
           <p className="text-xs text-muted-foreground">
             {t("map.coverageHint")} {t("map.greatCircleNote")}
             {hasGround ? ` ${t("map.groundNote")}` : ""}
+            {routes.length > 0 ? ` ${t("map.zoomHint")}` : ""}
           </p>
           <BottomSheet
             open={selectedRoute !== undefined}

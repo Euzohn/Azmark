@@ -246,6 +246,39 @@ def test_station_point_uses_registry_when_present():
         reference._stations_by_name = monkey
 
 
+def test_station_point_registry_entry_gets_curated_city():
+    from app.services import reference
+
+    # stations.json has no city column, but the curated hub table fills it so
+    # the map can group nearby stations under one city label at low zoom.
+    registry = {"北京南": {"name": "北京南", "lat": 39.865, "lon": 116.378}}
+    monkey = reference._stations_by_name
+    reference._stations_by_name = lambda: registry
+    try:
+        point = reference.station_point("北京南")
+        assert point is not None
+        assert point["precise"] is True
+        assert point["city"] == "北京"
+    finally:
+        reference._stations_by_name = monkey
+
+
+def test_station_point_registry_entry_without_curated_city():
+    from app.services import reference
+
+    # An unknown station keeps city=None instead of guessing from its name.
+    registry = {"某某北": {"name": "某某北", "lat": 38.9, "lon": 117.4}}
+    monkey = reference._stations_by_name
+    reference._stations_by_name = lambda: registry
+    try:
+        point = reference.station_point("某某北")
+        assert point is not None
+        assert point["precise"] is True
+        assert point["city"] is None
+    finally:
+        reference._stations_by_name = monkey
+
+
 def test_station_point_falls_back_to_city_coordinates():
     from app.services import reference
 

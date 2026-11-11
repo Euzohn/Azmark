@@ -58,7 +58,7 @@ See [`AGENTS.md`](./AGENTS.md) for repository conventions, [`CHANGELOG.md`](./CH
 | Records | Unified records list (flight / train / other): search, type / status / trip / date filters, sorting and pagination |
 | Trips | A trip groups flights, trains, hotels and activities, and aggregates its expenses and notes; ordering within a trip |
 | Attachments | Upload / download / delete boarding passes and receipts per record (transport, hotel, activity; S3-compatible storage · MinIO) |
-| Map | Flight great-circle arcs + schematic train / other-transport lines + place & stay pins, switchable layers (MapLibre GL · OpenFreeMap; optional station registry, city-level fallback) |
+| Map | Flight great-circle arcs + schematic train / other-transport lines + place & stay pins, switchable layers; stop labels follow zoom (city clusters ↔ individual stations, collision-aware) (MapLibre GL · OpenFreeMap; optional station registry, city-level fallback) |
 | Timeline | Every transport record in chronological order |
 | Dashboard | Key metrics, upcoming departures, recent records across types |
 | Statistics | Flight / train breakdowns, year / month / day distributions, expense composition (no overlap with dashboard metrics) |

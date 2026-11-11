@@ -406,6 +406,19 @@ def _city_coords() -> dict[str, tuple[float, float]]:
     }
 
 
+def _station_city(label: str) -> str | None:
+    """Curated station→city lookup, tolerant of a trailing 「站」.
+
+    Returns ``None`` when the station is not in the curated tables; callers
+    then fall back to treating the label itself as a city.
+    """
+    for candidate in (label, label.removesuffix("站").strip()):
+        city = _STATION_CITIES.get(candidate)
+        if city:
+            return city
+    return _STATION_CITY_HINTS.get(label)
+
+
 def station_point(name: str) -> dict[str, Any] | None:
     """Resolve a station name to a map point for schematic train routes.
 
@@ -413,6 +426,10 @@ def station_point(name: str) -> dict[str, Any] | None:
     been run) -> curated station-to-city table -> the name itself as a city.
     City coordinates come from ``airports.json``. Returns ``None`` when nothing
     can be resolved, in which case the record is left off the map.
+
+    Precise registry entries carry no city field of their own, so the curated
+    table still fills ``city`` for known hubs — the map groups nearby stations
+    under one city label at low zoom levels.
     """
     label = (name or "").strip()
     if not label:
@@ -420,19 +437,16 @@ def station_point(name: str) -> dict[str, Any] | None:
     key = normalize_station_name(label)
     station = _stations_by_name().get(key)
     if station:
+        registry_name = station.get("name") or label
         return {
-            "name": station["name"],
-            "city": None,
+            "name": registry_name,
+            "city": _station_city(registry_name) or _station_city(label),
             "lat": float(station["lat"]),
             "lon": float(station["lon"]),
             "precise": True,
         }
 
-    city = _STATION_CITIES.get(label)
-    if city is None:
-        city = _STATION_CITIES.get(label.removesuffix("站").strip())
-    if city is None:
-        city = _STATION_CITY_HINTS.get(label)
+    city = _station_city(label)
     if city is None:
         city = label.removesuffix("站").strip()
 

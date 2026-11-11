@@ -14,6 +14,44 @@ export function haversineKm(a: LonLat, b: LonLat): number {
   return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
+export interface DistanceCluster<T> {
+  members: T[];
+  point: LonLat;
+}
+
+/**
+ * Greedily group points that lie within `radiusKm` of a cluster seed.
+ *
+ * Used by the map to collapse nearby stops (e.g. Beijing South / West / the
+ * main station) into one city-level label at low zoom levels. Seeding follows
+ * input order, so callers should pass a stable order; O(n²) is plenty for the
+ * few hundred endpoints a personal map holds.
+ */
+export function clusterByDistance<T extends { point: LonLat }>(
+  items: readonly T[],
+  radiusKm: number,
+): DistanceCluster<T>[] {
+  const remaining = [...items];
+  const clusters: DistanceCluster<T>[] = [];
+  while (remaining.length > 0) {
+    const seed = remaining.shift()!;
+    const members = [seed];
+    for (let i = remaining.length - 1; i >= 0; i -= 1) {
+      if (haversineKm(seed.point, remaining[i]!.point) <= radiusKm) {
+        members.push(...remaining.splice(i, 1));
+      }
+    }
+    let lon = 0;
+    let lat = 0;
+    for (const member of members) {
+      lon += member.point[0];
+      lat += member.point[1];
+    }
+    clusters.push({ members, point: [lon / members.length, lat / members.length] });
+  }
+  return clusters;
+}
+
 /**
  * Interpolate `steps + 1` points along the great circle between two
  * `[lon, lat]` points. Longitudes are "unwrapped" so successive points never
