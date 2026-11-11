@@ -36,6 +36,11 @@
   --warning-foreground: #fbf6ef;
 
   --ring: #b45309;
+
+  /* Transport-mode hues, shared with the map layers (flights / rail / other). */
+  --mode-flight: #b45309;
+  --mode-train: #0f766e;
+  --mode-other: #2563eb;
 }
 
 .dark {
@@ -68,6 +73,10 @@
   --warning-foreground: #2a1f0c;
 
   --ring: #e0a737;
+
+  --mode-flight: #e0a737;
+  --mode-train: #61b8a8;
+  --mode-other: #7aa2f7;
 }
 
 @theme inline {
@@ -141,6 +150,56 @@ body {
 /* Subtle ambient glow — evokes a night-sky / aurora feel */
 .bg-glow {
   background-image: none;
+}
+
+/*
+ * Wrapped report — chapters reveal as they scroll into view; inner blocks
+ * stagger through --stagger-delay. Bars and count-ups key off the same
+ * visibility so the whole chapter arrives as one choreographed beat.
+ */
+.reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 0.6s ease,
+    transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+.reveal .stagger {
+  opacity: 0;
+  transform: translateY(12px);
+  transition:
+    opacity 0.5s ease,
+    transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: var(--stagger-delay, 0ms);
+}
+.reveal.is-visible .stagger {
+  opacity: 1;
+  transform: none;
+}
+
+@keyframes dash-flow {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+.animate-dash-flow {
+  animation: dash-flow 1.6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  .reveal .stagger {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .animate-dash-flow {
+    animation: none;
+  }
 }
 
 @keyframes sheet-up {
