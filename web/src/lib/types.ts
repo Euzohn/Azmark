@@ -1038,6 +1038,16 @@ export interface MapRoutesRead {
   items: MapRoute[];
   total: number;
   hotels: MapHotel[];
+  places: MapPlace[];
+}
+
+export interface MapPlace {
+  id: string;
+  name: string;
+  type: PlaceType;
+  lat: number;
+  lon: number;
+  city: string | null;
 }
 
 export interface MapHotel {
@@ -1048,6 +1058,48 @@ export interface MapHotel {
   check_in: string;
   check_out: string | null;
   status: string;
+}
+
+export interface WrappedTotals {
+  countries: number;
+  cities: number;
+  distance_km: number;
+  trips: number;
+  flights: number;
+  trains: number;
+  transports: number;
+  hotels: number;
+  hotel_nights: number;
+  activities: number;
+  travel_days: number;
+}
+
+export interface WrappedRoute {
+  id: string;
+  type: string;
+  service_number: string | null;
+  carrier: string | null;
+  origin: MapPoint;
+  destination: MapPoint;
+  distance_km: number;
+  departure_date: string | null;
+}
+
+export interface WrappedRead {
+  year: number;
+  available_years: number[];
+  totals: WrappedTotals;
+  by_month: BreakdownItem[];
+  top_airlines: BreakdownItem[];
+  top_airports: BreakdownItem[];
+  top_stations: BreakdownItem[];
+  top_aircraft: BreakdownItem[];
+  most_visited_city: BreakdownItem | null;
+  favorite_trip: BreakdownItem | null;
+  longest_route: WrappedRoute | null;
+  first_journey: string | null;
+  last_journey: string | null;
+  spend: ExpenseSummary;
 }
 
 export interface AiProposal {

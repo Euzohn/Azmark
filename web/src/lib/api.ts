@@ -27,6 +27,7 @@ import type {
   ImportPreview,
   ImportResult,
   MapRoutesRead,
+  WrappedRead,
   OtherTransport,
   OtherTransportInput,
   OtherTransportList,
@@ -533,6 +534,10 @@ export const api = {
 
   getDashboard: () => request<DashboardRead>("/dashboard"),
   getStatistics: () => request<StatisticsRead>("/statistics"),
+  getWrapped: (year?: number) =>
+    request<WrappedRead>(
+      year ? `/statistics/wrapped?year=${encodeURIComponent(String(year))}` : "/statistics/wrapped",
+    ),
   getTimeline: () => request<TimelineRecord[]>("/timeline"),
   getMapRoutes: () => request<MapRoutesRead>("/map/routes"),
 

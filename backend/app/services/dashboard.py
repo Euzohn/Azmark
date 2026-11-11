@@ -8,13 +8,15 @@ from __future__ import annotations
 
 import uuid
 from collections import Counter
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.timezones import in_timezone
+from app.models.activity import Activity
 from app.models.hotel import Hotel
+from app.models.place import Place
 from app.models.transport_record import TransportRecord
 from app.models.trip import Trip
 from app.models.user import User
@@ -25,15 +27,21 @@ from app.schemas.dashboard import (
     DashboardRead,
     DashboardStats,
     MapHotel,
+    MapPlace,
     MapPoint,
     MapRoute,
     MapRoutesRead,
     StatisticsRead,
     StatisticsTotals,
 )
+from app.schemas.wrapped import WrappedRead, WrappedRoute, WrappedTotals
 from app.services import reference
 from app.services.expense import build_expense_statistics, summarize_expenses
 from app.utils.geo import haversine_km
+
+# Sentinel year for records without a departure time: they never match any real
+# year, so the annual report simply skips them (spec #87).
+_EPOCH = date(1, 1, 1)
 
 
 def _naive_utc(dt: datetime) -> datetime:
@@ -55,18 +63,30 @@ class DashboardService:
 
     @staticmethod
     def _distance_km(record: TransportRecord) -> float | None:
-        """Return the record's distance, falling back to haversine from coords."""
+        """Return the record's distance, falling back to haversine from coords.
+
+        Flights resolve their endpoints as IATA airports; trains and other
+        transport resolve as stations (spec #27). The haversine between
+        endpoints is only ever a fallback: a user-entered `distance` wins.
+        """
         if record.distance is not None:
             return float(record.distance)
-        origin = reference.get_airport_by_iata(record.origin or "")
-        dest = reference.get_airport_by_iata(record.destination or "")
-        if not origin or not dest:
+        if record.type == "flight":
+            origin = reference.get_airport_by_iata(record.origin or "")
+            dest = reference.get_airport_by_iata(record.destination or "")
+            coords = [(origin or {}).get("lat"), (origin or {}).get("lon")] + [
+                (dest or {}).get("lat"),
+                (dest or {}).get("lon"),
+            ]
+        else:
+            origin = reference.station_point(record.origin or "")
+            dest = reference.station_point(record.destination or "")
+            if not origin or not dest:
+                return None
+            coords = [origin["lat"], origin["lon"], dest["lat"], dest["lon"]]
+        if None in coords:
             return None
-        olat, olon = origin.get("lat"), origin.get("lon")
-        dlat, dlon = dest.get("lat"), dest.get("lon")
-        if None in (olat, olon, dlat, dlon):
-            return None
-        return round(haversine_km(olat, olon, dlat, dlon), 1)
+        return round(haversine_km(coords[0], coords[1], coords[2], coords[3]), 1)
 
     @staticmethod
     def _map_point(code: str | None) -> MapPoint:
@@ -82,6 +102,25 @@ class DashboardService:
             country=airport.get("country"),
             lat=airport.get("lat"),
             lon=airport.get("lon"),
+        )
+
+    @staticmethod
+    def _station_point(name: str | None) -> MapPoint | None:
+        """Resolve a station name for schematic train lines (spec #27).
+
+        Coordinates come from the optional stations registry or the city-level
+        fallback in `reference.station_point` (see `AGENTS.md`). A station that
+        cannot be resolved is not drawn, instead of being pinned at (0, 0).
+        """
+        resolved = reference.station_point(name or "")
+        if resolved is None:
+            return None
+        return MapPoint(
+            code=name,
+            name=name,
+            city=resolved.get("city"),
+            lat=resolved["lat"],
+            lon=resolved["lon"],
         )
 
     @staticmethod
@@ -311,9 +350,206 @@ class DashboardService:
             expense_stats=expense_stats,
         )
 
+    def wrapped(self, *, user_id: uuid.UUID, year: int | None = None) -> WrappedRead:
+        """The annual report card (spec #87).
+
+        A journey belongs to the year of its departure **in the departure
+        timezone** — a red-eye that lands after midnight still counts for the
+        night it started on. Hotels belong to the year of check-in, activities
+        to the year of their local start, and expenses to the year of their UTC
+        instant, matching the statistics conventions.
+        """
+        all_records = self.records.list_all(user_id=user_id)
+
+        # Departure day per record, in the departure timezone (see above).
+        departure_days: dict[uuid.UUID, date] = {}
+        for record in all_records:
+            if record.departure_time is not None:
+                departure_days[record.id] = in_timezone(
+                    record.departure_time, record.departure_timezone
+                ).date()
+
+        hotels = list(self.db.scalars(select(Hotel).where(Hotel.user_id == user_id)))
+        activities = list(self.db.scalars(select(Activity).where(Activity.user_id == user_id)))
+        expenses = self.expenses.list_for_user(user_id=user_id)
+
+        years: set[int] = {day.year for day in departure_days.values()}
+        years.update(hotel.check_in.year for hotel in hotels)
+        for activity in activities:
+            if activity.start_at is not None:
+                years.add(in_timezone(activity.start_at, activity.timezone).date().year)
+        for expense in expenses:
+            if expense.occurred_at is not None:
+                years.add(in_timezone(expense.occurred_at, "UTC").date().year)
+
+        target = year if year is not None else (max(years) if years else datetime.now(UTC).year)
+        year_records = [r for r in all_records if departure_days.get(r.id, _EPOCH).year == target]
+
+        months: Counter[str] = Counter()
+        days: set[date] = set()
+        airlines: Counter[str] = Counter()
+        airports: Counter[str] = Counter()
+        stations: Counter[str] = Counter()
+        aircraft: Counter[str] = Counter()
+        trip_counts: Counter[uuid.UUID] = Counter()
+        city_counts: Counter[str] = Counter()
+        # Identity key -> display names; airport cities get a bilingual pair.
+        city_display: dict[str, str] = {}
+        city_display_zh: dict[str, str] = {}
+        distance = 0.0
+        longest: tuple[float, TransportRecord] | None = None
+
+        for record in year_records:
+            day = departure_days[record.id]
+            months[day.strftime("%Y-%m")] += 1
+            days.add(day)
+            km = self._distance_km(record)
+            if km:
+                distance += km
+                if longest is None or km > longest[0]:
+                    longest = (km, record)
+            if record.trip_id:
+                trip_counts[record.trip_id] += 1
+            for place_name in (record.origin, record.destination):
+                if not place_name:
+                    continue
+                airport = reference.get_airport_by_iata(place_name)
+                if airport and airport.get("city"):
+                    key = reference.airport_city_key(airport)
+                    city_counts[key] += 1
+                    city_display.setdefault(key, airport["city"])
+                    if airport.get("city_zh"):
+                        city_display_zh.setdefault(key, airport["city_zh"])
+                elif record.type in {"train", "other"}:
+                    key = reference.place_city_key(place_name)
+                    city_counts[key] += 1
+                    city_display.setdefault(key, reference.station_city_label(place_name))
+            if record.type == "flight":
+                key = record.airline_code or record.carrier
+                if key:
+                    airlines[key] += 1
+                for code in (record.origin, record.destination):
+                    if code:
+                        airports[code] += 1
+                if record.aircraft_model:
+                    aircraft[record.aircraft_model] += 1
+            else:
+                # Trains and other transport share the station leaderboard: both
+                # store free-text endpoints.
+                for place_name in (record.origin, record.destination):
+                    if place_name:
+                        stations[place_name] += 1
+
+        countries, cities = self._collect_places(year_records)
+        trips = len({r.trip_id for r in year_records if r.trip_id})
+
+        year_hotels = [h for h in hotels if h.check_in.year == target]
+        nights = sum((h.check_out - h.check_in).days for h in year_hotels if h.check_out)
+        year_activities = sum(
+            1
+            for activity in activities
+            if activity.start_at is not None
+            and in_timezone(activity.start_at, activity.timezone).date().year == target
+        )
+        year_expenses = [
+            e
+            for e in expenses
+            if e.occurred_at is not None and in_timezone(e.occurred_at, "UTC").date().year == target
+        ]
+
+        user = self.db.get(User, user_id)
+        report_currency = (user.currency if user else None) or "CNY"
+
+        longest_route = None
+        if longest is not None:
+            km, record = longest
+            resolver = self._map_point if record.type == "flight" else self._station_point
+            origin = resolver(record.origin) or MapPoint(code=record.origin)
+            destination = resolver(record.destination) or MapPoint(code=record.destination)
+            longest_route = WrappedRoute(
+                id=record.id,
+                type=record.type,
+                service_number=record.service_number,
+                carrier=record.carrier,
+                origin=origin,
+                destination=destination,
+                distance_km=km,
+                departure_date=departure_days[record.id],
+            )
+
+        favorite_trip = None
+        if trip_counts:
+            trip_id, count = trip_counts.most_common(1)[0]
+            trip = self.db.scalar(select(Trip).where(Trip.id == trip_id, Trip.user_id == user_id))
+            if trip is not None:
+                favorite_trip = BreakdownItem(label=trip.name, count=count)
+
+        most_visited_city = None
+        if city_counts:
+            city_key, count = city_counts.most_common(1)[0]
+            most_visited_city = BreakdownItem(
+                label=city_display[city_key],
+                name=city_display_zh.get(city_key),
+                count=count,
+            )
+
+        return WrappedRead(
+            year=target,
+            available_years=sorted(years),
+            totals=WrappedTotals(
+                countries=len(countries),
+                cities=len(cities),
+                distance_km=round(distance, 1),
+                trips=trips,
+                flights=sum(1 for r in year_records if r.type == "flight"),
+                trains=sum(1 for r in year_records if r.type == "train"),
+                transports=sum(1 for r in year_records if r.type == "other"),
+                hotels=len(year_hotels),
+                hotel_nights=nights,
+                activities=year_activities,
+                travel_days=len(days),
+            ),
+            by_month=self._chronological(months),
+            top_airlines=self._top_with_airline_names(airlines),
+            top_airports=self._top_with_airport_names(airports),
+            top_stations=self._ranked(stations)[:5],
+            top_aircraft=self._ranked(aircraft)[:5],
+            most_visited_city=most_visited_city,
+            favorite_trip=favorite_trip,
+            longest_route=longest_route,
+            first_journey=min(days) if days else None,
+            last_journey=max(days) if days else None,
+            spend=summarize_expenses(year_expenses, report_currency),
+        )
+
     @staticmethod
-    def _ranked(counter: Counter[str]) -> list[BreakdownItem]:
-        return [BreakdownItem(label=label, count=count) for label, count in counter.most_common()]
+    def _top_with_airline_names(counter: Counter[str], *, limit: int = 5) -> list[BreakdownItem]:
+        items: list[BreakdownItem] = []
+        for code, count in counter.most_common(limit):
+            airline = reference.get_airline_by_iata(code)
+            items.append(
+                BreakdownItem(
+                    label=code, name=airline.get("name") if airline else None, count=count
+                )
+            )
+        return items
+
+    @staticmethod
+    def _top_with_airport_names(counter: Counter[str], *, limit: int = 5) -> list[BreakdownItem]:
+        items: list[BreakdownItem] = []
+        for code, count in counter.most_common(limit):
+            airport = reference.get_airport_by_iata(code)
+            items.append(
+                BreakdownItem(
+                    label=code, name=airport.get("name") if airport else None, count=count
+                )
+            )
+        return items
+
+    @staticmethod
+    def _ranked(counter: Counter[str], *, limit: int | None = None) -> list[BreakdownItem]:
+        ranked = [BreakdownItem(label=label, count=count) for label, count in counter.most_common()]
+        return ranked if limit is None else ranked[:limit]
 
     @staticmethod
     def _chronological(counter: Counter[str]) -> list[BreakdownItem]:
@@ -324,22 +560,41 @@ class DashboardService:
 
     def routes(self, *, user_id: uuid.UUID) -> MapRoutesRead:
         all_records = self.records.list_all(user_id=user_id)
-        items = [
-            MapRoute(
-                id=record.id,
-                type=record.type,
-                status=record.status,
-                service_number=record.service_number,
-                airline_code=record.airline_code,
-                carrier=record.carrier,
-                departure_time=record.departure_time,
-                origin=self._map_point(record.origin),
-                destination=self._map_point(record.destination),
-                distance_km=self._distance_km(record),
+        items: list[MapRoute] = []
+        for record in all_records:
+            if record.type == "flight":
+                origin = self._map_point(record.origin)
+                destination = self._map_point(record.destination)
+            elif record.type in ("train", "other"):
+                # Station fields are free text: resolve them through the
+                # station registry with the city-level fallback (spec #27).
+                # Unresolved endpoints would pin the route at (0, 0), so those
+                # records stay off the map until a Place or registry entry
+                # provides coordinates.
+                origin = self._station_point(record.origin)
+                destination = self._station_point(record.destination)
+                if origin is None or destination is None:
+                    continue
+            else:
+                continue
+            if origin.lat is None or origin.lon is None:
+                continue
+            if destination.lat is None or destination.lon is None:
+                continue
+            items.append(
+                MapRoute(
+                    id=record.id,
+                    type=record.type,
+                    status=record.status,
+                    service_number=record.service_number,
+                    airline_code=record.airline_code,
+                    carrier=record.carrier,
+                    departure_time=record.departure_time,
+                    origin=origin,
+                    destination=destination,
+                    distance_km=self._distance_km(record),
+                )
             )
-            for record in all_records
-            if record.type == "flight"
-        ]
         # Only stays with coordinates can be pinned; the rest stay list-only
         # until the user runs the explicit geocode action (spec #10).
         hotels = [
@@ -362,4 +617,23 @@ class DashboardService:
                 .order_by(Hotel.check_in)
             )
         ]
-        return MapRoutesRead(items=items, total=len(items), hotels=hotels)
+        places = [
+            MapPlace(
+                id=place.id,
+                name=place.name,
+                type=place.type,
+                lat=place.lat,
+                lon=place.lon,
+                city=place.city,
+            )
+            for place in self.db.scalars(
+                select(Place)
+                .where(
+                    Place.user_id == user_id,
+                    Place.lat.isnot(None),
+                    Place.lon.isnot(None),
+                )
+                .order_by(Place.name)
+            )
+        ]
+        return MapRoutesRead(items=items, total=len(items), hotels=hotels, places=places)

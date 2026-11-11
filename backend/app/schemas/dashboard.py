@@ -129,8 +129,21 @@ class MapHotel(BaseModel):
     status: str
 
 
+class MapPlace(BaseModel):
+    """A saved place with coordinates, rendered as a pin (spec #14, #27)."""
+
+    id: uuid.UUID
+    name: str
+    type: str
+    lat: float
+    lon: float
+    city: str | None = None
+
+
 class MapRoutesRead(BaseModel):
     items: list[MapRoute]
     total: int
     # Stays with coordinates render as pins next to the flight arcs (spec #10).
     hotels: list[MapHotel] = []
+    # Saved places (spec #14) render as their own layer (spec #27).
+    places: list[MapPlace] = []

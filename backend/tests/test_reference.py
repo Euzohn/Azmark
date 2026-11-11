@@ -211,3 +211,70 @@ def test_reference_requires_auth(client):
     assert (
         client.get("/api/v1/reference/flight-lookup", params={"number": "CX659"}).status_code == 401
     )
+
+
+def test_normalize_station_name_variants():
+    from app.services import reference
+
+    # The trailing 站 / 火车站 marker is not part of the lookup identity.
+    assert reference.normalize_station_name("上海虹桥站") == "上海虹桥"
+    assert reference.normalize_station_name("北京南站") == "北京南"
+    assert reference.normalize_station_name("  广州东  ") == "广州东"
+    # Full-width and hyphenated forms fold together.
+    assert reference.normalize_station_name("深圳北－") == "深圳北"
+    # English suffixes are stripped; case and spaces fold.
+    assert reference.normalize_station_name("Shanghai Hongqiao Railway Station") == (
+        "shanghaihongqiao"
+    )
+    assert reference.normalize_station_name("SHANGHAI-HONGQIAO") == "shanghaihongqiao"
+    assert reference.normalize_station_name("") == ""
+
+
+def test_station_point_uses_registry_when_present():
+    from app.services import reference
+
+    registry = {"上海虹桥": {"name": "上海虹桥", "lat": 31.19598, "lon": 121.3162}}
+    monkey = reference._stations_by_name
+    reference._stations_by_name = lambda: registry
+    try:
+        point = reference.station_point("上海虹桥站")  # 站 suffix folded away
+        assert point is not None
+        assert point["precise"] is True
+        assert point["lat"] == 31.19598
+        assert point["lon"] == 121.3162
+    finally:
+        reference._stations_by_name = monkey
+
+
+def test_station_point_falls_back_to_city_coordinates():
+    from app.services import reference
+
+    # With no registry (stations.json absent) the curated station→city table and
+    # the city coordinates from airports.json still place the station (spec #27).
+    monkey = reference._stations_by_name
+    reference._stations_by_name = lambda: {}
+    try:
+        point = reference.station_point("上海虹桥")
+        assert point is not None
+        assert point["precise"] is False
+        assert point["city"] == "上海"
+        assert 31.0 < point["lat"] < 31.4
+        assert 121.2 < point["lon"] < 121.9
+
+        hk = reference.station_point("香港西九龙")
+        assert hk is not None
+        assert hk["city"] == "香港"
+    finally:
+        reference._stations_by_name = monkey
+
+
+def test_station_point_unknown_station_returns_none():
+    from app.services import reference
+
+    monkey = reference._stations_by_name
+    reference._stations_by_name = lambda: {}
+    try:
+        assert reference.station_point("NoSuchStation") is None
+        assert reference.station_point("") is None
+    finally:
+        reference._stations_by_name = monkey

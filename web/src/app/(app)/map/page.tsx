@@ -6,7 +6,14 @@ import { useQuery } from "@tanstack/react-query";
 import { MapIcon } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { GeoJSONSource, Map as MLMap, Marker, Popup, StyleSpecification } from "maplibre-gl";
+import type {
+  GeoJSONSource,
+  Map as MLMap,
+  MapLayerMouseEvent,
+  Marker,
+  Popup,
+  StyleSpecification,
+} from "maplibre-gl";
 
 import { useTheme } from "@/components/theme-provider";
 import { AirportName } from "@/components/airport-name";
@@ -20,6 +27,7 @@ import { Stat } from "@/components/ui/stat";
 import { api } from "@/lib/api";
 import { greatCircle, type LonLat } from "@/lib/geo";
 import { useI18n } from "@/lib/i18n";
+import type { MapRoute, PlaceType } from "@/lib/types";
 
 // Basemap defaults to OpenFreeMap — a free, keyless, no-watermark vector map.
 // Override per build with:
@@ -35,6 +43,16 @@ const TILES_DARK = process.env.NEXT_PUBLIC_MAP_TILES_DARK;
 
 const ATTRIBUTION =
   '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
+type LayerFilter = "all" | "flights" | "ground" | "places" | "hotels";
+
+const LAYER_FILTERS = [
+  { value: "all", key: "map.layers.all" },
+  { value: "flights", key: "map.layers.flights" },
+  { value: "ground", key: "map.layers.ground" },
+  { value: "places", key: "map.layers.places" },
+  { value: "hotels", key: "map.layers.hotels" },
+] as const satisfies { value: LayerFilter; key: string }[];
 
 function isDarkTheme(theme: string): boolean {
   if (theme === "dark") return true;
@@ -67,6 +85,36 @@ function pointOf(code: string | null, lat: number | null, lon: number | null): L
   return [lon, lat];
 }
 
+function routeHref(route: MapRoute): string {
+  if (route.type === "train") return `/trains/${route.id}`;
+  if (route.type === "other") return `/transports/${route.id}`;
+  return `/flights/${route.id}`;
+}
+
+function lineFeature(
+  route: MapRoute,
+  from: LonLat,
+  to: LonLat,
+  sag: number,
+  side: 1 | -1,
+  steps: number,
+) {
+  return {
+    type: "Feature" as const,
+    properties: {
+      id: route.id,
+      origin: route.origin.code ?? "",
+      destination: route.destination.code ?? "",
+      service: route.service_number ?? "",
+      carrier: route.carrier ?? "",
+    },
+    geometry: {
+      type: "LineString" as const,
+      coordinates: greatCircle(from, to, steps, sag, side),
+    },
+  };
+}
+
 export default function MapPage() {
   const { t, locale } = useI18n();
   const { theme } = useTheme();
@@ -78,24 +126,43 @@ export default function MapPage() {
   const markersRef = useRef<Marker[]>([]);
   const interactionsBoundRef = useRef(false);
   const themeRef = useRef(theme);
+  const tRef = useRef(t);
+  const layerRef = useRef<LayerFilter>("all");
+  const fittedKeyRef = useRef("");
   const [ready, setReady] = useState(false);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [selectedHotelId, setSelectedHotelId] = useState<string | null>(null);
+  const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
+  const [layer, setLayer] = useState<LayerFilter>("all");
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["map-routes"],
     queryFn: api.getMapRoutes,
   });
 
-  const routes = useMemo(
+  // Flight arcs and ground (train / other transport) lines are drawn as
+  // separate sources so the map can tell them apart visually (spec #27).
+  const flightRoutes = useMemo(
     () =>
       (data?.items ?? []).filter(
         (route) =>
+          route.type === "flight" &&
           pointOf(route.origin.code, route.origin.lat, route.origin.lon) &&
           pointOf(route.destination.code, route.destination.lat, route.destination.lon),
       ),
     [data],
   );
+  const groundRoutes = useMemo(
+    () =>
+      (data?.items ?? []).filter(
+        (route) =>
+          route.type !== "flight" &&
+          pointOf(route.origin.code, route.origin.lat, route.origin.lon) &&
+          pointOf(route.destination.code, route.destination.lat, route.destination.lon),
+      ),
+    [data],
+  );
+  const routes = useMemo(() => [...flightRoutes, ...groundRoutes], [flightRoutes, groundRoutes]);
   const hotels = useMemo(
     () =>
       (data?.hotels ?? []).filter(
@@ -103,20 +170,27 @@ export default function MapPage() {
       ),
     [data],
   );
-  const showMap = !isLoading && !isError && (routes.length > 0 || hotels.length > 0);
+  const places = useMemo(
+    () => (data?.places ?? []).filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lon)),
+    [data],
+  );
+  const showMap =
+    !isLoading &&
+    !isError &&
+    (routes.length > 0 || hotels.length > 0 || places.length > 0);
 
   const summary = useMemo(() => {
-    const airports = new Set<string>();
+    const stops = new Set<string>();
     const countries = new Set<string>();
     let distance = 0;
     for (const route of routes) {
-      if (route.origin.code) airports.add(route.origin.code);
-      if (route.destination.code) airports.add(route.destination.code);
+      if (route.origin.code) stops.add(route.origin.code);
+      if (route.destination.code) stops.add(route.destination.code);
       if (route.origin.country) countries.add(route.origin.country);
       if (route.destination.country) countries.add(route.destination.country);
       if (route.distance_km) distance += route.distance_km;
     }
-    return { airports: airports.size, countries: countries.size, distance };
+    return { stops: stops.size, countries: countries.size, distance };
   }, [routes]);
 
   const longestRoutes = useMemo(
@@ -137,6 +211,16 @@ export default function MapPage() {
   useEffect(() => {
     themeRef.current = theme;
   }, [theme]);
+
+  // Keep translations fresh for handlers bound once at map init.
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
+
+  // Keep the layer filter available to the draw effect.
+  useEffect(() => {
+    layerRef.current = layer;
+  }, [layer]);
 
   // Initialise the map once the container is on screen (client-only).
   useEffect(() => {
@@ -197,15 +281,19 @@ export default function MapPage() {
     if (!map || !maplibregl || !ready) return;
 
     const draw = () => {
-      const current = routes;
+      const active = layerRef.current;
+      const showFlights = active === "all" || active === "flights";
+      const showGround = active === "all" || active === "ground";
+      const showPlaces = active === "all" || active === "places";
+      const showHotels = active === "all" || active === "hotels";
 
-      // Group routes by unordered airport pair to detect overlapping arcs.
-      // Round-trip flights (A→B and B→A) and duplicate routes share the same
-      // great circle, so we fan them out: opposite directions curve to
-      // opposite sides of the chord; same-direction routes get increasing
-      // sag so they spread apart visually.
-      const pairGroups = new Map<string, typeof current>();
-      for (const route of current) {
+      // Group routes by unordered endpoint pair to detect overlapping arcs.
+      // Round-trips (A→B and B→A) and duplicate routes share the same great
+      // circle, so we fan them out: opposite directions curve to opposite
+      // sides of the chord; same-direction routes get increasing sag so they
+      // spread apart visually.
+      const pairGroups = new Map<string, MapRoute[]>();
+      for (const route of routes) {
         const codes = [route.origin.code, route.destination.code]
           .filter(Boolean)
           .sort() as string[];
@@ -220,9 +308,7 @@ export default function MapPage() {
         const forward = group.filter(
           (r) => (r.origin.code ?? "") <= (r.destination.code ?? ""),
         );
-        const reverse = group.filter(
-          (r) => (r.origin.code ?? "") > (r.destination.code ?? ""),
-        );
+        const reverse = group.filter((r) => (r.origin.code ?? "") > (r.destination.code ?? ""));
         forward.forEach((r, i) => {
           routeOffsets.set(r.id, { side: 1, sag: 2 + (i + 1) * 0.7 });
         });
@@ -231,45 +317,55 @@ export default function MapPage() {
         });
       }
 
-      const lineFeatures = current.map((route) => {
-        const from = pointOf(route.origin.code, route.origin.lat, route.origin.lon)!;
-        const to = pointOf(route.destination.code, route.destination.lat, route.destination.lon)!;
-        const offset = routeOffsets.get(route.id);
-        const side = offset?.side ?? 1;
-        const sag = offset?.sag ?? 2;
-        return {
-          type: "Feature" as const,
-          properties: {
-            id: route.id,
-            origin: route.origin.code,
-            destination: route.destination.code,
-            service: route.service_number ?? "",
-            carrier: route.carrier ?? "",
-          },
-          geometry: { type: "LineString" as const, coordinates: greatCircle(from, to, 96, sag, side) },
-        };
-      });
+      const flightFeatures = showFlights
+        ? flightRoutes.map((route) => {
+            const from = pointOf(route.origin.code, route.origin.lat, route.origin.lon)!;
+            const to = pointOf(
+              route.destination.code,
+              route.destination.lat,
+              route.destination.lon,
+            )!;
+            const offset = routeOffsets.get(route.id);
+            return lineFeature(route, from, to, offset?.sag ?? 2, offset?.side ?? 1, 96);
+          })
+        : [];
+      // Ground lines stay close to the chord: rail routes are short enough that
+      // the flight-style arc would read as a detour. minSagDeg 0 keeps the true
+      // (near-straight) curve; the dashed style carries the distinction instead.
+      const groundFeatures = showGround
+        ? groundRoutes.map((route) => {
+            const from = pointOf(route.origin.code, route.origin.lat, route.origin.lon)!;
+            const to = pointOf(
+              route.destination.code,
+              route.destination.lat,
+              route.destination.lon,
+            )!;
+            const offset = routeOffsets.get(route.id);
+            return lineFeature(route, from, to, offset ? offset.sag * 0.3 : 0, offset?.side ?? 1, 48);
+          })
+        : [];
 
-      const airportMap = new Map<string, LonLat>();
-      for (const route of current) {
+      const endpointMap = new Map<string, LonLat>();
+      for (const route of [...(showFlights ? flightRoutes : []), ...(showGround ? groundRoutes : [])]) {
         const from = pointOf(route.origin.code, route.origin.lat, route.origin.lon);
         const to = pointOf(route.destination.code, route.destination.lat, route.destination.lon);
-        if (from && route.origin.code) airportMap.set(route.origin.code, from);
-        if (to && route.destination.code) airportMap.set(route.destination.code, to);
+        if (from && route.origin.code) endpointMap.set(route.origin.code, from);
+        if (to && route.destination.code) endpointMap.set(route.destination.code, to);
       }
-      const pointFeatures = Array.from(airportMap.entries()).map(([code, coords]) => ({
+      const pointFeatures = Array.from(endpointMap.entries()).map(([code, coords]) => ({
         type: "Feature" as const,
         properties: { code },
         geometry: { type: "Point" as const, coordinates: coords },
       }));
 
-      const lineData = { type: "FeatureCollection" as const, features: lineFeatures };
+      const flightData = { type: "FeatureCollection" as const, features: flightFeatures };
+      const groundData = { type: "FeatureCollection" as const, features: groundFeatures };
       const pointData = { type: "FeatureCollection" as const, features: pointFeatures };
 
-      // Geocoded stays render as pins beside the flight arcs (spec #10). Their
+      // Geocoded stays render as pins beside the route lines (spec #10). Their
       // popup data rides in the feature properties so the click handler never
       // captures a stale `hotels` array.
-      const hotelFeatures = hotels.map((hotel) => ({
+      const hotelFeatures = (showHotels ? hotels : []).map((hotel) => ({
         type: "Feature" as const,
         properties: {
           id: hotel.id,
@@ -284,29 +380,61 @@ export default function MapPage() {
       }));
       const hotelData = { type: "FeatureCollection" as const, features: hotelFeatures };
 
+      const placeFeatures = (showPlaces ? places : []).map((place) => ({
+        type: "Feature" as const,
+        properties: {
+          id: place.id,
+          name: place.name,
+          place_type: place.type,
+          city: place.city ?? "",
+        },
+        geometry: {
+          type: "Point" as const,
+          coordinates: [place.lon, place.lat] as LonLat,
+        },
+      }));
+      const placeData = { type: "FeatureCollection" as const, features: placeFeatures };
+
       const dark = isDarkTheme(themeRef.current);
       const accent = dark ? "#e0a737" : "#b45309";
+      const groundColor = dark ? "#61b8a8" : "#0f766e";
       const hotelColor = dark ? "#d98a70" : "#c66b4e";
+      const placeColor = dark ? "#7aa2f7" : "#2563eb";
+      const stroke = dark ? "#12161b" : "#f6f7f8";
 
-      if (!map.getSource("routes")) {
-        map.addSource("routes", { type: "geojson", data: lineData, tolerance: 0 });
-        map.addSource("airports", { type: "geojson", data: pointData });
+      if (!map.getSource("flights")) {
+        map.addSource("flights", { type: "geojson", data: flightData, tolerance: 0 });
+        map.addSource("ground", { type: "geojson", data: groundData, tolerance: 0 });
+        map.addSource("stops", { type: "geojson", data: pointData });
         map.addSource("hotels", { type: "geojson", data: hotelData });
+        map.addSource("places", { type: "geojson", data: placeData });
         map.addLayer({
-          id: "routes-line",
+          id: "flights-line",
           type: "line",
-          source: "routes",
+          source: "flights",
           layout: { "line-cap": "round", "line-join": "round" },
           paint: { "line-color": accent, "line-width": 2, "line-opacity": 0.8 },
         });
         map.addLayer({
-          id: "airports-point",
+          id: "ground-line",
+          type: "line",
+          source: "ground",
+          layout: { "line-cap": "butt", "line-join": "round" },
+          paint: {
+            "line-color": groundColor,
+            "line-width": 2,
+            "line-opacity": 0.85,
+            "line-dasharray": [2, 2],
+          },
+        });
+        map.addLayer({
+          id: "stops-point",
           type: "circle",
-          source: "airports",
+          source: "stops",
           paint: {
             "circle-radius": 3.5,
             "circle-color": accent,
-             "circle-stroke-color": dark ? "#12161b" : "#f6f7f8",
+            "circle-stroke-color": stroke,
             "circle-stroke-width": 1.5,
           },
         });
@@ -317,21 +445,32 @@ export default function MapPage() {
           paint: {
             "circle-radius": 5,
             "circle-color": hotelColor,
-            "circle-stroke-color": dark ? "#12161b" : "#f6f7f8",
+            "circle-stroke-color": stroke,
+            "circle-stroke-width": 1.5,
+          },
+        });
+        map.addLayer({
+          id: "places-point",
+          type: "circle",
+          source: "places",
+          paint: {
+            "circle-radius": 4.5,
+            "circle-color": placeColor,
+            "circle-stroke-color": stroke,
             "circle-stroke-width": 1.5,
           },
         });
 
         if (!interactionsBoundRef.current) {
           interactionsBoundRef.current = true;
-          map.on("click", "routes-line", (event) => {
+          const routePopup = (event: MapLayerMouseEvent) => {
             const feature = event.features?.[0];
             if (!feature) return;
-             const props = feature.properties as Record<string, string>;
-             if (window.matchMedia("(max-width: 767px)").matches) {
-               setSelectedRouteId(props.id);
-               return;
-             }
+            const props = feature.properties as Record<string, string>;
+            if (window.matchMedia("(max-width: 767px)").matches) {
+              setSelectedRouteId(props.id);
+              return;
+            }
             const node = document.createElement("div");
             node.className = "text-xs leading-relaxed";
             const title = document.createElement("div");
@@ -349,13 +488,16 @@ export default function MapPage() {
               .setLngLat(event.lngLat)
               .setDOMContent(node)
               .addTo(map);
-          });
-          map.on("mouseenter", "routes-line", () => {
-            map.getCanvas().style.cursor = "pointer";
-          });
-          map.on("mouseleave", "routes-line", () => {
-            map.getCanvas().style.cursor = "";
-          });
+          };
+          for (const lineLayer of ["flights-line", "ground-line"]) {
+            map.on("click", lineLayer, routePopup);
+            map.on("mouseenter", lineLayer, () => {
+              map.getCanvas().style.cursor = "pointer";
+            });
+            map.on("mouseleave", lineLayer, () => {
+              map.getCanvas().style.cursor = "";
+            });
+          }
 
           map.on("click", "hotels-point", (event) => {
             const feature = event.features?.[0];
@@ -390,17 +532,60 @@ export default function MapPage() {
           map.on("mouseleave", "hotels-point", () => {
             map.getCanvas().style.cursor = "";
           });
+
+          map.on("click", "places-point", (event) => {
+            const feature = event.features?.[0];
+            if (!feature) return;
+            const props = feature.properties as Record<string, string>;
+            if (window.matchMedia("(max-width: 767px)").matches) {
+              setSelectedPlaceId(props.id);
+              return;
+            }
+            const node = document.createElement("div");
+            node.className = "text-xs leading-relaxed";
+            const title = document.createElement("a");
+            title.className = "font-semibold underline-offset-2 hover:underline";
+            title.href = `/places/${props.id}`;
+            title.textContent = props.name;
+            node.appendChild(title);
+            const meta = [
+              props.place_type
+                ? tRef.current(`places.type.${props.place_type as PlaceType}`)
+                : "",
+              props.city,
+            ]
+              .filter(Boolean)
+              .join(" · ");
+            if (meta) {
+              const subNode = document.createElement("div");
+              subNode.textContent = meta;
+              node.appendChild(subNode);
+            }
+            popupRef.current?.remove();
+            popupRef.current = new maplibregl.Popup({ closeButton: false, offset: 8 })
+              .setLngLat(event.lngLat)
+              .setDOMContent(node)
+              .addTo(map);
+          });
+          map.on("mouseenter", "places-point", () => {
+            map.getCanvas().style.cursor = "pointer";
+          });
+          map.on("mouseleave", "places-point", () => {
+            map.getCanvas().style.cursor = "";
+          });
         }
       } else {
-        (map.getSource("routes") as GeoJSONSource).setData(lineData);
-        (map.getSource("airports") as GeoJSONSource).setData(pointData);
+        (map.getSource("flights") as GeoJSONSource).setData(flightData);
+        (map.getSource("ground") as GeoJSONSource).setData(groundData);
+        (map.getSource("stops") as GeoJSONSource).setData(pointData);
         (map.getSource("hotels") as GeoJSONSource).setData(hotelData);
+        (map.getSource("places") as GeoJSONSource).setData(placeData);
       }
 
-      // airport code labels
+      // station / airport code labels
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
-      for (const [code, coords] of airportMap.entries()) {
+      for (const [code, coords] of endpointMap.entries()) {
         const el = document.createElement("div");
         el.className =
           "ml-3 rounded-md border border-border bg-card/90 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-foreground shadow-sm";
@@ -411,12 +596,24 @@ export default function MapPage() {
         markersRef.current.push(marker);
       }
 
-      // fit view to the drawn routes and pinned stays
+      // Fit view from the FULL dataset (not the layer-filtered view) so
+      // toggling layers never jumps the camera. Ground lines use near-chord
+      // geometry; fitting their raw endpoints is enough.
       const boundsCoords: LonLat[] = [
-        ...lineFeatures.flatMap((feature) => feature.geometry.coordinates as LonLat[]),
+        ...flightRoutes.flatMap((route) => [
+          pointOf(route.origin.code, route.origin.lat, route.origin.lon)!,
+          pointOf(route.destination.code, route.destination.lat, route.destination.lon)!,
+        ]),
+        ...groundRoutes.flatMap((route) => [
+          pointOf(route.origin.code, route.origin.lat, route.origin.lon)!,
+          pointOf(route.destination.code, route.destination.lat, route.destination.lon)!,
+        ]),
         ...hotels.map((hotel) => [hotel.lon, hotel.lat] as LonLat),
+        ...places.map((place) => [place.lon, place.lat] as LonLat),
       ];
-      if (boundsCoords.length > 0) {
+      const fittedKey = `${routes.length}|${hotels.length}|${places.length}`;
+      if (boundsCoords.length > 0 && fittedKey !== fittedKeyRef.current) {
+        fittedKeyRef.current = fittedKey;
         let minLon = Infinity;
         let minLat = Infinity;
         let maxLon = -Infinity;
@@ -434,11 +631,12 @@ export default function MapPage() {
           ],
           {
             padding: 64,
-            maxZoom: lineFeatures.length > 0 ? 6 : 10,
+            maxZoom: routes.length > 0 ? 6 : 10,
             duration: 600,
           },
         );
       }
+
     };
 
     draw();
@@ -446,16 +644,22 @@ export default function MapPage() {
     return () => {
       map.off("style.load", draw);
     };
-  }, [routes, hotels, ready]);
+  }, [routes, flightRoutes, groundRoutes, hotels, places, ready, layer]);
 
-  const routeHref = (route: (typeof routes)[number]) => route.type === "train" ? `/trains/${route.id}` : route.type === "other" ? `/transports/${route.id}` : `/flights/${route.id}`;
   const selectedRoute = routes.find((route) => route.id === selectedRouteId);
   const selectedHotel = hotels.find((hotel) => hotel.id === selectedHotelId);
+  const selectedPlace = places.find((place) => place.id === selectedPlaceId);
   const subtitle = !data
     ? undefined
-    : hotels.length > 0
-      ? t("map.subtitle", { routes: routes.length, hotels: hotels.length })
+    : hotels.length > 0 || places.length > 0
+      ? t("map.subtitle", {
+          routes: routes.length,
+          hotels: hotels.length,
+          places: places.length,
+        })
       : t("map.routes", { count: routes.length });
+
+  const hasGround = groundRoutes.length > 0;
 
   return (
     <div className="flex flex-col gap-5">
@@ -463,9 +667,19 @@ export default function MapPage() {
 
       {isLoading ? <Skeleton className="h-[60vh] w-full" /> : null}
 
-      {isError ? <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-danger/30 bg-card p-5"><span className="text-sm text-danger">{t("common.error")}</span><Button variant="outline" onClick={() => void refetch()}>{t("common.retry")}</Button></div> : null}
+      {isError ? (
+        <div
+          role="alert"
+          className="flex items-center justify-between gap-3 rounded-xl border border-danger/30 bg-card p-5"
+        >
+          <span className="text-sm text-danger">{t("common.error")}</span>
+          <Button variant="outline" onClick={() => void refetch()}>
+            {t("common.retry")}
+          </Button>
+        </div>
+      ) : null}
 
-      {!isLoading && !isError && routes.length === 0 && hotels.length === 0 ? (
+      {!isLoading && !isError && routes.length === 0 && hotels.length === 0 && places.length === 0 ? (
         <EmptyState icon={MapIcon} title={t("map.empty")} hint={t("map.emptyHint")} />
       ) : null}
 
@@ -474,7 +688,7 @@ export default function MapPage() {
           {routes.length > 0 ? (
             <div className="grid grid-cols-2 gap-4 border-y border-border py-4 sm:grid-cols-4">
               <Stat label={t("map.stats.routes")} value={routes.length} />
-              <Stat label={t("map.stats.airports")} value={summary.airports} />
+              <Stat label={t("map.stats.stops")} value={summary.stops} />
               <Stat label={t("map.stats.countries")} value={summary.countries} />
               <Stat
                 label={t("map.stats.distance")}
@@ -483,55 +697,86 @@ export default function MapPage() {
             </div>
           ) : null}
 
+          <div className="flex flex-wrap gap-2" role="group" aria-label={t("map.layers")}>
+            {LAYER_FILTERS.map((item) => (
+              <Button
+                key={item.value}
+                size="sm"
+                variant={layer === item.value ? "default" : "outline"}
+                onClick={() => setLayer(item.value)}
+              >
+                {t(item.key)}
+              </Button>
+            ))}
+          </div>
+
           <div
             className={`grid gap-4 ${
               longestRoutes.length > 0 ? "xl:grid-cols-[minmax(0,1fr)_20rem]" : ""
             }`}
           >
-            <Card className="overflow-hidden p-0"><div ref={containerRef} className="h-[55dvh] min-h-[24rem] w-full xl:h-[70dvh]" /></Card>
-            {longestRoutes.length > 0 ? <Card className="xl:max-h-[70dvh] xl:overflow-y-auto">
-              <CardHeader>
-                <CardTitle>{t("map.longest")}</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
-                {longestRoutes.map((route) => {
-                  return (
-                    <Link
-                      key={route.id}
-                      href={routeHref(route)}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-border/70 px-3 py-2.5 transition-colors hover:bg-accent/40"
-                    >
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 truncate text-sm font-medium">
-                          <AirportName value={route.origin.code ?? route.origin.name} />
-                          <span className="text-muted-foreground">→</span>
-                          <AirportName
-                            value={route.destination.code ?? route.destination.name}
-                          />
+            <Card className="overflow-hidden p-0">
+              <div ref={containerRef} className="h-[55dvh] min-h-[24rem] w-full xl:h-[70dvh]" />
+            </Card>
+            {longestRoutes.length > 0 ? (
+              <Card className="xl:max-h-[70dvh] xl:overflow-y-auto">
+                <CardHeader>
+                  <CardTitle>{t("map.longest")}</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+                  {longestRoutes.map((route) => {
+                    return (
+                      <Link
+                        key={route.id}
+                        href={routeHref(route)}
+                        className="flex items-center justify-between gap-3 rounded-xl border border-border/70 px-3 py-2.5 transition-colors hover:bg-accent/40"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 truncate text-sm font-medium">
+                            <AirportName value={route.origin.code ?? route.origin.name} />
+                            <span className="text-muted-foreground">→</span>
+                            <AirportName
+                              value={route.destination.code ?? route.destination.name}
+                            />
+                          </div>
+                          <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                            {[route.service_number, route.carrier].filter(Boolean).join(" · ")}
+                          </div>
                         </div>
-                        <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                          {[route.service_number, route.carrier]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </div>
-                      </div>
-                      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                        {t("map.km", {
-                          value: numberFormat.format(route.distance_km ?? 0),
-                        })}
-                      </span>
-                    </Link>
-                  );
-                })}
-              </CardContent>
-            </Card> : null}
+                        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                          {t("map.km", {
+                            value: numberFormat.format(route.distance_km ?? 0),
+                          })}
+                        </span>
+                      </Link>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+            ) : null}
           </div>
-          <p className="text-xs text-muted-foreground">{t("map.coverageHint")} {t("map.greatCircleNote")}</p>
-          <BottomSheet open={selectedRoute !== undefined} onClose={() => setSelectedRouteId(null)} title={t("map.title")}>
-            {selectedRoute ? <Link href={routeHref(selectedRoute)} onClick={() => setSelectedRouteId(null)} className="flex items-center justify-between gap-4 rounded-lg border border-border p-4 text-sm font-medium">
-              <span>{selectedRoute.origin.code ?? selectedRoute.origin.name} → {selectedRoute.destination.code ?? selectedRoute.destination.name}</span>
-              <span className="text-xs text-muted-foreground">{selectedRoute.service_number}</span>
-            </Link> : null}
+          <p className="text-xs text-muted-foreground">
+            {t("map.coverageHint")} {t("map.greatCircleNote")}
+            {hasGround ? ` ${t("map.groundNote")}` : ""}
+          </p>
+          <BottomSheet
+            open={selectedRoute !== undefined}
+            onClose={() => setSelectedRouteId(null)}
+            title={t("map.title")}
+          >
+            {selectedRoute ? (
+              <Link
+                href={routeHref(selectedRoute)}
+                onClick={() => setSelectedRouteId(null)}
+                className="flex items-center justify-between gap-4 rounded-lg border border-border p-4 text-sm font-medium"
+              >
+                <span>
+                  {selectedRoute.origin.code ?? selectedRoute.origin.name} →{" "}
+                  {selectedRoute.destination.code ?? selectedRoute.destination.name}
+                </span>
+                <span className="text-xs text-muted-foreground">{selectedRoute.service_number}</span>
+              </Link>
+            ) : null}
           </BottomSheet>
           <BottomSheet
             open={selectedHotel !== undefined}
@@ -547,6 +792,24 @@ export default function MapPage() {
                 <span className="min-w-0 truncate">{selectedHotel.name}</span>
                 <span className="shrink-0 text-xs text-muted-foreground">
                   {[selectedHotel.check_in, selectedHotel.check_out].filter(Boolean).join(" → ")}
+                </span>
+              </Link>
+            ) : null}
+          </BottomSheet>
+          <BottomSheet
+            open={selectedPlace !== undefined}
+            onClose={() => setSelectedPlaceId(null)}
+            title={t("places.title")}
+          >
+            {selectedPlace ? (
+              <Link
+                href={`/places/${selectedPlace.id}`}
+                onClick={() => setSelectedPlaceId(null)}
+                className="flex items-center justify-between gap-4 rounded-lg border border-border p-4 text-sm font-medium"
+              >
+                <span className="min-w-0 truncate">{selectedPlace.name}</span>
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {t(`places.type.${selectedPlace.type}`)}
                 </span>
               </Link>
             ) : null}

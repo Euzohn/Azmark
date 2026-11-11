@@ -392,3 +392,138 @@ def test_map_routes_include_geocoded_hotels_only(client):
     assert pin["name"] == "Marina Bay Sands"
     assert pin["lat"] == 1.2834
     assert pin["lon"] == 103.8607
+
+
+def _no_station_registry(monkeypatch):
+    """Force the city-level fallback regardless of whether stations.json exists."""
+    from app.services import reference
+
+    monkeypatch.setattr(reference, "_stations_by_name", lambda: {})
+
+
+def test_map_routes_include_trains(client, monkeypatch):
+    _no_station_registry(monkeypatch)
+    token = register_and_login(client, "map_train")["access_token"]
+    headers = auth_headers(token)
+
+    client.post(
+        "/api/v1/trains",
+        json={
+            "origin": "上海虹桥",
+            "destination": "北京南",
+            "service_number": "G2",
+            "departure_time": "2026-09-26T01:00:00Z",
+            "arrival_time": "2026-09-26T06:00:00Z",
+            "carrier": "中国铁路",
+        },
+        headers=headers,
+    )
+
+    body = client.get("/api/v1/map/routes", headers=headers).json()
+    assert body["total"] == 1
+    route = body["items"][0]
+    assert route["type"] == "train"
+    assert route["origin"]["code"] == "上海虹桥"
+    assert route["origin"]["city"] == "上海"
+    assert 31.0 < route["origin"]["lat"] < 31.4
+    assert route["destination"]["city"] == "北京"
+    # Fallback distance from city coordinates (沪京直线约 1000+ km)。
+    assert route["distance_km"] > 900
+
+
+def test_map_routes_skip_unresolvable_trains(client, monkeypatch):
+    _no_station_registry(monkeypatch)
+    token = register_and_login(client, "map_train_skip")["access_token"]
+    headers = auth_headers(token)
+
+    client.post(
+        "/api/v1/trains",
+        json={
+            "origin": "NoSuchStationville",
+            "destination": "北京南",
+            "service_number": "G9",
+            "departure_time": "2026-09-26T01:00:00Z",
+        },
+        headers=headers,
+    )
+
+    body = client.get("/api/v1/map/routes", headers=headers).json()
+    assert body["total"] == 0
+
+
+def test_map_routes_use_station_registry_when_present(client):
+    # With stations.json vendored (the default in this repo), a registered
+    # station resolves to its precise OSM coordinates rather than city coords.
+    import pytest
+
+    from app.services.reference import DATA_DIR
+
+    if not (DATA_DIR / "stations.json").exists():
+        pytest.skip("optional stations.json not built")
+    token = register_and_login(client, "map_train_registry")["access_token"]
+    headers = auth_headers(token)
+
+    client.post(
+        "/api/v1/trains",
+        json={
+            "origin": "上海虹桥",
+            "destination": "北京南",
+            "service_number": "G2",
+            "departure_time": "2026-09-26T01:00:00Z",
+        },
+        headers=headers,
+    )
+
+    body = client.get("/api/v1/map/routes", headers=headers).json()
+    assert body["total"] == 1
+    origin = body["items"][0]["origin"]
+    # Hongqiao station sits west of the PVG/SHA city average; precise data puts
+    # its longitude below 121.35 while the city fallback averages toward 121.5+.
+    assert origin["lat"] is not None and origin["lon"] < 121.35
+
+
+def test_map_routes_include_places(client):
+    token = register_and_login(client, "map_places")["access_token"]
+    headers = auth_headers(token)
+
+    created = client.post(
+        "/api/v1/places",
+        json={
+            "type": "attraction",
+            "name": "Gardens by the Bay",
+            "city": "Singapore",
+            "lat": 1.2816,
+            "lon": 103.8636,
+        },
+        headers=headers,
+    )
+    assert created.status_code == 201, created.text
+    client.post(
+        "/api/v1/places",
+        json={"type": "city", "name": "No Coord City"},
+        headers=headers,
+    )
+
+    body = client.get("/api/v1/map/routes", headers=headers).json()
+    assert len(body["places"]) == 1
+    place = body["places"][0]
+    assert place["id"] == created.json()["id"]
+    assert place["name"] == "Gardens by the Bay"
+    assert place["type"] == "attraction"
+    assert place["lat"] == 1.2816
+
+
+def test_map_routes_user_isolation(client):
+    token_a = register_and_login(client, "map_iso_a")["access_token"]
+    token_b = register_and_login(client, "map_iso_b")["access_token"]
+
+    client.post("/api/v1/flights", json=FLIGHT_HKG_SIN, headers=auth_headers(token_a))
+    client.post(
+        "/api/v1/places",
+        json={"type": "city", "name": "Wuhan", "lat": 30.59, "lon": 114.3},
+        headers=auth_headers(token_a),
+    )
+
+    body = client.get("/api/v1/map/routes", headers=auth_headers(token_b)).json()
+    assert body["total"] == 0
+    assert body["places"] == []

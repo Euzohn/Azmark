@@ -58,10 +58,11 @@ See [`AGENTS.md`](./AGENTS.md) for repository conventions, [`docs/backup.md`](./
 | Records | Unified records list (flight / train / other): search, type / status / trip / date filters, sorting and pagination |
 | Trips | A trip groups flights, trains, hotels and activities, and aggregates its expenses and notes; ordering within a trip |
 | Attachments | Upload / download / delete boarding passes and receipts per record (transport, hotel, activity; S3-compatible storage · MinIO) |
-| Map | Great-circle route visualization (MapLibre GL · OpenFreeMap) |
+| Map | Flight great-circle arcs + schematic train / other-transport lines + place & stay pins, switchable layers (MapLibre GL · OpenFreeMap; optional station registry, city-level fallback) |
 | Timeline | Every transport record in chronological order |
 | Dashboard | Key metrics, upcoming departures, recent records across types |
 | Statistics | Flight / train breakdowns, year / month / day distributions, expense composition (no overlap with dashboard metrics) |
+| Year in review | Travel Wrapped: an annual summary (distance / footprint / top airlines, airports & stations / longest journey / spend), entered from Statistics, full-screen chapters |
 | Audit log | Account, records, trips, attachments, AI and import / export actions; client IP and its salted hash |
 | Agent access | Personal access tokens (read / write scopes, revocable, rate-limited per token); scripts and AI agents can call the REST API directly |
 | MCP | MCP server (Streamable HTTP): read-only tools plus write proposals for `write`-scope tokens; Claude / Cursor connect to `/api/v1/mcp` with an access token |
@@ -259,7 +260,7 @@ docker compose exec api python -c "from app.core.db import SessionLocal; from ap
 
 - **MVP (done)** — accounts; flight / train / other transport records; trips; attachments; map / timeline / dashboard / statistics; audit log; AI chat with natural-language entry (including the confirmation flow); CSV / JSON import / export; zh-CN / en-US and mobile adaptation; personal access tokens.
 - **P1 (done)** — hotels / stays, places, activities, expenses, notes. Photos / OCR / boarding-pass parsing are not built as separate modules: image extraction is handled by the web AI assistant (images are not persisted; upload them as attachments when they need to be kept).
-- **P2** — email import, automation rules, AI travel journal, Travel Wrapped, advanced OCR, AI photo organization.
+- **P2** — Travel Wrapped (Year in Review, done); remaining: email import, automation rules, AI travel journal, advanced OCR, AI photo organization.
 - **P3** — trip collaboration, family accounts, multi-user shared trips, public trip pages, native mobile apps, plugin ecosystem.
 
 ## Contributing

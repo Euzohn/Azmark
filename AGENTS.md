@@ -43,6 +43,7 @@
   - Lint / 格式：`./.venv/bin/ruff check .`、`./.venv/bin/ruff format --check .`（修复用 `ruff check --fix .` / `ruff format .`）
   - 迁移：`./.venv/bin/alembic upgrade head`（需要 PostgreSQL，交给服务器环境）
   - 创建管理员：`./.venv/bin/python -m app create-admin --username admin --email you@example.com`（需要 PostgreSQL；密码交互输入或加 `--password`）
+  - 参考数据重建（可选，需要联网，不影响测试）：`./.venv/bin/python scripts/build_reference.py`（机场/航司）、`scripts/build_airport_names_zh.py`（中文机场名）、`scripts/build_stations.py --countries CN`（火车站坐标，`app/data/stations.json` 缺省时地图火车线路按城市级解析）；许可与来源见 `app/data/ATTRIBUTION.md`
 - 前端（在 `web/`，Node 22）：`npm install`；`npm test`；`npm run lint`；`npm run typecheck`；`npm run build`；`npm run dev`
 - CI（`.github/workflows/ci.yml`，push `main` 与 PR 自动运行）：后端 job 跑 `ruff check .`、`ruff format --check .`、`pytest -q`；前端 job 跑 `npm ci`、`npm run lint`、`npm run typecheck`、`npm test`、`npm run build`。CI 不启动 PostgreSQL / Redis / MinIO，后端测试仍用 SQLite 内存库。
 - 备份 / 恢复（仅服务器，需 `docker compose`；本地不要运行）：`./scripts/backup.sh`、`./scripts/restore.sh backups/<ts>`（见 `docs/backup.md`）

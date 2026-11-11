@@ -1,7 +1,16 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { BarChart3, CalendarRange, ChevronDown, ChevronUp, Compass } from "lucide-react";
+import {
+  BarChart3,
+  CalendarRange,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  Compass,
+  Gift,
+} from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { AirlineLogo } from "@/components/airline-logo";
@@ -474,6 +483,20 @@ export default function StatisticsPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title={t("stats.title")} subtitle={t("stats.subtitle")} />
+
+      <Link
+        href="/wrapped"
+        className="group flex animate-fade-in-up items-center justify-between gap-4 rounded-2xl border border-border bg-card/60 px-5 py-4 transition-colors hover:bg-accent/40"
+      >
+        <div className="flex items-center gap-3">
+          <Gift className="h-5 w-5 text-primary" />
+          <div>
+            <div className="text-sm font-semibold">{t("wrapped.entryTitle")}</div>
+            <div className="text-xs text-muted-foreground">{t("wrapped.entryHint")}</div>
+          </div>
+        </div>
+        <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+      </Link>
 
       {isLoading ? (
         <div className="flex flex-col gap-4">
