@@ -26,7 +26,7 @@
   <img src="./assets/readme/showcase.svg" width="100%" alt="界面结构示意：大圆航线地图、时间线、按行程归组的记录列表（线框示意，非截图）">
 </p>
 
-仓库开发约定见 [`AGENTS.md`](./AGENTS.md)，备份 / 恢复运维见 [`docs/backup.md`](./docs/backup.md)，MCP 接入见 [`docs/mcp.md`](./docs/mcp.md)，反向代理与审计 IP 见 [`docs/reverse-proxy.md`](./docs/reverse-proxy.md)。
+仓库开发约定见 [`AGENTS.md`](./AGENTS.md)，更新日志见 [`CHANGELOG.md`](./CHANGELOG.md)，备份 / 恢复运维见 [`docs/backup.md`](./docs/backup.md)，MCP 接入见 [`docs/mcp.md`](./docs/mcp.md)，反向代理与审计 IP 见 [`docs/reverse-proxy.md`](./docs/reverse-proxy.md)。
 
 ## 目录
 

@@ -26,7 +26,7 @@
   <img src="./assets/readme/showcase-en.svg" width="100%" alt="Interface overview: great-circle route map, timeline, and records grouped by trip (schematic wireframe, not screenshots)">
 </p>
 
-See [`AGENTS.md`](./AGENTS.md) for repository conventions, [`docs/backup.md`](./docs/backup.md) for backup / restore operations, [`docs/mcp.md`](./docs/mcp.md) for MCP integration, and [`docs/reverse-proxy.md`](./docs/reverse-proxy.md) for reverse proxying and audit client IPs.
+See [`AGENTS.md`](./AGENTS.md) for repository conventions, [`CHANGELOG.md`](./CHANGELOG.md) for the changelog, [`docs/backup.md`](./docs/backup.md) for backup / restore operations, [`docs/mcp.md`](./docs/mcp.md) for MCP integration, and [`docs/reverse-proxy.md`](./docs/reverse-proxy.md) for reverse proxying and audit client IPs.
 
 ## Table of contents
 
