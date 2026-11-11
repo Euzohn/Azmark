@@ -23,6 +23,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Markdown } from "@/components/markdown";
 import { PageHeader } from "@/components/page-header";
 import { api, ApiError } from "@/lib/api";
 import { buildChatHistory } from "@/lib/ai-history";
@@ -892,6 +893,10 @@ export default function AiChatPage() {
                     </div>
                   ) : msg.error ? (
                     <p className="whitespace-pre-wrap">{msg.error}</p>
+                  ) : msg.role === "assistant" ? (
+                    // Model replies are Markdown (the journal prompt even asks
+                    // for it); render them safely instead of as raw text.
+                    <Markdown content={msg.content} />
                   ) : (
                     <p className="whitespace-pre-wrap">{msg.content}</p>
                   )}
