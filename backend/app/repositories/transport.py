@@ -105,9 +105,15 @@ class TransportRepository:
         self,
         *,
         user_id: uuid.UUID,
-        limit: int = 5000,
+        limit: int | None = None,
     ) -> list[TransportRecord]:
-        """Return all records for a user ordered by departure time desc."""
+        """Return all records for a user ordered by departure time desc.
+
+        No hard cap by default: dashboard / statistics / wrapped / timeline /
+        map must never silently drop rows once a user passes 10,000 records
+        (spec #71); export has always streamed unbounded. Callers that want to
+        bound the result — e.g. AI tool context — pass an explicit ``limit``.
+        """
         stmt = (
             select(TransportRecord)
             .where(TransportRecord.user_id == user_id)

@@ -527,3 +527,47 @@ def test_map_routes_user_isolation(client):
     body = client.get("/api/v1/map/routes", headers=auth_headers(token_b)).json()
     assert body["total"] == 0
     assert body["places"] == []
+
+
+def test_statistics_timeline_not_truncated_beyond_5000_records(client, db):
+    """Regression: repository.list_all used to default to a 5,000-row cap the
+    dashboard / statistics / timeline endpoints silently inherited, so heavy
+    users (spec #71 targets 10,000+ records) lost rows from their stats.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import select
+
+    from app.models.transport_record import TransportRecord
+    from app.models.user import User
+
+    total = 5001
+    token = register_and_login(client, "bulk_stats")["access_token"]
+    headers = auth_headers(token)
+    user_id = db.execute(select(User.id).where(User.username == "bulk_stats")).scalar_one()
+
+    base = datetime(2026, 1, 1, tzinfo=UTC)
+    db.add_all(
+        [
+            TransportRecord(
+                user_id=user_id,
+                type="flight",
+                airline_code="CX",
+                origin="HKG",
+                destination="SIN",
+                departure_time=base + timedelta(minutes=i),
+            )
+            for i in range(total)
+        ]
+    )
+    db.flush()
+
+    stats = client.get("/api/v1/statistics", headers=headers).json()
+    assert stats["totals"]["flights"] == total
+    assert stats["totals"]["trains"] == 0
+
+    timeline = client.get("/api/v1/timeline", headers=headers).json()
+    assert len(timeline) == total
+
+    routes = client.get("/api/v1/map/routes", headers=headers).json()
+    assert routes["total"] == total
