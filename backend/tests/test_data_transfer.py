@@ -777,3 +777,16 @@ def test_v2_import_uses_service_defaults(client):
 
     hotels_b = client.get("/api/v1/hotels", headers=headers_b).json()["items"]
     assert hotels_b[0]["status"] == "scheduled"
+
+
+def test_import_rejects_oversized_file(client, monkeypatch):
+    from app.core.config import settings
+
+    token = register_and_login(client, "oversize")["access_token"]
+    headers = auth_headers(token)
+    monkeypatch.setattr(settings, "max_import_bytes", 64)
+    oversized = "a" * 128
+
+    # Both preview and commit must reject the file before buffering it all.
+    assert _upload(client, headers, oversized).status_code == 413
+    assert _commit(client, headers, oversized).status_code == 413

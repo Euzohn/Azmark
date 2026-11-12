@@ -2,7 +2,16 @@
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+)
 
 from app.api.deps import (
     get_audit_service,
@@ -10,6 +19,7 @@ from app.api.deps import (
     get_data_source_service,
     get_data_transfer_service,
 )
+from app.core.config import settings
 from app.models.audit_log import AuditAction
 from app.models.user import User
 from app.schemas.data_transfer import ImportPreview, ImportResult
@@ -21,7 +31,11 @@ router = APIRouter(tags=["data"])
 
 
 def _decode_file(file: UploadFile) -> str:
-    data = file.file.read()
+    # Read at most max_import_bytes + 1 so an oversized upload is rejected
+    # without buffering the whole file in memory.
+    data = file.file.read(settings.max_import_bytes + 1)
+    if len(data) > settings.max_import_bytes:
+        raise HTTPException(status_code=413, detail="Import file is too large")
     try:
         return data.decode("utf-8-sig")
     except UnicodeDecodeError:

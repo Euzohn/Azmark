@@ -71,6 +71,9 @@ class Settings(BaseSettings):
     s3_use_ssl: bool = True
     s3_addressing_style: str = "path"
     max_attachment_bytes: int = 20 * 1024 * 1024
+    # Import files are UTF-8 JSON/CSV text; cap the upload so a huge file cannot
+    # be read fully into memory (the attachment cap does not cover imports).
+    max_import_bytes: int = 10 * 1024 * 1024
 
     log_level: str = "INFO"
 

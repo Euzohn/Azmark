@@ -10,12 +10,30 @@ from app.core.request_context import RequestContextMiddleware
 from app.mcp.server import MCPMount
 from app.services.admin import bootstrap_admin_from_env
 
+# Placeholder secrets shipped in config defaults / .env.example / compose. If
+# any of these (or a short key) is used, session JWTs are forgeable.
+_WEAK_SECRET_KEYS = {
+    "",
+    "change-me",
+    "change-me-in-production",
+    "dev-secret-change-me-please-32bytes-minimum",
+}
+
 
 def create_app() -> FastAPI:
     logging.basicConfig(
         level=getattr(logging, settings.log_level.upper(), logging.INFO),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+
+    # A publicly-known default SECRET_KEY lets anyone forge session JWTs (incl.
+    # admin). Warn loudly at startup so an unconfigured deployment is obvious;
+    # set a strong random SECRET_KEY before exposing the instance.
+    if settings.secret_key in _WEAK_SECRET_KEYS or len(settings.secret_key) < 32:
+        logging.getLogger(__name__).warning(
+            "SECRET_KEY is a known default or shorter than 32 chars — session "
+            "tokens can be forged. Set a strong random SECRET_KEY in production."
+        )
 
     # spec #85: MCP shares the api process; MCP_ENABLED=false removes the route.
     mcp_mount = MCPMount() if settings.mcp_enabled else None
