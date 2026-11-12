@@ -100,13 +100,16 @@ function idempotencyHeaders(key?: string): Record<string, string> {
   return key ? { "Idempotency-Key": key } : {};
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {  const token = useAuth.getState().token;
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const isFormData = options.body instanceof FormData;
+  // The session JWT travels in an HttpOnly cookie (spec #4.3); nothing is
+  // attached here. `credentials: "include"` also carries the cookie to a
+  // separately deployed API origin (NEXT_PUBLIC_API_BASE_URL).
   const response = await fetch(`${API_BASE}/api/v1${path}`, {
     ...options,
+    credentials: "include",
     headers: {
       ...(isFormData ? {} : { "Content-Type": "application/json" }),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers ?? {}),
     },
   });
@@ -143,9 +146,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 async function fetchBlob(path: string): Promise<Blob> {
-  const token = useAuth.getState().token;
   const response = await fetch(`${API_BASE}/api/v1${path}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    credentials: "include",
   });
   if (response.status === 401) {
     useAuth.getState().clear();
@@ -613,12 +615,11 @@ export const api = {
     image?: string | null,
     history?: AiHistoryMessage[],
   ): AsyncGenerator<AiStreamEvent> {
-    const token = useAuth.getState().token;
     const response = await fetch(`${API_BASE}/api/v1/ai/chat/stream`, {
       method: "POST",
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify({ message, image, history }),
     });

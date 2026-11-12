@@ -14,6 +14,11 @@ from app.core.config import settings
 PAT_PREFIX = "azm_"
 PAT_PREFIX_LENGTH = 12
 
+# The browser session cookie holding the web UI's JWT (spec #4.3). HttpOnly +
+# SameSite=Lax: scripts can never read it, and cross-site POSTs cannot ride on
+# it. The same JWT also works as a Bearer token for non-browser API clients.
+SESSION_COOKIE_NAME = "azmark_session"
+
 
 def generate_access_token() -> str:
     """Create a high-entropy secret. 32 random bytes → 43 URL-safe characters."""

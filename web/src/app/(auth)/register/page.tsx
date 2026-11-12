@@ -18,7 +18,7 @@ import type { AuthConfig, CaptchaChallenge } from "@/lib/types";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { setAuth } = useAuth();
+  const { setUser } = useAuth();
   const { t } = useI18n();
   usePageTitle(t("auth.register"));
   const [username, setUsername] = useState("");
@@ -89,10 +89,11 @@ export default function RegisterPage() {
         captcha_token: turnstileActive ? turnstileToken : challenge?.token,
         captcha_answer: turnstileActive ? undefined : challenge ? captchaAnswer : undefined,
       });
-      const token = await api.login(username, password);
-      useAuth.setState({ token: token.access_token });
+      await api.login(username, password);
+      // Login delivered the session as an HttpOnly cookie (spec #4.3); fetch
+      // the profile through it and persist only the user record.
       const user = await api.me();
-      setAuth(token.access_token, user);
+      setUser(user);
       router.replace("/dashboard");
     } catch (err) {
       if (err instanceof ApiError && err.status === 403) {

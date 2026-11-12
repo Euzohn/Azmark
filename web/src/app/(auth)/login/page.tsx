@@ -16,7 +16,7 @@ import { usePageTitle } from "@/lib/page-title";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { setAuth } = useAuth();
+  const { setUser } = useAuth();
   const { t } = useI18n();
   usePageTitle(t("auth.login"));
   const [username, setUsername] = useState("");
@@ -29,10 +29,11 @@ export default function LoginPage() {
     setLoading(true);
     setError(false);
     try {
-      const token = await api.login(username, password);
-      useAuth.setState({ token: token.access_token });
+      // Login delivers the session as an HttpOnly cookie (spec #4.3); fetch
+      // the profile through it and persist only the user record.
+      await api.login(username, password);
       const user = await api.me();
-      setAuth(token.access_token, user);
+      setUser(user);
       router.replace("/dashboard");
     } catch {
       setError(true);

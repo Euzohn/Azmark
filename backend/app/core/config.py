@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     login_rate_limit_per_minute: int = 10
     register_rate_limit_per_minute: int = 5
 
+    # The azmark_session cookie (spec #4.3) carries the web UI's JWT. Set true
+    # when the browser always talks HTTPS (behind TLS-terminating nginx), so
+    # the cookie only ever travels encrypted. Leave false for plain-HTTP LAN
+    # deployments, where Secure would stop login from working at all.
+    session_cookie_secure: bool = False
+
     # MCP server for external agents (spec #85), mounted at /api/v1/mcp.
     # Authenticates personal access tokens only; set false to hide the route.
     mcp_enabled: bool = True

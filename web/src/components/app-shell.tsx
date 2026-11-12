@@ -125,9 +125,13 @@ const SIDEBAR_COLLAPSE_KEY = "azmark-sidebar-collapsed";
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { token, user, setUser, clear, hasHydrated } = useAuth();
+  const { user, setUser, clear, hasHydrated } = useAuth();
   const { t } = useI18n();
   const [moreOpen, setMoreOpen] = useState(false);
+  // The session lives in an HttpOnly cookie (spec #4.3), which scripts cannot
+  // read. Resolving it means asking the backend; until /auth/me answers, the
+  // shell stays on the loader so nothing renders for a stale persisted user.
+  const [sessionReady, setSessionReady] = useState(false);
   // Read the collapse preference lazily so it is already correct on the first
   // sidebar render (SSR never reaches the aside: it renders behind the auth
   // loader), avoiding both a flash and a synchronous setState in an effect.
@@ -145,7 +149,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { data: pendingData } = useQuery({
     queryKey: ["pending-actions", "sidebar-badge", user?.id ?? null],
     queryFn: () => api.listPendingActions({ status: "pending", page_size: 1 }),
-    enabled: !!token && !!user,
+    enabled: !!user,
     refetchInterval: 60_000,
   });
   const pendingCount = pendingData?.pending_total ?? 0;
@@ -160,29 +164,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!hasHydrated) return;
-    if (!token) {
+    // Validate the cookie session on every mount: the persisted user name
+    // alone proves nothing about the cookie that actually authenticates us.
+    api
+      .me()
+      .then(setUser)
+      .catch(() => {
+        // The interceptor clears auth on 401; land on the login form.
+        clear();
+        router.replace("/login");
+      })
+      .finally(() => setSessionReady(true));
+  }, [hasHydrated, router, setUser, clear]);
+
+  // Mid-session expiry: any 401 clears the user, so send the visitor back to
+  // the login form instead of freezing on a loader.
+  useEffect(() => {
+    if (hasHydrated && sessionReady && !user) {
       router.replace("/login");
-      return;
     }
-    if (!user) {
-      api
-        .me()
-        .then(setUser)
-        .catch(() => {
-          // interceptor clears auth on 401
-        });
-    }
-  }, [hasHydrated, token, user, router, setUser]);
+  }, [hasHydrated, sessionReady, user, router]);
 
-  if (!hasHydrated) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <AzmarkLoader className="h-20 w-auto text-foreground" label={t("common.loading")} />
-      </div>
-    );
-  }
-
-  if (!token) {
+  if (!hasHydrated || !sessionReady || !user) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <AzmarkLoader className="h-20 w-auto text-foreground" label={t("common.loading")} />

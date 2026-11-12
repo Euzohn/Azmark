@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.db import get_db
 from app.core.rate_limit import access_token_limiter
-from app.core.security import PAT_PREFIX, decode_access_token
+from app.core.security import PAT_PREFIX, SESSION_COOKIE_NAME, decode_access_token
 from app.models.personal_access_token import TokenScope
 from app.models.user import User, UserRole, UserStatus
 from app.services.access_token import AccessTokenService
@@ -31,40 +31,47 @@ def get_current_user(
         detail="Not authenticated",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    if credentials is None:
-        raise unauthorized
 
-    raw = credentials.credentials
+    if credentials is not None:
+        raw = credentials.credentials
+        # Personal access token (spec #85): agents and scripts present a
+        # long-lived secret instead of a browser session token.
+        if raw.startswith(PAT_PREFIX):
+            resolved = AccessTokenService(db).authenticate(raw)
+            if resolved is None:
+                raise unauthorized
+            user, token = resolved
 
-    # Personal access token (spec #85): agents and scripts present a long-lived
-    # secret instead of a browser session token.
-    if raw.startswith(PAT_PREFIX):
-        resolved = AccessTokenService(db).authenticate(raw)
-        if resolved is None:
+            if settings.pat_rate_limit_per_minute > 0 and not access_token_limiter.allow(
+                str(token.id)
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Too many requests",
+                    headers={"Retry-After": "60"},
+                )
+
+            if request.method not in SAFE_METHODS and token.scope != TokenScope.WRITE:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="This access token is read-only",
+                )
+
+            # Audit entries pick this up so the user can see which agent acted.
+            request.state.auth_kind = "access_token"
+            request.state.actor = {
+                "kind": "access_token",
+                "id": str(token.id),
+                "name": token.name,
+            }
+            return user
+    else:
+        # No Authorization header: the web UI's session cookie (spec #4.3).
+        # Only JWTs are accepted from cookies — PATs must be Bearer headers,
+        # so a stolen cookie cannot impersonate an agent credential either.
+        raw = request.cookies.get(SESSION_COOKIE_NAME)
+        if not raw or raw.startswith(PAT_PREFIX):
             raise unauthorized
-        user, token = resolved
-
-        if settings.pat_rate_limit_per_minute > 0 and not access_token_limiter.allow(str(token.id)):
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Too many requests",
-                headers={"Retry-After": "60"},
-            )
-
-        if request.method not in SAFE_METHODS and token.scope != TokenScope.WRITE:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="This access token is read-only",
-            )
-
-        # Audit entries pick this up so the user can see which agent acted.
-        request.state.auth_kind = "access_token"
-        request.state.actor = {
-            "kind": "access_token",
-            "id": str(token.id),
-            "name": token.name,
-        }
-        return user
 
     subject = decode_access_token(raw)
     if subject is None:

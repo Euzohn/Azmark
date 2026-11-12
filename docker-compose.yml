@@ -66,6 +66,8 @@ services:
       # 登录/注册暴破防护（spec #70）：按客户端 IP 滑动窗口限流，0 关闭。
       LOGIN_RATE_LIMIT_PER_MINUTE: ${LOGIN_RATE_LIMIT_PER_MINUTE:-10}
       REGISTER_RATE_LIMIT_PER_MINUTE: ${REGISTER_RATE_LIMIT_PER_MINUTE:-5}
+      # https 部署设为 true：会话 Cookie（azmark_session）仅经加密连接传输。
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
       # 只读 MCP Server（spec #85）：false 时不挂载 /api/v1/mcp。
       MCP_ENABLED: ${MCP_ENABLED:-true}
       # 酒店地图定位（spec #10/#66）：高德 Key 可选，配置后优先使用（国内可达、中文地址更准）。

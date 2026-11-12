@@ -316,7 +316,7 @@ function formatProposalData(
 export default function AiChatPage() {
   const { t } = useI18n();
   usePageTitle(t("nav.ai"));
-  const { token, user } = useAuth();
+  const { user } = useAuth();
   const userId = user?.id;
   const queryClient = useQueryClient();
 
@@ -363,7 +363,7 @@ export default function AiChatPage() {
   const { data: aiSettings } = useQuery({
     queryKey: ["ai-settings"],
     queryFn: api.getAiSettings,
-    enabled: !!token,
+    enabled: !!user,
   });
   const configured = aiSettings?.configured ?? false;
 

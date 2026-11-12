@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from app.api.deps import (
     get_attachment_service,
@@ -15,7 +15,7 @@ from app.core.captcha import (
 )
 from app.core.config import settings
 from app.core.rate_limit import login_limiter, register_limiter
-from app.core.security import create_access_token
+from app.core.security import SESSION_COOKIE_NAME, create_access_token
 from app.models.audit_log import AuditAction
 from app.models.user import User
 from app.schemas.auth import (
@@ -55,6 +55,24 @@ def _enforce_rate_limit(limiter, budget: int, request: Request, bucket: str, det
             detail=detail,
             headers={"Retry-After": "60"},
         )
+
+
+def _set_session_cookie(response: Response, token: str) -> None:
+    """Issue the web UI's HttpOnly session cookie (spec #4.3).
+
+    HttpOnly keeps the JWT out of any page script; SameSite=Lax keeps it off
+    cross-site POSTs. The same JWT remains valid as a Bearer token, so API
+    clients and tests are unaffected.
+    """
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=token,
+        max_age=settings.access_token_expire_minutes * 60,
+        httponly=True,
+        samesite="lax",
+        secure=settings.session_cookie_secure,
+        path="/",
+    )
 
 
 @router.get("/config", response_model=AuthConfig)
@@ -153,6 +171,7 @@ def register(
 def login(
     payload: LoginRequest,
     request: Request,
+    response: Response,
     service: AuthService = Depends(get_auth_service),
     audit: AuditService = Depends(get_audit_service),
 ):
@@ -173,16 +192,24 @@ def login(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
         ) from None
     audit.log(action=AuditAction.LOGIN, user_id=user.id, request=request)
-    return TokenResponse(access_token=create_access_token(str(user.id)))
+    token = create_access_token(str(user.id))
+    _set_session_cookie(response, token)
+    return TokenResponse(access_token=token)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(
     request: Request,
+    response: Response,
     current_user: User = Depends(get_current_user),
     audit: AuditService = Depends(get_audit_service),
 ) -> None:
-    """Tokens are stateless; clients drop them after this call (spec #4.3, #47)."""
+    """JWTs are stateless; clients drop them after this call (spec #4.3, #47).
+
+    The browser session cookie is cleared here; Bearer tokens simply become
+    useless once the client discards them.
+    """
+    response.delete_cookie(SESSION_COOKIE_NAME, path="/")
     audit.log(action=AuditAction.LOGOUT, user_id=current_user.id, request=request)
 
 
