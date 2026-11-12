@@ -10,9 +10,11 @@ import { test } from "node:test";
 
 import {
   appendMessage,
+  conversationsKey,
   createConversation,
   deriveTitle,
   emptyStore,
+  mergeLegacyStores,
   migrateLegacy,
   patchMessage,
   removeConversation,
@@ -128,4 +130,45 @@ test("migrateLegacy wraps old history into one conversation", () => {
 
 test("migrateLegacy of an empty history yields an empty store", () => {
   assert.deepEqual(migrateLegacy([]), emptyStore());
+});
+
+test("conversationsKey is scoped per user id", () => {
+  assert.equal(conversationsKey("u-1"), "azmark-ai-conversations:v1:u-1");
+  assert.notEqual(conversationsKey("u-1"), conversationsKey("u-2"));
+});
+
+test("mergeLegacyStores prefers the shared multi-key and combines leftovers", () => {
+  const legacy = migrateLegacy(
+    [msg("m1", "user", "旧问题"), msg("m2", "assistant", "旧回答")],
+    NOW,
+  );
+  const shared: ConversationStore = {
+    version: 1,
+    activeId: "c-shared",
+    conversations: [
+      { id: "c-shared", title: "共享会话", createdAt: LATER.toISOString(), updatedAt: LATER.toISOString(), messages: [msg("m3", "user", "另一个问题")] },
+    ],
+  };
+
+  const combined = mergeLegacyStores(legacy, shared);
+  assert.ok(combined);
+  assert.deepEqual(
+    combined?.conversations.map((c) => c.id),
+    [legacy.conversations[0].id, "c-shared"],
+  );
+  assert.equal(combined?.activeId, "c-shared");
+});
+
+test("mergeLegacyStores falls back to whichever side has data", () => {
+  const shared: ConversationStore = {
+    version: 1,
+    activeId: "c-shared",
+    conversations: [],
+  };
+  assert.equal(mergeLegacyStores(emptyStore(), shared), null);
+  assert.equal(mergeLegacyStores(emptyStore(), null), null);
+
+  const legacy = migrateLegacy([msg("m1", "user", "旧问题")], NOW);
+  const merged = mergeLegacyStores(legacy, null);
+  assert.equal(merged?.conversations.length, 1);
 });

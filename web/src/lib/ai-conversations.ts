@@ -8,15 +8,26 @@
  * Storage shape (versioned for future migrations):
  *   { version: 1, activeId, conversations: Conversation[] }
  *
- * Before multi-conversation support there was a single array under
- * `azmark-ai-chat-history`; that is migrated into one conversation on first
- * load so nobody loses their existing chat.
+ * The store key is scoped per user id (`azmark-ai-conversations:v1:<userId>`):
+ * chat history is private to the account that wrote it. Before this isolation
+ * the history lived under two shared keys — the single-history
+ * `azmark-ai-chat-history` and the pre-isolation multi-conversation key — so
+ * signing in with a different account on the same browser revealed the
+ * previous account's chats. On first load, a non-admin account adopts the
+ * shared leftovers and the shared keys are removed; admins read (and write)
+ * only their own key.
  */
 
 import type { AiProposal } from "./types";
 
-export const CONVERSATIONS_KEY = "azmark-ai-conversations";
+/** Shared keys from before per-user isolation (one history for every account). */
 export const LEGACY_HISTORY_KEY = "azmark-ai-chat-history";
+export const LEGACY_SHARED_KEY = "azmark-ai-conversations";
+
+/** Per-user key: chat history is private to the account that wrote it. */
+export function conversationsKey(userId: string): string {
+  return `azmark-ai-conversations:v1:${userId}`;
+}
 
 let _seq = 0;
 
@@ -208,24 +219,57 @@ function parseLegacy(raw: string | null): StoredMessage[] {
   }
 }
 
-/** Load the store, migrating the legacy single-history key if needed. */
-export function loadStore(): ConversationStore {
-  if (typeof window === "undefined") return emptyStore();
-  const stored = parseStore(window.localStorage.getItem(CONVERSATIONS_KEY));
-  if (stored) return stored;
-
-  const legacy = migrateLegacy(parseLegacy(window.localStorage.getItem(LEGACY_HISTORY_KEY)));
-  if (legacy.conversations.length > 0) {
-    saveStore(legacy);
-    window.localStorage.removeItem(LEGACY_HISTORY_KEY);
+/**
+ * Combine pre-isolation leftovers into one store for adoption, preferring the
+ * newer multi-conversation data. Pure so it can be pinned by unit tests.
+ */
+export function mergeLegacyStores(
+  legacy: ConversationStore,
+  shared: ConversationStore | null,
+): ConversationStore | null {
+  const usable = shared && shared.conversations.length > 0 ? shared : null;
+  if (usable && legacy.conversations.length > 0) {
+    return {
+      ...usable,
+      conversations: [...legacy.conversations, ...usable.conversations],
+    };
   }
-  return legacy;
+  if (usable) return usable;
+  return legacy.conversations.length > 0 ? legacy : null;
 }
 
-export function saveStore(store: ConversationStore): void {
+/**
+ * Load the signed-in account's store. When the per-user key is absent, the
+ * pre-isolation leftovers — the single-history key and the shared
+ * multi-conversation key every account used to read — are adopted by the
+ * first *non-admin* signed-in account opening the AI page, then the shared
+ * keys are removed. Admins never adopt: the shared leftovers are regular
+ * users' chat history, and this keeps the isolation guarantee even if an
+ * admin logs in before the original author after the upgrade.
+ */
+export function loadStore(userId: string, adoptShared = true): ConversationStore {
+  if (typeof window === "undefined") return emptyStore();
+  const stored = parseStore(window.localStorage.getItem(conversationsKey(userId)));
+  if (stored) return stored;
+
+  const adopted = adoptShared
+    ? mergeLegacyStores(
+        migrateLegacy(parseLegacy(window.localStorage.getItem(LEGACY_HISTORY_KEY))),
+        parseStore(window.localStorage.getItem(LEGACY_SHARED_KEY)),
+      )
+    : null;
+  if (adopted) {
+    saveStore(adopted, userId);
+    window.localStorage.removeItem(LEGACY_HISTORY_KEY);
+    window.localStorage.removeItem(LEGACY_SHARED_KEY);
+  }
+  return adopted ?? emptyStore();
+}
+
+export function saveStore(store: ConversationStore, userId: string): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(store));
+    window.localStorage.setItem(conversationsKey(userId), JSON.stringify(store));
   } catch {
     // localStorage quota exceeded — drop the write rather than crash the page.
   }

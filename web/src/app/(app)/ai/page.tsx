@@ -31,6 +31,7 @@ import {
   activeConversation,
   appendMessage,
   createConversation,
+  emptyStore,
   loadStore,
   patchMessage,
   removeConversation,
@@ -315,10 +316,22 @@ function formatProposalData(
 export default function AiChatPage() {
   const { t } = useI18n();
   usePageTitle(t("nav.ai"));
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const userId = user?.id;
   const queryClient = useQueryClient();
 
-  const [store, setStore] = useState<ConversationStore>(() => loadStore());
+  // Chat history is private per account. Normal case: persisted auth is
+  // hydrated before this page mounts, so the store can be read synchronously
+  // at mount. `storeOwner` remembers whose store is in memory. Admins never
+  // adopt pre-isolation leftovers (see loadStore) — they skip to their own
+  // (empty) store.
+  const [store, setStore] = useState<ConversationStore>(() => {
+    const account = useAuth.getState().user;
+    return account ? loadStore(account.id, account.role !== "ADMIN") : emptyStore();
+  });
+  const [storeOwner, setStoreOwner] = useState<string | null>(
+    () => useAuth.getState().user?.id ?? null,
+  );
   // A trip page can deep-link here with a prefilled request, e.g.
   // /ai?q=<journal prompt>. Guarded like the wrapped page: the shell renders
   // after auth hydration, so this never runs on the server.
@@ -418,11 +431,25 @@ export default function AiChatPage() {
     setStore(updater);
   }, []);
 
-  // Persist on every change. The store is loaded lazily in the useState
-  // initializer, so the first run simply rewrites the loaded value.
+  // Load the signed-in account's history once it is known (the rare window
+  // where the shell is still fetching the account after mount), and remember
+  // which account the in-memory store belongs to.
   useEffect(() => {
-    saveStore(store);
-  }, [store]);
+    if (!userId || storeOwner === userId) return;
+    queueMicrotask(() => {
+      setStore(loadStore(userId, user?.role !== "ADMIN"));
+      setStoreOwner(userId);
+    });
+  }, [userId, storeOwner, user]);
+
+  // Persist on every change — but only while the store belongs to the
+  // signed-in account. This blocks two leaks: writing an empty pre-load store
+  // over the account's history, and writing account A's store under account
+  // B's key when the account switches.
+  useEffect(() => {
+    if (!userId || storeOwner !== userId) return;
+    saveStore(store, userId);
+  }, [store, storeOwner, userId]);
 
   const updateActive = useCallback(
     (fn: (conv: Conversation) => Conversation) => {
