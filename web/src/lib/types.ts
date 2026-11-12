@@ -765,6 +765,54 @@ export interface AdminSystem {
   audit_logs: number;
 }
 
+export interface AdminSettings {
+  allow_registration: boolean;
+  registration_captcha_enabled: boolean;
+  captcha_provider: "arithmetic" | "turnstile";
+  turnstile_site_key: string | null;
+  turnstile_secret_set: boolean;
+  smtp_host: string | null;
+  smtp_port: number | null;
+  smtp_username: string | null;
+  smtp_sender: string | null;
+  smtp_starttls: boolean;
+  smtp_password_set: boolean;
+}
+
+export interface AdminSettingsUpdateInput {
+  allow_registration?: boolean;
+  registration_captcha_enabled?: boolean;
+  captcha_provider?: "arithmetic" | "turnstile";
+  turnstile_site_key?: string;
+  turnstile_secret?: string;
+  smtp_host?: string;
+  smtp_port?: number | null;
+  smtp_username?: string;
+  smtp_password?: string;
+  smtp_sender?: string;
+  smtp_starttls?: boolean;
+}
+
+export interface AdminUserCreateInput {
+  username: string;
+  password: string;
+  email?: string;
+  display_name?: string;
+  role?: "USER" | "ADMIN";
+}
+
+export interface AuthConfig {
+  allow_registration: boolean;
+  registration_captcha_enabled: boolean;
+  captcha_provider: "arithmetic" | "turnstile";
+  turnstile_site_key: string | null;
+}
+
+export interface CaptchaChallenge {
+  token: string;
+  question: string;
+}
+
 export interface AdminAuditLog {
   id: string;
   user_id: string | null;

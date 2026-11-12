@@ -20,4 +20,6 @@ export const AUDIT_ACTION_LABELS: Record<string, TranslationKey> = {
   ai_action: "audit.action.ai_action",
   admin_bootstrap: "audit.action.admin_bootstrap",
   admin_update_user: "audit.action.admin_update_user",
+  admin_create_user: "audit.action.admin_create_user",
+  admin_update_settings: "audit.action.admin_update_settings",
 };

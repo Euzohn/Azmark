@@ -14,6 +14,10 @@ class UsernameTakenError(AuthError):
     pass
 
 
+class EmailTakenError(AuthError):
+    pass
+
+
 class InvalidCredentialsError(AuthError):
     pass
 
@@ -36,6 +40,8 @@ class AuthService:
     ) -> User:
         if self.users.get_by_username(username) is not None:
             raise UsernameTakenError(username)
+        if email and self.users.get_by_email(email) is not None:
+            raise EmailTakenError(email)
         user = User(
             username=username,
             password_hash=hash_password(password),

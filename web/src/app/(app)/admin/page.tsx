@@ -1,22 +1,26 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ShieldAlert, Users } from "lucide-react";
+import { Plus, ShieldAlert, Users } from "lucide-react";
 import { useState } from "react";
 
 import { AzmarkLoader } from "@/components/azmark-loader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { AUDIT_ACTION_LABELS } from "@/lib/audit-actions";
 import { useAuth } from "@/lib/auth-store";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
+import type { AdminUser } from "@/lib/types";
+
+import { AdminSettingsCard } from "./settings-card";
 
 function formatDate(value: string): string {
   const date = new Date(value);
@@ -30,6 +34,182 @@ function formatDateTime(value: string): string {
   return date.toLocaleString();
 }
 
+function CreateUserDialog({ onClose }: { onClose: () => void }) {
+  const { t } = useI18n();
+  const queryClient = useQueryClient();
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [role, setRole] = useState<"USER" | "ADMIN">("USER");
+  const [error, setError] = useState<string | null>(null);
+
+  const create = useMutation({
+    mutationFn: () =>
+      api.createAdminUser({
+        username,
+        password,
+        email: email.trim() || undefined,
+        display_name: displayName.trim() || undefined,
+        role,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-system"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-logs"] });
+      onClose();
+    },
+    onError: (err) => {
+      if (err instanceof ApiError && err.status === 409) {
+        setError(err.message.toLowerCase().includes("email") ? t("admin.emailTaken") : t("admin.usernameTaken"));
+      } else {
+        setError(t("admin.createFailed"));
+      }
+    },
+  });
+
+  return (
+    <Dialog open onClose={onClose} title={t("admin.createUser")}>
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          create.mutate();
+        }}
+      >
+        <p className="text-xs text-muted-foreground">{t("admin.createUserHint")}</p>
+        <div>
+          <Label className="mb-1.5 block" htmlFor="new-user-username">
+            {t("auth.username")}
+          </Label>
+          <Input
+            id="new-user-username"
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            required
+            minLength={3}
+            autoComplete="off"
+          />
+        </div>
+        <div>
+          <Label className="mb-1.5 block" htmlFor="new-user-display-name">
+            {t("admin.displayName")}
+          </Label>
+          <Input
+            id="new-user-display-name"
+            value={displayName}
+            onChange={(event) => setDisplayName(event.target.value)}
+            autoComplete="off"
+          />
+        </div>
+        <div>
+          <Label className="mb-1.5 block" htmlFor="new-user-email">
+            {t("auth.email")}
+          </Label>
+          <Input
+            id="new-user-email"
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            autoComplete="off"
+          />
+        </div>
+        <div>
+          <Label className="mb-1.5 block" htmlFor="new-user-password">
+            {t("admin.initialPassword")}
+          </Label>
+          <Input
+            id="new-user-password"
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            required
+            minLength={6}
+            autoComplete="new-password"
+          />
+        </div>
+        <div>
+          <Label className="mb-1.5 block" htmlFor="new-user-role">
+            {t("admin.role")}
+          </Label>
+          <Select
+            id="new-user-role"
+            value={role}
+            onChange={(event) => setRole(event.target.value as "USER" | "ADMIN")}
+          >
+            <option value="USER">{t("admin.role.user")}</option>
+            <option value="ADMIN">{t("admin.role.admin")}</option>
+          </Select>
+        </div>
+        {error ? <p className="text-sm text-danger">{error}</p> : null}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onClose}>
+            {t("common.cancel")}
+          </Button>
+          <Button type="submit" disabled={create.isPending}>
+            {t("admin.createUser")}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+function ResetPasswordDialog({ user, onClose }: { user: AdminUser; onClose: () => void }) {
+  const { t } = useI18n();
+  const queryClient = useQueryClient();
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const reset = useMutation({
+    mutationFn: () => api.updateAdminUser(user.id, { new_password: password }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-logs"] });
+      onClose();
+    },
+    onError: () => setError(t("admin.resetFailed")),
+  });
+
+  return (
+    <Dialog open onClose={onClose} title={t("admin.resetPassword")}>
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          reset.mutate();
+        }}
+      >
+        <p className="text-xs text-muted-foreground">
+          {t("admin.resetHint", { username: user.username })}
+        </p>
+        <div>
+          <Label className="mb-1.5 block" htmlFor="reset-password">
+            {t("admin.newPasswordLabel")}
+          </Label>
+          <Input
+            id="reset-password"
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            required
+            minLength={6}
+            autoComplete="new-password"
+          />
+        </div>
+        {error ? <p className="text-sm text-danger">{error}</p> : null}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onClose}>
+            {t("common.cancel")}
+          </Button>
+          <Button type="submit" disabled={reset.isPending}>
+            {t("admin.resetPassword")}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
 export default function AdminPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { t } = useI18n();
   const { user } = useAuth();
@@ -40,6 +220,8 @@ export default function AdminPage({ embedded = false }: { embedded?: boolean } =
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [logPage, setLogPage] = useState(1);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [resetTarget, setResetTarget] = useState<AdminUser | null>(null);
 
   const usersQuery = useQuery({
     queryKey: ["admin-users", search, page],
@@ -130,13 +312,19 @@ export default function AdminPage({ embedded = false }: { embedded?: boolean } =
 
       <Card className="animate-fade-in-up" style={{ animationDelay: "120ms" }}>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Users className="h-4 w-4" />
-            {t("admin.users")}
-            {usersQuery.data ? (
-              <Badge variant="neutral">{usersQuery.data.total}</Badge>
-            ) : null}
-          </CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              {t("admin.users")}
+              {usersQuery.data ? (
+                <Badge variant="neutral">{usersQuery.data.total}</Badge>
+              ) : null}
+            </CardTitle>
+            <Button size="sm" onClick={() => setCreateOpen(true)}>
+              <Plus className="h-4 w-4" />
+              {t("admin.createUser")}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <form
@@ -191,6 +379,7 @@ export default function AdminPage({ embedded = false }: { embedded?: boolean } =
                     <th className="px-4 py-3 font-semibold">{t("admin.records")}</th>
                     <th className="px-4 py-3 font-semibold">{t("admin.trips")}</th>
                     <th className="px-4 py-3 font-semibold">{t("admin.joined")}</th>
+                    <th className="px-4 py-3 font-semibold">{t("common.actions")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -240,6 +429,19 @@ export default function AdminPage({ embedded = false }: { embedded?: boolean } =
                         <td className="px-4 py-3 text-muted-foreground">{item.trips}</td>
                         <td className="px-4 py-3 text-muted-foreground">
                           {formatDate(item.created_at)}
+                        </td>
+                        <td className="px-4 py-3">
+                          {isSelf ? (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setResetTarget(item)}
+                            >
+                              {t("admin.resetPassword")}
+                            </Button>
+                          )}
                         </td>
                       </tr>
                     );
@@ -380,6 +582,13 @@ export default function AdminPage({ embedded = false }: { embedded?: boolean } =
           ) : null}
         </CardContent>
       </Card>
+
+      <AdminSettingsCard />
+
+      {createOpen ? <CreateUserDialog onClose={() => setCreateOpen(false)} /> : null}
+      {resetTarget ? (
+        <ResetPasswordDialog user={resetTarget} onClose={() => setResetTarget(null)} />
+      ) : null}
     </div>
   );
 }

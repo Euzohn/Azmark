@@ -8,6 +8,26 @@ class RegisterRequest(BaseModel):
     password: str = Field(min_length=6, max_length=128)
     email: str | None = Field(default=None, max_length=255)
     display_name: str | None = Field(default=None, max_length=100)
+    # Captcha challenge (spec #60). Required only while the instance has the
+    # registration captcha enabled; ignored (and optional) otherwise.
+    captcha_token: str | None = Field(default=None, max_length=512)
+    captcha_answer: str | None = Field(default=None, max_length=16)
+
+
+class AuthConfig(BaseModel):
+    """Public facts the unauthenticated login/register pages need to render
+    correctly: whether self-registration is open, how bots are challenged, and
+    the Turnstile site key when the widget must render."""
+
+    allow_registration: bool
+    registration_captcha_enabled: bool
+    captcha_provider: str
+    turnstile_site_key: str | None
+
+
+class CaptchaChallenge(BaseModel):
+    token: str
+    question: str
 
 
 class LoginRequest(BaseModel):

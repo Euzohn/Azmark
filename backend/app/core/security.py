@@ -1,9 +1,11 @@
+import base64
 import hashlib
 import secrets
 from datetime import UTC, datetime, timedelta
 
 import bcrypt
 import jwt
+from cryptography.fernet import Fernet
 
 from app.core.config import settings
 
@@ -63,3 +65,27 @@ def hash_ip(ip: str | None) -> str | None:
     if not ip:
         return None
     return hashlib.sha256(f"{settings.secret_key}:{ip}".encode()).hexdigest()
+
+
+def _field_key(salt: str) -> bytes:
+    """Derive a 32-byte Fernet key from SECRET_KEY for reversible secrets."""
+    return base64.urlsafe_b64encode(
+        hashlib.sha256(f"azmark-field:{salt}:{settings.secret_key}".encode()).digest()
+    )
+
+
+def encrypt_field(salt: str, value: str) -> str:
+    """Encrypt a secret stored in the database (e.g. SMTP password).
+
+    Reversible because the server must present the credential back to the SMTP
+    server on every send; the key is derived from SECRET_KEY, so rotating it
+    invalidates stored secrets (admins re-enter them — safe failure mode).
+    """
+    return Fernet(_field_key(salt)).encrypt(value.encode("utf-8")).decode("utf-8")
+
+
+def decrypt_field(salt: str, token: str) -> str:
+    try:
+        return Fernet(_field_key(salt)).decrypt(token.encode("utf-8")).decode("utf-8")
+    except Exception:  # wrong key / tampered ciphertext → treat as unset
+        return ""

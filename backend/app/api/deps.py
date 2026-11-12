@@ -228,6 +228,12 @@ def get_admin_service(db: Session = Depends(get_db)):
     return AdminService(db)
 
 
+def get_system_settings_service(db: Session = Depends(get_db)):
+    from app.services.system_setting import SystemSettingsService
+
+    return SystemSettingsService(db)
+
+
 @lru_cache(maxsize=1)
 def get_storage_provider() -> StorageProvider:
     """One S3 client per process (spec #44/#66)."""

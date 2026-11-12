@@ -46,7 +46,8 @@
 
 | 模块 | 能力 |
 | --- | --- |
-| 账号 | 注册、登录（JWT Bearer）、当前用户、改用户名/密码（不依赖邮件） |
+| 账号 | 登录（JWT Bearer）、当前用户、改用户名/密码（不依赖邮件）；自助注册默认关闭，管理员可开启并选择人机验证（自建算术题 / Cloudflare Turnstile） |
+| 管理 | 管理员新建账户、重置用户密码、启停与角色调整；系统设置（注册开关、人机验证、SMTP 邮箱配置，凭据加密存储不回显）；全局操作日志与系统统计 |
 | 航班 | 详情、编辑、删除、AI/表单录入 |
 | 火车 | 详情、编辑、删除、AI/表单录入 |
 | 其他交通 | 详情、编辑、删除、AI/表单录入 |
@@ -138,7 +139,7 @@ openssl rand -hex 32    # SECRET_KEY
 ./deploy.sh
 ```
 
-`deploy.sh` 会拉取代码 → 备份数据库 → 重建容器 → 执行迁移 → 健康检查 → 清理；若 `git pull` 没有新提交且服务健康，则跳过备份/构建/迁移直接退出（强制重建用 `FORCE_DEPLOY=1 ./deploy.sh`）。完成后浏览器打开 `http://<服务器IP>:3000` → 注册 → 添加航班 → 在「地图」看到大圆航线。
+`deploy.sh` 会拉取代码 → 备份数据库 → 重建容器 → 执行迁移 → 健康检查 → 清理；若 `git pull` 没有新提交且服务健康，则跳过备份/构建/迁移直接退出（强制重建用 `FORCE_DEPLOY=1 ./deploy.sh`）。完成后浏览器打开 `http://<服务器IP>:3000` → 首个管理员登录（见下）→ 在「管理」页新建账户（或开启自助注册）→ 添加航班 → 在「地图」看到大圆航线。
 
 > 审计日志的客户端 IP 在 `.env` 设置 `TRUSTED_PROXIES`（填 compose 网络网段）后即可正确记录，直连 3000 也生效——审计由 api 写入，而它的直连 peer 是 web 容器。详见 [`docs/reverse-proxy.md`](./docs/reverse-proxy.md)；想进一步收紧端口、杜绝 XFF 伪造，可再加一层宿主机 nginx。
 
@@ -150,7 +151,7 @@ openssl rand -hex 32    # SECRET_KEY
 docker compose exec api python -m app create-admin --username admin --email you@example.com
 ```
 
-管理员登录后侧边栏会出现「管理」，可查看用户、全局操作日志与系统统计。
+管理员登录后侧边栏会出现「管理」，可查看用户、全局操作日志与系统统计，也可新建账户、重置用户密码、开启自助注册并配置人机验证（算术题 / Turnstile）与 SMTP 邮箱服务。
 
 附件使用 compose 内置的 MinIO。请修改 `.env` 中的 `S3_SECRET_KEY`（至少 8 位）。bucket 由 API 在首次上传时自动创建。`deploy.sh` 只备份 PostgreSQL 数据库；附件存放在 `minio_data` 数据卷，请另行备份该卷（例如定期对卷做快照/导出）。使用外部 S3 / R2 / OSS 时，设置 `S3_ENDPOINT`、`S3_REGION`、`S3_USE_SSL`、`S3_ADDRESSING_STYLE`，并提前创建 bucket。
 

@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class AdminUserRead(BaseModel):
@@ -19,6 +19,17 @@ class AdminUserRead(BaseModel):
     created_at: datetime
 
 
+class AdminUserCreate(BaseModel):
+    """Admin-created account (spec #60): initial password is conveyed to the
+    new user out-of-band; they should change it on first login."""
+
+    username: str = Field(min_length=3, max_length=64)
+    password: str = Field(min_length=6, max_length=128)
+    email: str | None = Field(default=None, max_length=255)
+    display_name: str | None = Field(default=None, max_length=100)
+    role: Literal["USER", "ADMIN"] = "USER"
+
+
 class AdminUserList(BaseModel):
     items: list[AdminUserRead]
     total: int
@@ -29,6 +40,7 @@ class AdminUserList(BaseModel):
 class AdminUserUpdate(BaseModel):
     role: Literal["USER", "ADMIN"] | None = None
     status: Literal["ACTIVE", "DISABLED"] | None = None
+    new_password: str | None = Field(default=None, min_length=6, max_length=128)
 
 
 class AdminSystemRead(BaseModel):

@@ -10,6 +10,7 @@ from sqlalchemy.pool import StaticPool
 from app.api.deps import get_storage_provider
 from app.core.db import Base, get_db
 from app.main import app
+from app.models.system_setting import SystemSetting
 from app.services.storage import StorageObjectNotFound, StorageProvider
 
 TEST_DATABASE_URL = "sqlite+pysqlite://"
@@ -63,6 +64,23 @@ class FakeStorageProvider(StorageProvider):
         self.content_types.pop(key, None)
 
 
+def seed_system_settings(db: Session, **overrides) -> SystemSetting:
+    """Upsert the single settings row within the current test transaction.
+
+    The product default is registration-closed; the suite opts every test into
+    the open-registration mode it was written against (tests that exercise the
+    gate flip it back explicitly).
+    """
+    row = db.get(SystemSetting, 1)
+    if row is None:
+        row = SystemSetting(id=1, allow_registration=True)
+        db.add(row)
+    for field, value in overrides.items():
+        setattr(row, field, value)
+    db.flush()
+    return row
+
+
 @pytest.fixture
 def storage() -> FakeStorageProvider:
     return FakeStorageProvider()
@@ -77,6 +95,11 @@ def client(
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_storage_provider] = lambda: storage
+
+    # Self-registration is closed by default (product decision); the test
+    # suite opts into the open mode unless a test overrides it via
+    # seed_system_settings(...).
+    seed_system_settings(db)
 
     # The MCP endpoint is a raw ASGI mount, so it cannot use get_db; point its
     # session scope at the same in-memory session.

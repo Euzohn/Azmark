@@ -1,8 +1,11 @@
 import { useAuth } from "@/lib/auth-store";
 import type {
   AdminAuditLogList,
+  AdminSettings,
+  AdminSettingsUpdateInput,
   AdminSystem,
   AdminUser,
+  AdminUserCreateInput,
   AdminUserList,
   AiChatResponse,
   AiHistoryMessage,
@@ -49,6 +52,8 @@ import type {
   AccessTokenList,
   AccessTokenCreated,
   AccessTokenScope,
+  AuthConfig,
+  CaptchaChallenge,
   Hotel,
   HotelGeocodeRead,
   HotelInput,
@@ -173,11 +178,20 @@ function attachmentForm(
 }
 
 export const api = {
-  register: (username: string, password: string, email?: string, display_name?: string) =>
+  register: (payload: {
+    username: string;
+    password: string;
+    email?: string;
+    display_name?: string;
+    captcha_token?: string;
+    captcha_answer?: string;
+  }) =>
     request<User>("/auth/register", {
       method: "POST",
-      body: JSON.stringify({ username, password, email, display_name }),
+      body: JSON.stringify(payload),
     }),
+  getAuthConfig: () => request<AuthConfig>("/auth/config"),
+  getCaptcha: () => request<CaptchaChallenge>("/auth/captcha"),
   login: (username: string, password: string) =>
     request<TokenResponse>("/auth/login", {
       method: "POST",
@@ -518,10 +532,26 @@ export const api = {
     const suffix = query.toString() ? `?${query.toString()}` : "";
     return request<AdminUserList>(`/admin/users${suffix}`);
   },
-  updateAdminUser: (id: string, data: { role?: string; status?: string }) =>
+  updateAdminUser: (id: string, data: { role?: string; status?: string; new_password?: string }) =>
     request<AdminUser>(`/admin/users/${id}`, {
       method: "PATCH",
       body: JSON.stringify(data),
+    }),
+  createAdminUser: (data: AdminUserCreateInput) =>
+    request<AdminUser>("/admin/users", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  getAdminSettings: () => request<AdminSettings>("/admin/settings"),
+  updateAdminSettings: (data: AdminSettingsUpdateInput) =>
+    request<AdminSettings>("/admin/settings", {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  testAdminEmail: (to?: string) =>
+    request<{ ok: boolean }>("/admin/settings/test-email", {
+      method: "POST",
+      body: JSON.stringify(to ? { to } : {}),
     }),
   getAdminSystem: () => request<AdminSystem>("/admin/system"),
   listAdminLogs: (params: { page?: number; page_size?: number } = {}) => {

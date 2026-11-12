@@ -26,6 +26,13 @@ class AdminUserNotFoundError(Exception):
     pass
 
 
+class AdminUserExistsError(Exception):
+    def __init__(self, field: str, value: str) -> None:
+        super().__init__(f"{field} already in use")
+        self.field = field
+        self.value = value
+
+
 class AdminSelfLockoutError(Exception):
     """An admin tried to demote or disable their own account."""
 
@@ -217,6 +224,32 @@ class AdminService:
             created_at=user.created_at,
         )
 
+    def create_user(
+        self,
+        *,
+        username: str,
+        password: str,
+        email: str | None = None,
+        display_name: str | None = None,
+        role: str = UserRole.USER,
+    ) -> User:
+        """Admin-created account (spec #60). The initial password changes hands
+        out-of-band; the new user should change it on first login."""
+        repo = UserRepository(self.db)
+        if repo.get_by_username(username) is not None:
+            raise AdminUserExistsError("username", username)
+        if email and repo.get_by_email(email) is not None:
+            raise AdminUserExistsError("email", email)
+        user = User(
+            username=username,
+            email=email,
+            password_hash=hash_password(password),
+            display_name=display_name or username,
+            role=role,
+            status=UserStatus.ACTIVE,
+        )
+        return repo.create(user)
+
     def update_user(
         self, *, actor: User, user_id, payload: AdminUserUpdate
     ) -> tuple[AdminUserRead, list[str]]:
@@ -225,19 +258,27 @@ class AdminService:
             raise AdminUserNotFoundError
 
         data = payload.model_dump(exclude_unset=True, exclude_none=True)
-        if not data:
+        new_password = data.pop("new_password", None)
+        if not data and new_password is None:
             return self.read_user(user), []
 
         if user.id == actor.id:
-            if data.get("role") == UserRole.USER or data.get("status") == UserStatus.DISABLED:
+            losing_own = (
+                data.get("role") == UserRole.USER or data.get("status") == UserStatus.DISABLED
+            )
+            if losing_own or new_password is not None:
                 raise AdminSelfLockoutError
 
         for field, value in data.items():
             setattr(user, field, value)
+        fields = sorted(data.keys())
+        if new_password is not None:
+            user.password_hash = hash_password(new_password)
+            fields.append("new_password")
         self.db.add(user)
         self.db.commit()
         self.db.refresh(user)
-        return self.read_user(user), sorted(data.keys())
+        return self.read_user(user), fields
 
     def system(self) -> AdminSystemRead:
         def count(model) -> int:

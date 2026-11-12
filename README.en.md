@@ -46,7 +46,8 @@ See [`AGENTS.md`](./AGENTS.md) for repository conventions, [`CHANGELOG.md`](./CH
 
 | Module | Capabilities |
 | --- | --- |
-| Accounts | Register, login (JWT bearer), current user, change username / password (no email required) |
+| Accounts | Login (JWT bearer), current user, change username / password (no email required); self-registration is closed by default and admins can open it with a bot challenge (built-in arithmetic / Cloudflare Turnstile) |
+| Admin | Admin-created accounts, password reset, enable / disable and role changes; system settings (registration toggle, captcha, SMTP — credentials encrypted at rest, never echoed back); global action log and system stats |
 | Flights | Detail, edit, delete, AI / form entry |
 | Trains | Detail, edit, delete, AI / form entry |
 | Other transport | Detail, edit, delete, AI / form entry |
@@ -138,7 +139,7 @@ openssl rand -hex 32    # SECRET_KEY
 ./deploy.sh
 ```
 
-`deploy.sh` pulls the code → backs up the database → rebuilds containers → runs migrations → health-checks → cleans up. If `git pull` finds no new commits and the services are healthy, it skips backup / build / migration and exits (force a rebuild with `FORCE_DEPLOY=1 ./deploy.sh`). When it finishes, open `http://<server-ip>:3000` → register → add a flight → watch the great-circle route appear on the map.
+`deploy.sh` pulls the code → backs up the database → rebuilds containers → runs migrations → health-checks → cleans up. If `git pull` finds no new commits and the services are healthy, it skips backup / build / migration and exits (force a rebuild with `FORCE_DEPLOY=1 ./deploy.sh`). When it finishes, open `http://<server-ip>:3000` → sign in as the first admin (see below) → create accounts on the Admin page (or enable self-registration) → add a flight → watch the great-circle route appear on the map.
 
 > The audit log records real client IPs once `TRUSTED_PROXIES` is set in `.env` (to the compose network's subnet), including with direct :3000 access — the audit is written by the api, whose direct peer is the web container. See [`docs/reverse-proxy.md`](./docs/reverse-proxy.md). A host-level nginx can additionally lock the port down and prevent X-Forwarded-For spoofing.
 
@@ -150,7 +151,7 @@ First admin (pick one):
 docker compose exec api python -m app create-admin --username admin --email you@example.com
 ```
 
-After an admin logs in, an "Admin" entry appears in the sidebar with users, the global action log and system statistics.
+After an admin logs in, an "Admin" entry appears in the sidebar with users, the global action log and system statistics — admins can also create users, reset passwords, open self-registration and configure the bot challenge (arithmetic / Turnstile) and SMTP email settings.
 
 Attachments use the MinIO bundled in compose. Change `S3_SECRET_KEY` in `.env` (at least 8 characters). The bucket is created automatically by the API on first upload. `deploy.sh` only backs up the PostgreSQL database; attachments live in the `minio_data` volume — back that volume up separately (e.g. periodic volume snapshots / exports). For external S3 / R2 / OSS, set `S3_ENDPOINT`, `S3_REGION`, `S3_USE_SSL`, `S3_ADDRESSING_STYLE` and create the bucket in advance.
 

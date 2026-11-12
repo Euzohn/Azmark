@@ -5,11 +5,20 @@ from app.api.deps import (
     get_audit_service,
     get_auth_service,
     get_current_user,
+    get_system_settings_service,
+)
+from app.core.captcha import (
+    CAPTCHA_PROVIDER_TURNSTILE,
+    create_captcha,
+    verify_captcha,
+    verify_turnstile,
 )
 from app.core.security import create_access_token
 from app.models.audit_log import AuditAction
 from app.models.user import User
 from app.schemas.auth import (
+    AuthConfig,
+    CaptchaChallenge,
     DeleteAccountRequest,
     LoginRequest,
     PasswordChange,
@@ -20,15 +29,43 @@ from app.schemas.auth import (
     UserUpdate,
 )
 from app.services.attachment import AttachmentService
-from app.services.audit import AuditService
+from app.services.audit import AuditService, client_ip
 from app.services.auth import (
     AuthService,
+    EmailTakenError,
     InvalidCredentialsError,
     LastAdminError,
     UsernameTakenError,
 )
+from app.services.system_setting import SystemSettingsService, effective_registration_captcha
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@router.get("/config", response_model=AuthConfig)
+def auth_config(
+    service: SystemSettingsService = Depends(get_system_settings_service),
+) -> AuthConfig:
+    """Public registration posture so the anonymous forms can render correctly.
+
+    The provider reported here is the *effective* one: Turnstile only when it
+    is fully configured, otherwise arithmetic — exactly what the register
+    endpoint enforces, so the form and the API never disagree.
+    """
+    row = service.get_or_create()
+    provider, site_key, _secret = effective_registration_captcha(row)
+    return AuthConfig(
+        allow_registration=row.allow_registration,
+        registration_captcha_enabled=row.registration_captcha_enabled,
+        captcha_provider=provider,
+        turnstile_site_key=site_key,
+    )
+
+
+@router.get("/captcha", response_model=CaptchaChallenge)
+def captcha() -> CaptchaChallenge:
+    token, question = create_captcha()
+    return CaptchaChallenge(token=token, question=question)
 
 
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
@@ -36,8 +73,38 @@ def register(
     payload: RegisterRequest,
     request: Request,
     service: AuthService = Depends(get_auth_service),
+    sys_settings: SystemSettingsService = Depends(get_system_settings_service),
     audit: AuditService = Depends(get_audit_service),
 ) -> User:
+    row = sys_settings.get_or_create()
+    if not row.allow_registration:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Registration is disabled on this instance",
+        )
+    if row.registration_captcha_enabled:
+        provider, _site_key, turnstile_secret = effective_registration_captcha(row)
+        if provider == CAPTCHA_PROVIDER_TURNSTILE:
+            # Cloudflare Turnstile: the client sends the widget token as captcha_token.
+            if not payload.captcha_token:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, detail="Captcha required"
+                )
+            if not verify_turnstile(payload.captcha_token, turnstile_secret, client_ip(request)):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid captcha"
+                )
+        else:
+            # Self-hosted arithmetic; also the fallback while Turnstile is
+            # selected but not fully configured (site key or secret missing).
+            if not payload.captcha_token or not payload.captcha_answer:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, detail="Captcha required"
+                )
+            if not verify_captcha(payload.captcha_token, payload.captcha_answer):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid captcha"
+                )
     try:
         user = service.register(
             username=payload.username,
@@ -48,6 +115,10 @@ def register(
     except UsernameTakenError:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Username already taken"
+        ) from None
+    except EmailTakenError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Email already in use"
         ) from None
     audit.log(action=AuditAction.REGISTER, user_id=user.id, request=request)
     return user

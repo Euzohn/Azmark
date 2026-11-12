@@ -56,6 +56,8 @@ class AuditAction:
     AI_ACTION = "ai_action"
     ADMIN_BOOTSTRAP = "admin_bootstrap"
     ADMIN_UPDATE_USER = "admin_update_user"
+    ADMIN_CREATE_USER = "admin_create_user"
+    ADMIN_UPDATE_SETTINGS = "admin_update_settings"
     CREATE_ACCESS_TOKEN = "create_access_token"
     REVOKE_ACCESS_TOKEN = "revoke_access_token"
     DELETE_ACCESS_TOKEN = "delete_access_token"
