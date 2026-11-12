@@ -90,6 +90,9 @@ def test_resolve_search_provider(monkeypatch):
     assert search_service.resolve_search_provider({}) is None
     provider = search_service.resolve_search_provider({"tavily": "key"})
     assert isinstance(provider, TavilyProvider)
+    # The searxng key doubles as its base_url (spec #66, #70).
+    provider = search_service.resolve_search_provider({"searxng": "https://s.example"})
+    assert isinstance(provider, SearxngProvider)
 
 
 def test_lookup_train_without_provider(db, monkeypatch):

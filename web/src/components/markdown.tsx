@@ -113,10 +113,26 @@ function MarkdownInner({ className, content }: { className?: string; content: st
           td: ({ children }) => (
             <td className="border border-border/70 px-2 py-1 align-top">{children}</td>
           ),
-          img: ({ src, alt }) => (
-            // eslint-disable-next-line @next/next/no-img-element -- arbitrary remote URLs from model output; next/image would need remotePatterns for every domain
-            <img src={src} alt={alt} loading="lazy" className="my-2 max-h-64 max-w-full rounded-lg" />
-          ),
+          img: ({ src, alt }) => {
+            // Model output may embed arbitrary remote images. Accept http(s)
+            // only (the URL transform already drops exotic protocols) and
+            // never send a Referer, so a tracking pixel cannot learn the
+            // instance URL (spec #70); the box stays capped and lazy-loaded.
+            if (typeof src !== "string" || !/^https?:\/\//i.test(src)) {
+              return null;
+            }
+            return (
+              // eslint-disable-next-line @next/next/no-img-element -- arbitrary remote URLs from model output; next/image would need remotePatterns for every domain
+              <img
+                src={src}
+                alt={alt}
+                loading="lazy"
+                decoding="async"
+                referrerPolicy="no-referrer"
+                className="my-2 max-h-64 max-w-full rounded-lg"
+              />
+            );
+          },
           strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
           del: ({ children }) => <del className="opacity-70">{children}</del>,
         }}

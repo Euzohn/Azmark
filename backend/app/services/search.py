@@ -15,8 +15,7 @@ def resolve_search_provider(user_keys: dict[str, str]) -> SearchProvider | None:
         provider = build_search_provider(
             name=name,
             api_key=settings.search_api_key or user_keys.get(name),
-            base_url=settings.searxng_base_url
-            or (user_keys.get(name) if name == "searxng" else user_keys.get("searxng")),
+            base_url=settings.searxng_base_url or user_keys.get("searxng"),
         )
         if provider is not None:
             return provider
