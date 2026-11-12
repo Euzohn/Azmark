@@ -35,6 +35,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { formatZonedDateTime } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
+import { usePageTitle } from "@/lib/page-title";
 import { useTimelineDirection } from "@/lib/timeline-direction";
 import type {
   OtherTransport,
@@ -79,6 +80,7 @@ export default function TripDetailPage() {
     queryFn: () => api.getTrip(id, direction),
     enabled: Boolean(id),
   });
+  usePageTitle(data?.name ?? t("nav.trips"));
 
   const update = useMutation({
     mutationFn: (input: TripInput) => api.updateTrip(id, input, direction),

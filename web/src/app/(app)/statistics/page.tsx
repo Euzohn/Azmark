@@ -25,6 +25,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Stat } from "@/components/ui/stat";
 import { api } from "@/lib/api";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
+import { usePageTitle } from "@/lib/page-title";
 import type { BreakdownItem, StatisticsRead } from "@/lib/types";
 
 const FLIGHT_CABIN_KEYS: Record<string, TranslationKey> = {
@@ -371,6 +372,7 @@ function buildSection(
 
 export default function StatisticsPage() {
   const { t, locale } = useI18n();
+  usePageTitle(t("nav.stats"));
   const [selectedYear, setSelectedYear] = useState<string | null>(null);
   const [spendYear, setSpendYear] = useState<string | null>(null);
 

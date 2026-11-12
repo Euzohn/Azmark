@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { saveScroll, takeScroll } from "@/lib/scroll-memory";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
+import { usePageTitle } from "@/lib/page-title";
 
 const STATUS_VARIANT: Record<string, "neutral" | "success" | "danger"> = {
   scheduled: "neutral",
@@ -25,6 +26,7 @@ const STATUS_VARIANT: Record<string, "neutral" | "success" | "danger"> = {
 
 function HotelsContent() {
   const { t } = useI18n();
+  usePageTitle(t("nav.hotels"));
   const searchParams = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get("search") ?? "");
 

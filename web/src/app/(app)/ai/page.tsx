@@ -43,6 +43,7 @@ import {
 } from "@/lib/ai-conversations";
 import { useAuth } from "@/lib/auth-store";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
+import { usePageTitle } from "@/lib/page-title";
 import { formatZonedDateTime } from "@/lib/datetime";
 import { uuid } from "@/lib/uuid";
 import type {
@@ -313,6 +314,7 @@ function formatProposalData(
 
 export default function AiChatPage() {
   const { t } = useI18n();
+  usePageTitle(t("nav.ai"));
   const { token } = useAuth();
   const queryClient = useQueryClient();
 

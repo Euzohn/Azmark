@@ -11,6 +11,7 @@ import { DataSourcePanel } from "@/components/data-source-panel";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { usePageTitle } from "@/lib/page-title";
 import type { ImportPreview, ImportResult } from "@/lib/types";
 
 const PREVIEW_COLUMNS = [
@@ -50,6 +51,9 @@ function formatCell(value: unknown, locale: string): string {
 
 export default function DataPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { t, locale } = useI18n();
+  // Embedded instances live inside the account page tabs; only the standalone
+  // route owns the document title.
+  usePageTitle(embedded ? undefined : t("nav.data"));
   const queryClient = useQueryClient();
   const [includeSensitive, setIncludeSensitive] = useState(false);
   const [exporting, setExporting] = useState<"json" | "csv" | null>(null);

@@ -15,6 +15,7 @@ import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { usePageTitle } from "@/lib/page-title";
 import type { ActivityType } from "@/lib/types";
 
 const TYPES: ActivityType[] = [
@@ -49,6 +50,7 @@ function formatDate(value: string | null, locale: string): string {
 
 function ActivitiesContent() {
   const { t, locale } = useI18n();
+  usePageTitle(t("nav.activities"));
   const [search, setSearch] = useState("");
   const [type, setType] = useState<ActivityType | "">("");
 

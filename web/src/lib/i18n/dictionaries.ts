@@ -5,6 +5,7 @@ export const dictionaries = {
     "app.github": "GitHub",
 
     "common.loading": "加载中…",
+    "a11y.skipToContent": "跳到主要内容",
     "common.save": "保存",
     "common.cancel": "取消",
     "common.close": "关闭",
@@ -1124,6 +1125,7 @@ export const dictionaries = {
     "app.github": "GitHub",
 
     "common.loading": "Loading…",
+    "a11y.skipToContent": "Skip to main content",
     "common.save": "Save",
     "common.cancel": "Cancel",
     "common.close": "Close",

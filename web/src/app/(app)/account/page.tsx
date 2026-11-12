@@ -9,6 +9,7 @@ import { Segmented, type SegmentedOption } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/lib/auth-store";
 import { useI18n } from "@/lib/i18n";
+import { usePageTitle } from "@/lib/page-title";
 
 import AdminPanel from "../admin/page";
 import AuditPanel from "../audit/page";
@@ -26,6 +27,7 @@ function parseTab(value: string | null, allowAdmin: boolean): AccountTab {
 
 function AccountContent() {
   const { t } = useI18n();
+  usePageTitle(t("nav.account"));
   const { user } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();

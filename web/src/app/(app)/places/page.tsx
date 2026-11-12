@@ -15,6 +15,7 @@ import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { usePageTitle } from "@/lib/page-title";
 import type { PlaceType } from "@/lib/types";
 
 const TYPES: PlaceType[] = [
@@ -32,6 +33,7 @@ const TYPES: PlaceType[] = [
 
 function PlacesContent() {
   const { t } = useI18n();
+  usePageTitle(t("nav.places"));
   const [search, setSearch] = useState("");
   const [type, setType] = useState<PlaceType | "">("");
 

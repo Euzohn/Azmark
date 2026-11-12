@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { saveScroll, takeScroll } from "@/lib/scroll-memory";
 import { useI18n } from "@/lib/i18n";
+import { usePageTitle } from "@/lib/page-title";
 import type { NoteFilters } from "@/lib/types";
 
 function formatDate(value: string | null, locale: string): string {
@@ -31,6 +32,7 @@ function formatDate(value: string | null, locale: string): string {
 
 function NotesContent() {
   const { t, locale } = useI18n();
+  usePageTitle(t("nav.notes"));
   const searchParams = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get("search") ?? "");
   const [sort, setSort] = useState<NoteFilters["sort"]>("newest");

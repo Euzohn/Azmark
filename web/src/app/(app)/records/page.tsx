@@ -37,6 +37,7 @@ import { parseRecordPage, parseRecordSort } from "@/lib/record-navigation";
 import { saveScroll, takeScroll } from "@/lib/scroll-memory";
 import { formatZonedDateTime, zonedDateKey } from "@/lib/datetime";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
+import { usePageTitle } from "@/lib/page-title";
 import type {
   Flight,
   RecordFilters,
@@ -184,6 +185,7 @@ function RecordCard({
 
 function RecordsContent() {
   const { t } = useI18n();
+  usePageTitle(t("nav.records"));
   const searchParams = useSearchParams();
   const [view, setView] = useState<ViewMode>(() => parseView(searchParams.get("view")));
   const [search, setSearch] = useState(() => searchParams.get("search") ?? "");

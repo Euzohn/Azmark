@@ -27,6 +27,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-store";
 import { daysUntilDeparture, formatZonedDateTime } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
+import { usePageTitle } from "@/lib/page-title";
 import type { DashboardRecord } from "@/lib/types";
 
 function recordHref(record: DashboardRecord): string {
@@ -198,6 +199,7 @@ function UpcomingTicket({ record }: { record: DashboardRecord }) {
 
 export default function DashboardPage() {
   const { t, locale } = useI18n();
+  usePageTitle(t("nav.dashboard"));
   const { user } = useAuth();
 
   const { data, isLoading, isError, refetch } = useQuery({

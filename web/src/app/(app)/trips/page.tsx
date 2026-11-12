@@ -15,6 +15,7 @@ import { Fab } from "@/components/ui/fab";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { usePageTitle } from "@/lib/page-title";
 import type { Trip } from "@/lib/types";
 
 function formatDate(value: string | null, locale: string): string {
@@ -32,6 +33,7 @@ function formatDate(value: string | null, locale: string): string {
 
 export default function TripsPage() {
   const { t, locale } = useI18n();
+  usePageTitle(t("nav.trips"));
   const queryClient = useQueryClient();
   const [pendingDelete, setPendingDelete] = useState<Trip | null>(null);
 

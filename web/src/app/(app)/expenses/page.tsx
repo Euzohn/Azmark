@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { saveScroll, takeScroll } from "@/lib/scroll-memory";
 import { useI18n } from "@/lib/i18n";
+import { usePageTitle } from "@/lib/page-title";
 import type { ExpenseCategory, ExpenseFilters } from "@/lib/types";
 
 const CATEGORIES: ExpenseCategory[] = [
@@ -41,6 +42,7 @@ function formatDate(value: string | null, locale: string): string {
 
 function ExpensesContent() {
   const { t, locale } = useI18n();
+  usePageTitle(t("nav.expenses"));
   const searchParams = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get("search") ?? "");
   const [category, setCategory] = useState<ExpenseCategory | "">(

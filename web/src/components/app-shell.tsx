@@ -211,6 +211,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-dvh w-full flex-col md:flex-row">
+      {/* Keyboard shortcut: jump past the sidebar straight to the content (spec #95). */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-card focus:px-3 focus:py-2 focus:text-sm focus:shadow-lg focus:ring-2 focus:ring-ring"
+      >
+        {t("a11y.skipToContent")}
+      </a>
       <aside
         className={cn(
           "hidden bg-card transition-[width] duration-200 ease-in-out md:sticky md:top-0 md:flex md:h-dvh md:shrink-0 md:flex-col md:overflow-hidden md:border-r md:border-border",
@@ -394,7 +401,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main className="min-w-0 flex-1 px-4 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-6 md:px-8 md:pb-12 md:pt-9 lg:px-10">
+      <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 px-4 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-6 outline-none md:px-8 md:pb-12 md:pt-9 lg:px-10">
         <div className={cn("mx-auto w-full", pathname.startsWith("/map") ? "max-w-none" : "max-w-[1440px]")}>{children}</div>
       </main>
 

@@ -15,6 +15,7 @@ import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, ApiError } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { usePageTitle } from "@/lib/page-title";
 import type { PendingAction, PendingActionStatus } from "@/lib/types";
 
 type Filter = "all" | "pending" | "resolved";
@@ -136,6 +137,7 @@ function ActionCard({
 
 export default function PendingActionsPage() {
   const { t, locale } = useI18n();
+  usePageTitle(t("nav.pending"));
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<Filter>("pending");
   const [duplicateId, setDuplicateId] = useState<string | null>(null);

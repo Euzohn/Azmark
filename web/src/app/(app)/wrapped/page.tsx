@@ -33,6 +33,7 @@ import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { usePageTitle } from "@/lib/page-title";
 import type {
   BreakdownItem,
   MapPoint,
@@ -438,6 +439,7 @@ function Cover({ wrapped, journeys }: { wrapped: WrappedRead; journeys: number }
 
 function WrappedContent() {
   const { t, locale } = useI18n();
+  usePageTitle(t("wrapped.title"));
   const [yearParam] = useState(() => {
     if (typeof window === "undefined") return null;
     return new URLSearchParams(window.location.search).get("year");

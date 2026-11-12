@@ -18,6 +18,7 @@ import { TimezoneSelect } from "@/components/ui/timezone-select";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-store";
 import { useI18n } from "@/lib/i18n";
+import { usePageTitle } from "@/lib/page-title";
 import type { AccessToken, AccessTokenScope } from "@/lib/types";
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -41,6 +42,9 @@ export function SettingsPanel({
   section = "profile",
 }: { embedded?: boolean; section?: SettingsSection } = {}) {
   const { t, locale } = useI18n();
+  // The panel is embedded inside the account page tabs as well — only set the
+  // document title when it renders as its own page.
+  usePageTitle(embedded ? undefined : t("nav.settings"));
   const { user, setUser, clear } = useAuth();
   const queryClient = useQueryClient();
   const router = useRouter();

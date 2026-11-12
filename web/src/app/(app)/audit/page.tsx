@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { AUDIT_ACTION_LABELS } from "@/lib/audit-actions";
 import { useI18n } from "@/lib/i18n";
+import { usePageTitle } from "@/lib/page-title";
 import type { AuditLog } from "@/lib/types";
 
 function formatDateTime(value: string, locale: string): string {
@@ -59,6 +60,9 @@ function AuditClientCell({ log }: { log: AuditLog }) {
 
 export default function AuditPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { t, locale } = useI18n();
+  // Embedded instances live inside the account page tabs; only the standalone
+  // route owns the document title.
+  usePageTitle(embedded ? undefined : t("nav.audit"));
   const { data, isLoading } = useQuery({
     queryKey: ["audit"],
     queryFn: () => api.listAuditLogs(),

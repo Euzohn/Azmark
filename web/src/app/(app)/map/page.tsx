@@ -27,6 +27,7 @@ import { Stat } from "@/components/ui/stat";
 import { api } from "@/lib/api";
 import { clusterByDistance, greatCircle, type LonLat } from "@/lib/geo";
 import { useI18n } from "@/lib/i18n";
+import { usePageTitle } from "@/lib/page-title";
 import type { MapRoute, PlaceType } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -154,6 +155,7 @@ function lineFeature(
 
 export default function MapPage() {
   const { t, locale } = useI18n();
+  usePageTitle(t("nav.map"));
   const { theme } = useTheme();
 
   const containerRef = useRef<HTMLDivElement | null>(null);

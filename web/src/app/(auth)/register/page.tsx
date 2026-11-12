@@ -13,12 +13,14 @@ import { Label } from "@/components/ui/label";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-store";
 import { useI18n } from "@/lib/i18n";
+import { usePageTitle } from "@/lib/page-title";
 import type { AuthConfig, CaptchaChallenge } from "@/lib/types";
 
 export default function RegisterPage() {
   const router = useRouter();
   const { setAuth } = useAuth();
   const { t } = useI18n();
+  usePageTitle(t("auth.register"));
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [email, setEmail] = useState("");

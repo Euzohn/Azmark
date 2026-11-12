@@ -12,11 +12,13 @@ import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-store";
 import { useI18n } from "@/lib/i18n";
+import { usePageTitle } from "@/lib/page-title";
 
 export default function LoginPage() {
   const router = useRouter();
   const { setAuth } = useAuth();
   const { t } = useI18n();
+  usePageTitle(t("auth.login"));
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(false);

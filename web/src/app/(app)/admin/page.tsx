@@ -18,6 +18,7 @@ import { api, ApiError } from "@/lib/api";
 import { AUDIT_ACTION_LABELS } from "@/lib/audit-actions";
 import { useAuth } from "@/lib/auth-store";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
+import { usePageTitle } from "@/lib/page-title";
 import type { AdminUser } from "@/lib/types";
 
 import { AdminSettingsCard } from "./settings-card";
@@ -212,6 +213,9 @@ function ResetPasswordDialog({ user, onClose }: { user: AdminUser; onClose: () =
 
 export default function AdminPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { t } = useI18n();
+  // Embedded instances live inside the account page tabs; only the standalone
+  // route owns the document title.
+  usePageTitle(embedded ? undefined : t("admin.title"));
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const isAdmin = user?.role === "ADMIN";
