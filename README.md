@@ -264,6 +264,10 @@ docker compose exec api python -c "from app.core.db import SessionLocal; from ap
 - **P2** — Travel Wrapped（年度报告）与 AI 旅行日志（已完成）；剩余：邮件导入、自动化规则、高级 OCR、AI 照片整理。
 - **P3** — 行程协作、家庭账户、多用户共享行程、公开行程页、移动原生 App、插件生态。
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Euzohn/Azmark&type=Date)](https://www.star-history.com/#Euzohn/Azmark&Date)
+
 ## 参与贡献
 
 欢迎 issue 与 PR。开发约定详见 [`AGENTS.md`](./AGENTS.md)，要点：

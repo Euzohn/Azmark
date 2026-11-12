@@ -264,6 +264,10 @@ docker compose exec api python -c "from app.core.db import SessionLocal; from ap
 - **P2** — Travel Wrapped (Year in Review) and AI travel journal (done); remaining: email import, automation rules, advanced OCR, AI photo organization.
 - **P3** — trip collaboration, family accounts, multi-user shared trips, public trip pages, native mobile apps, plugin ecosystem.
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Euzohn/Azmark&type=Date)](https://www.star-history.com/#Euzohn/Azmark&Date)
+
 ## Contributing
 
 Issues and PRs are welcome. See [`AGENTS.md`](./AGENTS.md) for development conventions; highlights:
