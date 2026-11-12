@@ -63,6 +63,9 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       # 个人访问令牌限流（spec #85），0 关闭。
       PAT_RATE_LIMIT_PER_MINUTE: ${PAT_RATE_LIMIT_PER_MINUTE:-120}
+      # 登录/注册暴破防护（spec #70）：按客户端 IP 滑动窗口限流，0 关闭。
+      LOGIN_RATE_LIMIT_PER_MINUTE: ${LOGIN_RATE_LIMIT_PER_MINUTE:-10}
+      REGISTER_RATE_LIMIT_PER_MINUTE: ${REGISTER_RATE_LIMIT_PER_MINUTE:-5}
       # 只读 MCP Server（spec #85）：false 时不挂载 /api/v1/mcp。
       MCP_ENABLED: ${MCP_ENABLED:-true}
       # 酒店地图定位（spec #10/#66）：高德 Key 可选，配置后优先使用（国内可达、中文地址更准）。
@@ -70,6 +73,9 @@ services:
       GEOCODE_PROVIDER: ${GEOCODE_PROVIDER:-photon,nominatim}
       GEOCODE_PHOTON_URL: ${GEOCODE_PHOTON_URL:-https://photon.komoot.io}
       GEOCODE_BASE_URL: ${GEOCODE_BASE_URL:-https://nominatim.openstreetmap.org}
+      # SSRF 防护（spec #70）：用户自配 LLM/SearxNG base_url 默认禁指内网地址；
+      # 自托管内网 LLM（如局域网 Ollama）需设 true 放行私网目标。
+      ALLOW_PRIVATE_BASE_URLS: ${ALLOW_PRIVATE_BASE_URLS:-false}
     depends_on:
       postgres:
         condition: service_healthy

@@ -9,6 +9,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.api.deps import get_storage_provider
 from app.core.db import Base, get_db
+from app.core.rate_limit import login_limiter, register_limiter
 from app.main import app
 from app.models.system_setting import SystemSetting
 from app.services.storage import StorageObjectNotFound, StorageProvider
@@ -21,6 +22,14 @@ engine = create_engine(
     poolclass=StaticPool,
 )
 TestingSessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+
+@pytest.fixture(autouse=True)
+def _reset_auth_rate_limiters() -> None:
+    # The auth-route buckets are keyed by client IP; every TestClient request
+    # shares "testclient", so clear the in-process windows between tests.
+    login_limiter.reset()
+    register_limiter.reset()
 
 
 @pytest.fixture(scope="session", autouse=True)

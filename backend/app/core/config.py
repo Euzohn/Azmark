@@ -26,11 +26,25 @@ class Settings(BaseSettings):
     # Personal access token rate limit per token (spec #69, #85). 0 disables it.
     pat_rate_limit_per_minute: int = 120
 
+    # Brute-force budgets for the anonymous auth routes (spec #70): one
+    # sliding window per client IP (trusted-proxy aware). Regular web use sits
+    # far below these ceilings; 0 disables the check.
+    login_rate_limit_per_minute: int = 10
+    register_rate_limit_per_minute: int = 5
+
     # MCP server for external agents (spec #85), mounted at /api/v1/mcp.
     # Authenticates personal access tokens only; set false to hide the route.
     mcp_enabled: bool = True
 
     cors_origins: str = "http://localhost:3000"
+
+    # SSRF guard for user-supplied provider base URLs (spec #70). When false
+    # (default), LLM/search base_url values must be http/https and must not
+    # target non-global address space (loopback/private/link-local/reserved),
+    # checked on the literal host and best-effort on DNS answers. Self-hosters
+    # pointing providers at LAN endpoints can set true to allow private
+    # targets; the scheme restriction still applies.
+    allow_private_base_urls: bool = False
 
     # Reverse-proxy trust (spec #47). Comma-separated CIDRs of the peers whose
     # X-Forwarded-For header is trusted. A direct client can forge that header,

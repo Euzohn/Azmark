@@ -1,9 +1,14 @@
-"""In-process rate limiting for personal access tokens.
+"""In-process rate limiting (spec #69, #70).
 
 Azmark is self-hosted as a single API container, so a process-local sliding
 window is sufficient; swapping in Redis later only touches this module. JWT
 sessions are deliberately not limited here — they belong to a human using the
 web UI, while tokens belong to agents that may loop (spec #69).
+
+The anonymous auth routes (login/register) get their own per-client-IP
+budgets: they are the only endpoints a walk-in attacker can hammer without
+credentials, and the budgets blunt password brute-forcing and scripted
+self-registration.
 """
 
 from __future__ import annotations
@@ -54,3 +59,8 @@ class SlidingWindowLimiter:
 # One bucket per personal access token, shared by the REST API and MCP so an
 # agent cannot double its budget by switching surfaces (spec #69).
 access_token_limiter = SlidingWindowLimiter(settings.pat_rate_limit_per_minute)
+
+# One bucket per client IP for the anonymous auth routes (spec #70).  The call
+# sites skip the check when the corresponding setting is 0.
+login_limiter = SlidingWindowLimiter(settings.login_rate_limit_per_minute)
+register_limiter = SlidingWindowLimiter(settings.register_rate_limit_per_minute)

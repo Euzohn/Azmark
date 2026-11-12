@@ -7,6 +7,8 @@ from app.api.deps import (
     get_current_user,
     get_provider_keys_service,
 )
+from app.core.config import settings
+from app.core.url_guard import validate_base_url
 from app.models.audit_log import AuditAction
 from app.models.user import User
 from app.schemas.ai_settings import AiSettingsRead, AiSettingsWrite
@@ -21,6 +23,19 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 def _ensure_provider(provider: str) -> None:
     if provider not in providers.provider_names():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown provider")
+
+
+def _guard_searxng_base_url(provider: str, api_key: str) -> None:
+    # SearxNG has no API key; the stored key value doubles as its base_url and
+    # is requested server-side by httpx. Guard it like a base URL (spec #70).
+    if provider != "searxng":
+        return
+    try:
+        validate_base_url(api_key, allow_private=settings.allow_private_base_urls)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
 
 
 @router.get("/provider-keys", response_model=ProviderKeysRead)
@@ -47,6 +62,7 @@ def upsert_provider_key(
     audit: AuditService = Depends(get_audit_service),
 ) -> ProviderKeyStatus:
     _ensure_provider(provider)
+    _guard_searxng_base_url(provider, payload.api_key)
     keys.upsert(user_id=current_user.id, provider=provider, api_key=payload.api_key)
     audit.log(
         action=AuditAction.UPDATE_RECORD,

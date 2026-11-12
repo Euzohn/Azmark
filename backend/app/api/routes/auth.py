@@ -13,6 +13,8 @@ from app.core.captcha import (
     verify_captcha,
     verify_turnstile,
 )
+from app.core.config import settings
+from app.core.rate_limit import login_limiter, register_limiter
 from app.core.security import create_access_token
 from app.models.audit_log import AuditAction
 from app.models.user import User
@@ -40,6 +42,19 @@ from app.services.auth import (
 from app.services.system_setting import SystemSettingsService, effective_registration_captcha
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def _enforce_rate_limit(limiter, budget: int, request: Request, bucket: str, detail: str) -> None:
+    """Reject the request with 429 once the per-IP budget is exhausted (spec #70)."""
+    if budget <= 0:
+        return
+    key = f"{bucket}:{client_ip(request) or 'unknown'}"
+    if not limiter.allow(key):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=detail,
+            headers={"Retry-After": "60"},
+        )
 
 
 @router.get("/config", response_model=AuthConfig)
@@ -82,6 +97,16 @@ def register(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Registration is disabled on this instance",
         )
+    # Count every attempt per client IP before any work is done; this also caps
+    # captcha-token guess rate for the arithmetic challenge, whose token allows
+    # answer retries (spec #70).
+    _enforce_rate_limit(
+        register_limiter,
+        settings.register_rate_limit_per_minute,
+        request,
+        "register",
+        "Too many registration attempts, please try again later",
+    )
     if row.registration_captcha_enabled:
         provider, _site_key, turnstile_secret = effective_registration_captcha(row)
         if provider == CAPTCHA_PROVIDER_TURNSTILE:
@@ -131,6 +156,15 @@ def login(
     service: AuthService = Depends(get_auth_service),
     audit: AuditService = Depends(get_audit_service),
 ):
+    # Brute-force budget per client IP; every attempt counts so password
+    # spraying across usernames and targeted guessing share one window (#70).
+    _enforce_rate_limit(
+        login_limiter,
+        settings.login_rate_limit_per_minute,
+        request,
+        "login",
+        "Too many login attempts, please try again later",
+    )
     try:
         user = service.authenticate(username=payload.username, password=payload.password)
     except InvalidCredentialsError:
