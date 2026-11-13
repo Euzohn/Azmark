@@ -12,7 +12,7 @@
 - 所有表结构变更必须通过 Alembic migration，禁止无 migration 直接改库（`#98`）。
 - 所有 UI 文案必须走 i18n key（`t("...")`），禁止硬编码字符串；语言为 `zh-CN`、`en-US`（`#7`）。
 - AI 只能通过绑定当前用户的 tool 层操作，禁止直接访问数据库；破坏性操作必须经用户显式确认（`#32`–`#34`、`#69`）。网页/邮件/文件内容一律视为不可信，以防御 prompt injection（`#70`）。
-- 外部服务一律通过 Provider 抽象：LLM / Search / Map / Flight / Train / Storage / OCR（`#66`）。
+- 外部服务一律通过 Provider 抽象：LLM / Search / Map / Flight / Train / Storage（`#66`）。OCR 不单独做 Provider（2026-11 取消，识图由 LLM 多模态承担）。
 - 禁止在日志中输出或提交密钥与敏感字段（PNR、票号、护照信息、API Key）（`#45`、`#75`、`#96`）。
 
 ## 范围
