@@ -571,3 +571,44 @@ def test_statistics_timeline_not_truncated_beyond_5000_records(client, db):
 
     routes = client.get("/api/v1/map/routes", headers=headers).json()
     assert routes["total"] == total
+
+
+def test_statistics_breakdowns_exclude_blanks_and_sum_endpoints(client):
+    """Regression for the SQL push-down of the statistics breakdowns.
+
+    The Python loop guarded every Counter with ``if value:``, so blank strings
+    could never become labels; the GROUP BY queries must reproduce that with
+    ``IS NOT NULL AND != ''``. It also pins the origin+destination UNION ALL:
+    one leg contributes to the tally of *both* of its endpoints.
+    """
+    token = register_and_login(client, "stats_blank")["access_token"]
+    headers = auth_headers(token)
+
+    client.post("/api/v1/flights", json=FLIGHT_HKG_SIN, headers=headers)  # HKG -> SIN
+    client.post("/api/v1/flights", json=FLIGHT_SIN_PEK, headers=headers)  # SIN -> PEK
+    client.post(
+        "/api/v1/flights",
+        json={
+            "origin": "PEK",
+            "destination": "SFO",
+            "departure_time": "2026-08-01T08:00:00Z",
+            "arrival_time": "2026-08-01T11:30:00Z",
+            "carrier": "",
+            "airline_code": "",
+            "service_number": "CA983",
+            "aircraft_model": "",
+        },
+        headers=headers,
+    )
+
+    body = client.get("/api/v1/statistics", headers=headers).json()
+
+    # The blank third record must not appear as an empty label anywhere.
+    assert {item["label"] for item in body["by_airline"]} == {"CX", "SQ"}
+    assert {item["label"] for item in body["by_aircraft"]} == {
+        "Airbus A330-300",
+        "Airbus A350-900",
+    }
+
+    by_airport = {item["label"]: item["count"] for item in body["by_airport"]}
+    assert by_airport == {"HKG": 1, "SIN": 2, "PEK": 2, "SFO": 1}
