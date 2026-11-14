@@ -216,3 +216,135 @@ def test_wrapped_year_validation(client):
 
 def test_wrapped_requires_auth(client):
     assert client.get("/api/v1/statistics/wrapped").status_code == 401
+
+
+def test_wrapped_longest_route_uses_haversine_fallback(client):
+    """A journey without a stored distance still competes for longest route.
+
+    The SQL pass sums stored distances; rows without one resolve endpoints
+    from the reference data in Python. The single-row refetch must return the
+    full record (type, carrier, endpoints) for the winner.
+    """
+    headers = _headers(client, "wrapped_haversine")
+    client.post(
+        "/api/v1/flights",
+        json={
+            "origin": "HKG",
+            "destination": "SIN",
+            "carrier": "Cathay Pacific",
+            "service_number": "CX659",
+            "departure_time": "2026-09-26T01:45:00Z",
+            "arrival_time": "2026-09-26T05:50:00Z",
+        },
+        headers=headers,
+    )
+    client.post(
+        "/api/v1/trains",
+        json={
+            "origin": "上海虹桥",
+            "destination": "苏州",
+            "service_number": "G7002",
+            "departure_time": "2026-10-01T01:00:00Z",
+            "arrival_time": "2026-10-01T01:25:00Z",
+            "distance": "100.0",
+        },
+        headers=headers,
+    )
+
+    body = client.get("/api/v1/statistics/wrapped", headers=headers).json()
+    route = body["longest_route"]
+    assert route["origin"]["code"] == "HKG"
+    assert route["destination"]["code"] == "SIN"
+    assert route["type"] == "flight"
+    assert route["carrier"] == "Cathay Pacific"
+    assert route["distance_km"] > 2000
+    # One stored distance (100 km) plus one haversine value, rounded once.
+    assert body["totals"]["distance_km"] == round(100 + route["distance_km"], 1)
+
+
+def test_wrapped_leaderboards_exclude_blank_values(client):
+    """Blank strings must stay out of the wrapped leaderboards.
+
+    The Python loop guarded every Counter with ``if value:``; the GROUP BY
+    queries reproduce that with ``IS NOT NULL AND != ''``. The airline key is
+    ``airline_code or carrier``, so a blank code falls back to the carrier.
+    """
+    headers = _headers(client, "wrapped_blank")
+    client.post(
+        "/api/v1/flights",
+        json={
+            "origin": "PEK",
+            "destination": "SFO",
+            "carrier": "",
+            "airline_code": "",
+            "service_number": "CA983",
+            "departure_time": "2026-08-01T08:00:00Z",
+            "arrival_time": "2026-08-01T11:30:00Z",
+            "aircraft_model": "",
+        },
+        headers=headers,
+    )
+    client.post(
+        "/api/v1/flights",
+        json={
+            "origin": "HKG",
+            "destination": "SIN",
+            "carrier": "Cathay Pacific",
+            "service_number": "CX659",
+            "departure_time": "2026-08-02T01:45:00Z",
+            "arrival_time": "2026-08-02T05:50:00Z",
+            "aircraft_model": "Airbus A330-300",
+        },
+        headers=headers,
+    )
+
+    body = client.get("/api/v1/statistics/wrapped", headers=headers).json()
+    assert body["totals"]["flights"] == 2
+    assert [(item["label"], item["count"]) for item in body["top_airlines"]] == [
+        ("Cathay Pacific", 1)
+    ]
+    assert [item["label"] for item in body["top_aircraft"]] == ["Airbus A330-300"]
+
+
+def test_wrapped_aggregates_merge_across_id_chunks(client, monkeypatch):
+    """Year-scoped GROUP BY queries batch large ``id IN (...)`` lists.
+
+    Shrink the batch size to force several queries and verify the merged
+    counters keep exact totals and the deterministic count-DESC ordering.
+    """
+    from app.services.dashboard import DashboardService
+
+    monkeypatch.setattr(DashboardService, "_ID_CHUNK", 2)
+
+    headers = _headers(client, "wrapped_chunks")
+    for origin, destination, code, number, day in (
+        ("HKG", "SIN", "CX", "CX659", "2026-03-01"),
+        ("SIN", "HKG", "CX", "CX660", "2026-03-02"),
+        ("PEK", "SFO", "SQ", "SQ802", "2026-04-01"),
+    ):
+        response = client.post(
+            "/api/v1/flights",
+            json={
+                "origin": origin,
+                "destination": destination,
+                "airline_code": code,
+                "service_number": number,
+                "departure_time": f"{day}T01:00:00Z",
+                "arrival_time": f"{day}T05:00:00Z",
+            },
+            headers=headers,
+        )
+        assert response.status_code == 201, response.text
+
+    body = client.get("/api/v1/statistics/wrapped", headers=headers).json()
+    assert body["totals"]["flights"] == 3
+    assert [(item["label"], item["count"]) for item in body["top_airlines"]] == [
+        ("CX", 2),
+        ("SQ", 1),
+    ]
+    by_airport = {item["label"]: item["count"] for item in body["top_airports"]}
+    assert by_airport == {"HKG": 2, "SIN": 2, "PEK": 1, "SFO": 1}
+    assert [(item["label"], item["count"]) for item in body["by_month"]] == [
+        ("2026-03", 2),
+        ("2026-04", 1),
+    ]

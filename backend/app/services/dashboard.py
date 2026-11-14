@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.core.timezones import in_timezone
 from app.models.activity import Activity
+from app.models.expense import Expense
 from app.models.hotel import Hotel
 from app.models.place import Place
 from app.models.transport_record import TransportRecord
@@ -40,10 +41,6 @@ from app.schemas.wrapped import WrappedRead, WrappedRoute, WrappedTotals
 from app.services import reference
 from app.services.expense import build_expense_statistics, summarize_expenses
 from app.utils.geo import haversine_km
-
-# Sentinel year for records without a departure time: they never match any real
-# year, so the annual report simply skips them (spec #87).
-_EPOCH = date(1, 1, 1)
 
 
 def _naive_utc(dt: datetime) -> datetime:
@@ -172,21 +169,61 @@ class DashboardService:
     # public API
     # ------------------------------------------------------------------
 
-    def _type_counts(self, *, user_id: uuid.UUID) -> dict[str, int]:
+    # Year-scoped aggregates filter by ``id IN (...)``; SQLite caps a statement
+    # at 32766 bound variables (PostgreSQL at 65535), so large years are
+    # queried in batches instead of failing on one giant IN list.
+    _ID_CHUNK = 5000
+
+    @staticmethod
+    def _chunks(ids: list[uuid.UUID]) -> list[list[uuid.UUID]]:
+        chunk = DashboardService._ID_CHUNK
+        return [ids[start : start + chunk] for start in range(0, len(ids), chunk)]
+
+    @staticmethod
+    def _merge_counts(batches: Iterable[Iterable[tuple[Any, int]]]) -> list[tuple[Any, int]]:
+        """Combine per-batch GROUP BY results under count DESC, label ASC."""
+        totals: Counter[Any] = Counter()
+        for batch in batches:
+            for label, count in batch:
+                totals[label] += count
+        return sorted(totals.items(), key=lambda item: (-item[1], item[0]))
+
+    @staticmethod
+    def _type_condition(record_type: str | tuple[str, ...]) -> Any:
+        if isinstance(record_type, tuple):
+            return TransportRecord.type.in_(record_type)
+        return TransportRecord.type == record_type
+
+    def _type_counts(
+        self, *, user_id: uuid.UUID, record_ids: list[uuid.UUID] | None = None
+    ) -> dict[str, int]:
         """Count records per transport type in a single GROUP BY query."""
-        rows = self.db.execute(
-            select(TransportRecord.type, func.count())
-            .where(TransportRecord.user_id == user_id)
-            .group_by(TransportRecord.type)
-        ).all()
-        return {record_type: int(count) for record_type, count in rows}
+
+        def query(ids: list[uuid.UUID] | None) -> dict[str, int]:
+            conditions = [TransportRecord.user_id == user_id]
+            if ids is not None:
+                conditions.append(TransportRecord.id.in_(ids))
+            rows = self.db.execute(
+                select(TransportRecord.type, func.count())
+                .where(*conditions)
+                .group_by(TransportRecord.type)
+            ).all()
+            return {record_type: int(count) for record_type, count in rows}
+
+        if record_ids is None:
+            return query(None)
+        totals: Counter[str] = Counter()
+        for chunk in self._chunks(record_ids):
+            totals.update(query(chunk))
+        return dict(totals)
 
     def _group_counts(
         self,
         *,
         user_id: uuid.UUID,
         column: Any,
-        record_type: str | None = None,
+        record_type: str | tuple[str, ...] | None = None,
+        record_ids: list[uuid.UUID] | None = None,
     ) -> list[tuple[str, int]]:
         """GROUP BY one column, excluding NULL and empty values.
 
@@ -195,63 +232,185 @@ class DashboardService:
         the same on SQLite and PostgreSQL. Callers who need a stable input for
         further reference lookups can rely on this order.
         """
-        conditions = [
-            TransportRecord.user_id == user_id,
-            column.isnot(None),
-            column != "",
-        ]
-        if record_type is not None:
-            conditions.append(TransportRecord.type == record_type)
-        stmt = (
-            select(column.label("label"), func.count().label("total"))
-            .where(*conditions)
-            .group_by(column)
-            .order_by(func.count().desc(), column.asc())
-        )
-        return [(str(label), int(total)) for label, total in self.db.execute(stmt).all()]
 
-    def _endpoint_counts(self, *, user_id: uuid.UUID, record_type: str) -> list[tuple[str, int]]:
-        """Count endpoint occurrences (origin + destination) for one record type.
+        def query(ids: list[uuid.UUID] | None) -> list[tuple[str, int]]:
+            conditions = [
+                TransportRecord.user_id == user_id,
+                column.isnot(None),
+                column != "",
+            ]
+            if record_type is not None:
+                conditions.append(self._type_condition(record_type))
+            if ids is not None:
+                conditions.append(TransportRecord.id.in_(ids))
+            stmt = (
+                select(column.label("label"), func.count().label("total"))
+                .where(*conditions)
+                .group_by(column)
+                .order_by(func.count().desc(), column.asc())
+            )
+            return [(str(label), int(total)) for label, total in self.db.execute(stmt).all()]
+
+        if record_ids is None:
+            return query(None)
+        return [
+            (str(label), int(total))
+            for label, total in self._merge_counts(
+                query(chunk) for chunk in self._chunks(record_ids)
+            )
+        ]
+
+    def _endpoint_counts(
+        self,
+        *,
+        user_id: uuid.UUID,
+        record_type: str | tuple[str, ...],
+        record_ids: list[uuid.UUID] | None = None,
+    ) -> list[tuple[str, int]]:
+        """Count endpoint occurrences (origin + destination) for record types.
 
         The previous Python pass incremented both ends of every record; the
         UNION ALL of two GROUP BYs keeps that exact semantics in SQL.
+
+        *record_type* accepts several types because the wrapped report shares
+        one station leaderboard between trains and other transport.
         """
-        conditions = [
-            TransportRecord.user_id == user_id,
-            TransportRecord.type == record_type,
+
+        def query(ids: list[uuid.UUID] | None) -> list[tuple[str, int]]:
+            conditions = [
+                TransportRecord.user_id == user_id,
+                self._type_condition(record_type),
+            ]
+            if ids is not None:
+                conditions.append(TransportRecord.id.in_(ids))
+
+            def part(column: Any):
+                return (
+                    select(column.label("label"), func.count().label("total"))
+                    .where(*conditions, column.isnot(None), column != "")
+                    .group_by(column)
+                )
+
+            union = (
+                part(TransportRecord.origin).union_all(part(TransportRecord.destination)).subquery()
+            )
+            total = func.sum(union.c.total)
+            stmt = (
+                select(union.c.label, total)
+                .group_by(union.c.label)
+                .order_by(total.desc(), union.c.label.asc())
+            )
+            return [(str(label), int(count)) for label, count in self.db.execute(stmt).all()]
+
+        if record_ids is None:
+            return query(None)
+        return [
+            (str(label), int(total))
+            for label, total in self._merge_counts(
+                query(chunk) for chunk in self._chunks(record_ids)
+            )
         ]
 
-        def part(column: Any):
-            return (
-                select(column.label("label"), func.count().label("total"))
-                .where(*conditions, column.isnot(None), column != "")
-                .group_by(column)
-            )
-
-        union = part(TransportRecord.origin).union_all(part(TransportRecord.destination)).subquery()
-        total = func.sum(union.c.total)
-        stmt = (
-            select(union.c.label, total)
-            .group_by(union.c.label)
-            .order_by(total.desc(), union.c.label.asc())
-        )
-        return [(str(label), int(count)) for label, count in self.db.execute(stmt).all()]
-
-    def _airline_counts(self, *, user_id: uuid.UUID) -> list[tuple[str, int]]:
+    def _airline_counts(
+        self, *, user_id: uuid.UUID, record_ids: list[uuid.UUID] | None = None
+    ) -> list[tuple[str, int]]:
         """Count flights per airline key (``airline_code or carrier``)."""
-        key = func.coalesce(func.nullif(TransportRecord.airline_code, ""), TransportRecord.carrier)
-        stmt = (
-            select(key.label("label"), func.count().label("total"))
-            .where(
+
+        def query(ids: list[uuid.UUID] | None) -> list[tuple[str, int]]:
+            key = func.coalesce(
+                func.nullif(TransportRecord.airline_code, ""), TransportRecord.carrier
+            )
+            conditions = [
                 TransportRecord.user_id == user_id,
                 TransportRecord.type == "flight",
                 key.isnot(None),
                 key != "",
+            ]
+            if ids is not None:
+                conditions.append(TransportRecord.id.in_(ids))
+            stmt = (
+                select(key.label("label"), func.count().label("total"))
+                .where(*conditions)
+                .group_by(key)
+                .order_by(func.count().desc(), key.asc())
             )
-            .group_by(key)
-            .order_by(func.count().desc(), key.asc())
-        )
-        return [(str(label), int(total)) for label, total in self.db.execute(stmt).all()]
+            return [(str(label), int(total)) for label, total in self.db.execute(stmt).all()]
+
+        if record_ids is None:
+            return query(None)
+        return [
+            (str(label), int(total))
+            for label, total in self._merge_counts(
+                query(chunk) for chunk in self._chunks(record_ids)
+            )
+        ]
+
+    def _trip_counts(
+        self, *, user_id: uuid.UUID, record_ids: list[uuid.UUID]
+    ) -> list[tuple[uuid.UUID, int]]:
+        """Records per trip — drives the favorite trip and the trips total."""
+
+        def query(ids: list[uuid.UUID]) -> list[tuple[uuid.UUID, int]]:
+            stmt = (
+                select(TransportRecord.trip_id.label("label"), func.count().label("total"))
+                .where(
+                    TransportRecord.user_id == user_id,
+                    TransportRecord.trip_id.isnot(None),
+                    TransportRecord.id.in_(ids),
+                )
+                .group_by(TransportRecord.trip_id)
+                .order_by(func.count().desc(), TransportRecord.trip_id.asc())
+            )
+            return [(label, int(total)) for label, total in self.db.execute(stmt).all()]
+
+        return self._merge_counts(query(chunk) for chunk in self._chunks(record_ids))
+
+    def _stored_distance_rows(
+        self, *, user_id: uuid.UUID, record_ids: list[uuid.UUID]
+    ) -> list[Any]:
+        """``(id, distance)`` rows with a user-entered distance."""
+        rows: list[Any] = []
+        for chunk in self._chunks(record_ids):
+            rows.extend(
+                self.db.execute(
+                    select(TransportRecord.id, TransportRecord.distance).where(
+                        TransportRecord.user_id == user_id,
+                        TransportRecord.id.in_(chunk),
+                        TransportRecord.distance.isnot(None),
+                    )
+                ).all()
+            )
+        return rows
+
+    def _null_distance_rows(
+        self, *, user_id: uuid.UUID, record_ids: list[uuid.UUID] | None = None
+    ) -> list[Any]:
+        """``(id, type, origin, destination)`` rows without a stored distance."""
+
+        def query(ids: list[uuid.UUID] | None) -> list[Any]:
+            conditions = [
+                TransportRecord.user_id == user_id,
+                TransportRecord.distance.is_(None),
+            ]
+            if ids is not None:
+                conditions.append(TransportRecord.id.in_(ids))
+            return self.db.execute(
+                select(
+                    TransportRecord.id,
+                    TransportRecord.type,
+                    TransportRecord.origin,
+                    TransportRecord.destination,
+                )
+                .where(*conditions)
+                .order_by(TransportRecord.id)
+            ).all()
+
+        if record_ids is None:
+            return query(None)
+        rows: list[Any] = []
+        for chunk in self._chunks(record_ids):
+            rows.extend(query(chunk))
+        return rows
 
     def _distance_total(self, *, user_id: uuid.UUID) -> float:
         """Total distance: SUM() user-entered values in SQL, haversine only for
@@ -264,27 +423,51 @@ class DashboardService:
             )
         )
         distance = float(stored or 0.0)
-        rows = self.db.execute(
-            select(TransportRecord.type, TransportRecord.origin, TransportRecord.destination)
-            .where(
-                TransportRecord.user_id == user_id,
-                TransportRecord.distance.is_(None),
-            )
-            .order_by(TransportRecord.id)
-        ).all()
-        for record_type, origin, destination in rows:
-            km = self._endpoint_distance_km(record_type, origin, destination)
+        for row in self._null_distance_rows(user_id=user_id):
+            km = self._endpoint_distance_km(row.type, row.origin, row.destination)
             if km:
                 distance += km
         return distance
 
-    def _lean_places_rows(self, *, user_id: uuid.UUID) -> list[Any]:
+    def _lean_places_rows(
+        self, *, user_id: uuid.UUID, record_ids: list[uuid.UUID] | None = None
+    ) -> list[Any]:
         """Only the columns the city/country tally needs — no ORM hydration."""
-        return self.db.execute(
-            select(TransportRecord.type, TransportRecord.origin, TransportRecord.destination).where(
-                TransportRecord.user_id == user_id
+
+        def query(ids: list[uuid.UUID] | None) -> list[Any]:
+            conditions = [TransportRecord.user_id == user_id]
+            if ids is not None:
+                conditions.append(TransportRecord.id.in_(ids))
+            return self.db.execute(
+                select(
+                    TransportRecord.type,
+                    TransportRecord.origin,
+                    TransportRecord.destination,
+                ).where(*conditions)
+            ).all()
+
+        if record_ids is None:
+            return query(None)
+        rows: list[Any] = []
+        for chunk in self._chunks(record_ids):
+            rows.extend(query(chunk))
+        return rows
+
+    def _expenses_by_ids(
+        self, *, user_id: uuid.UUID, expense_ids: list[uuid.UUID]
+    ) -> list[Expense]:
+        """Hydrate only the expenses of the wrapped year (id refetch)."""
+        expenses: list[Expense] = []
+        for chunk in self._chunks(expense_ids):
+            expenses.extend(
+                self.db.scalars(
+                    select(Expense).where(
+                        Expense.id.in_(chunk),
+                        Expense.user_id == user_id,
+                    )
+                )
             )
-        ).all()
+        return expenses
 
     @staticmethod
     def _items(rows: list[tuple[str, int]]) -> list[BreakdownItem]:
@@ -504,59 +687,75 @@ class DashboardService:
         night it started on. Hotels belong to the year of check-in, activities
         to the year of their local start, and expenses to the year of their UTC
         instant, matching the statistics conventions.
-        """
-        all_records = self.records.list_all(user_id=user_id)
 
+        Year attribution is the one step SQL cannot express portably (it
+        depends on each row's timezone), so it runs over a lean
+        ``(id, departure_time, departure_timezone)`` scan. Everything scoped to
+        that year then aggregates in SQL — GROUP BY leaderboards, SUM distance,
+        a single-row refetch for the longest journey — instead of hydrating the
+        user's full record table, mirroring the statistics page (spec #71).
+        """
         # Departure day per record, in the departure timezone (see above).
         departure_days: dict[uuid.UUID, date] = {}
-        for record in all_records:
-            if record.departure_time is not None:
-                departure_days[record.id] = in_timezone(
-                    record.departure_time, record.departure_timezone
-                ).date()
+        for record_id, departure_time, timezone in self.db.execute(
+            select(
+                TransportRecord.id,
+                TransportRecord.departure_time,
+                TransportRecord.departure_timezone,
+            ).where(
+                TransportRecord.user_id == user_id,
+                TransportRecord.departure_time.isnot(None),
+            )
+        ).all():
+            departure_days[record_id] = in_timezone(departure_time, timezone).date()
 
-        hotels = list(self.db.scalars(select(Hotel).where(Hotel.user_id == user_id)))
-        activities = list(self.db.scalars(select(Activity).where(Activity.user_id == user_id)))
-        expenses = self.expenses.list_for_user(user_id=user_id)
+        hotel_rows = self.db.execute(
+            select(Hotel.check_in, Hotel.check_out).where(Hotel.user_id == user_id)
+        ).all()
+        activity_dates = [
+            in_timezone(start_at, timezone).date()
+            for start_at, timezone in self.db.execute(
+                select(Activity.start_at, Activity.timezone).where(
+                    Activity.user_id == user_id,
+                    Activity.start_at.isnot(None),
+                )
+            ).all()
+        ]
+        expense_dates = {
+            expense_id: in_timezone(occurred_at, "UTC").date()
+            for expense_id, occurred_at in self.db.execute(
+                select(Expense.id, Expense.occurred_at).where(
+                    Expense.user_id == user_id,
+                    Expense.occurred_at.isnot(None),
+                )
+            ).all()
+        }
 
         years: set[int] = {day.year for day in departure_days.values()}
-        years.update(hotel.check_in.year for hotel in hotels)
-        for activity in activities:
-            if activity.start_at is not None:
-                years.add(in_timezone(activity.start_at, activity.timezone).date().year)
-        for expense in expenses:
-            if expense.occurred_at is not None:
-                years.add(in_timezone(expense.occurred_at, "UTC").date().year)
+        years.update(check_in.year for check_in, _ in hotel_rows)
+        years.update(day.year for day in activity_dates)
+        years.update(day.year for day in expense_dates.values())
 
         target = year if year is not None else (max(years) if years else datetime.now(UTC).year)
-        year_records = [r for r in all_records if departure_days.get(r.id, _EPOCH).year == target]
+        year_days = {
+            record_id: day for record_id, day in departure_days.items() if day.year == target
+        }
+        year_ids = list(year_days)
 
-        months: Counter[str] = Counter()
-        days: set[date] = set()
-        airlines: Counter[str] = Counter()
-        airports: Counter[str] = Counter()
-        stations: Counter[str] = Counter()
-        aircraft: Counter[str] = Counter()
-        trip_counts: Counter[uuid.UUID] = Counter()
+        days: set[date] = set(year_days.values())
+        months: Counter[str] = Counter(day.strftime("%Y-%m") for day in year_days.values())
+
+        type_counts = self._type_counts(user_id=user_id, record_ids=year_ids)
+        place_rows = self._lean_places_rows(user_id=user_id, record_ids=year_ids)
+        countries, cities = self._collect_places(place_rows)
+        trip_counts = self._trip_counts(user_id=user_id, record_ids=year_ids)
+
         city_counts: Counter[str] = Counter()
         # Identity key -> display names; airport cities get a bilingual pair.
         city_display: dict[str, str] = {}
         city_display_zh: dict[str, str] = {}
-        distance = 0.0
-        longest: tuple[float, TransportRecord] | None = None
-
-        for record in year_records:
-            day = departure_days[record.id]
-            months[day.strftime("%Y-%m")] += 1
-            days.add(day)
-            km = self._distance_km(record)
-            if km:
-                distance += km
-                if longest is None or km > longest[0]:
-                    longest = (km, record)
-            if record.trip_id:
-                trip_counts[record.trip_id] += 1
-            for place_name in (record.origin, record.destination):
+        for row in place_rows:
+            for place_name in (row.origin, row.destination):
                 if not place_name:
                     continue
                 airport = reference.get_airport_by_iata(place_name)
@@ -566,73 +765,87 @@ class DashboardService:
                     city_display.setdefault(key, airport["city"])
                     if airport.get("city_zh"):
                         city_display_zh.setdefault(key, airport["city_zh"])
-                elif record.type in {"train", "other"}:
+                elif row.type in {"train", "other"}:
                     key = reference.place_city_key(place_name)
                     city_counts[key] += 1
                     city_display.setdefault(key, reference.station_city_label(place_name))
-            if record.type == "flight":
-                key = record.airline_code or record.carrier
-                if key:
-                    airlines[key] += 1
-                for code in (record.origin, record.destination):
-                    if code:
-                        airports[code] += 1
-                if record.aircraft_model:
-                    aircraft[record.aircraft_model] += 1
-            else:
-                # Trains and other transport share the station leaderboard: both
-                # store free-text endpoints.
-                for place_name in (record.origin, record.destination):
-                    if place_name:
-                        stations[place_name] += 1
 
-        countries, cities = self._collect_places(year_records)
-        trips = len({r.trip_id for r in year_records if r.trip_id})
+        distance = 0.0
+        longest_id: uuid.UUID | None = None
+        longest_km = 0.0
 
-        year_hotels = [h for h in hotels if h.check_in.year == target]
-        nights = sum((h.check_out - h.check_in).days for h in year_hotels if h.check_out)
-        year_activities = sum(
-            1
-            for activity in activities
-            if activity.start_at is not None
-            and in_timezone(activity.start_at, activity.timezone).date().year == target
-        )
-        year_expenses = [
-            e
-            for e in expenses
-            if e.occurred_at is not None and in_timezone(e.occurred_at, "UTC").date().year == target
+        def consider(record_id: uuid.UUID, km: float) -> None:
+            nonlocal longest_id, longest_km
+            # Deterministic tie-break: more km wins, then the smaller id. The
+            # old "first max in list_all order" rule has no stable equivalent
+            # now that the full-table scan is gone.
+            if km and (
+                longest_id is None
+                or km > longest_km
+                or (km == longest_km and record_id < longest_id)
+            ):
+                longest_id, longest_km = record_id, km
+
+        for record_id, stored in self._stored_distance_rows(user_id=user_id, record_ids=year_ids):
+            km = float(stored)
+            distance += km
+            consider(record_id, km)
+        for row in self._null_distance_rows(user_id=user_id, record_ids=year_ids):
+            km = self._endpoint_distance_km(row.type, row.origin, row.destination)
+            if km:
+                distance += km
+                consider(row.id, km)
+
+        year_hotels = [
+            (check_in, check_out) for check_in, check_out in hotel_rows if check_in.year == target
         ]
+        nights = sum(
+            (check_out - check_in).days for check_in, check_out in year_hotels if check_out
+        )
+        year_activities = sum(1 for day in activity_dates if day.year == target)
+        year_expenses = self._expenses_by_ids(
+            user_id=user_id,
+            expense_ids=[
+                expense_id for expense_id, day in expense_dates.items() if day.year == target
+            ],
+        )
 
         user = self.db.get(User, user_id)
         report_currency = (user.currency if user else None) or "CNY"
 
         longest_route = None
-        if longest is not None:
-            km, record = longest
-            resolver = self._map_point if record.type == "flight" else self._station_point
-            origin = resolver(record.origin) or MapPoint(code=record.origin)
-            destination = resolver(record.destination) or MapPoint(code=record.destination)
-            longest_route = WrappedRoute(
-                id=record.id,
-                type=record.type,
-                service_number=record.service_number,
-                carrier=record.carrier,
-                origin=origin,
-                destination=destination,
-                distance_km=km,
-                departure_date=departure_days[record.id],
+        if longest_id is not None:
+            record = self.db.scalar(
+                select(TransportRecord).where(
+                    TransportRecord.id == longest_id,
+                    TransportRecord.user_id == user_id,
+                )
             )
+            if record is not None:
+                resolver = self._map_point if record.type == "flight" else self._station_point
+                origin = resolver(record.origin) or MapPoint(code=record.origin)
+                destination = resolver(record.destination) or MapPoint(code=record.destination)
+                longest_route = WrappedRoute(
+                    id=record.id,
+                    type=record.type,
+                    service_number=record.service_number,
+                    carrier=record.carrier,
+                    origin=origin,
+                    destination=destination,
+                    distance_km=longest_km,
+                    departure_date=year_days[record.id],
+                )
 
         favorite_trip = None
         if trip_counts:
-            trip_id, count = trip_counts.most_common(1)[0]
+            trip_id, count = trip_counts[0]
             trip = self.db.scalar(select(Trip).where(Trip.id == trip_id, Trip.user_id == user_id))
             if trip is not None:
                 favorite_trip = BreakdownItem(label=trip.name, count=count)
 
         most_visited_city = None
         if city_counts:
-            city_key, count = city_counts.most_common(1)[0]
+            city_key, count = min(city_counts.items(), key=lambda item: (-item[1], item[0]))
             most_visited_city = BreakdownItem(
                 label=city_display[city_key],
                 name=city_display_zh.get(city_key),
@@ -646,20 +859,41 @@ class DashboardService:
                 countries=len(countries),
                 cities=len(cities),
                 distance_km=round(distance, 1),
-                trips=trips,
-                flights=sum(1 for r in year_records if r.type == "flight"),
-                trains=sum(1 for r in year_records if r.type == "train"),
-                transports=sum(1 for r in year_records if r.type == "other"),
+                trips=len(trip_counts),
+                flights=type_counts.get("flight", 0),
+                trains=type_counts.get("train", 0),
+                transports=type_counts.get("other", 0),
                 hotels=len(year_hotels),
                 hotel_nights=nights,
                 activities=year_activities,
                 travel_days=len(days),
             ),
             by_month=self._chronological(months),
-            top_airlines=self._top_with_airline_names(airlines),
-            top_airports=self._top_with_airport_names(airports),
-            top_stations=self._ranked(stations)[:5],
-            top_aircraft=self._ranked(aircraft)[:5],
+            top_airlines=self._top_with_airline_names(
+                self._airline_counts(user_id=user_id, record_ids=year_ids)
+            ),
+            top_airports=self._top_with_airport_names(
+                self._endpoint_counts(
+                    user_id=user_id,
+                    record_type="flight",
+                    record_ids=year_ids,
+                )
+            ),
+            top_stations=self._items(
+                self._endpoint_counts(
+                    user_id=user_id,
+                    record_type=("train", "other"),
+                    record_ids=year_ids,
+                )
+            )[:5],
+            top_aircraft=self._items(
+                self._group_counts(
+                    user_id=user_id,
+                    record_type="flight",
+                    column=TransportRecord.aircraft_model,
+                    record_ids=year_ids,
+                )
+            )[:5],
             most_visited_city=most_visited_city,
             favorite_trip=favorite_trip,
             longest_route=longest_route,
@@ -669,9 +903,11 @@ class DashboardService:
         )
 
     @staticmethod
-    def _top_with_airline_names(counter: Counter[str], *, limit: int = 5) -> list[BreakdownItem]:
+    def _top_with_airline_names(
+        rows: list[tuple[str, int]], *, limit: int = 5
+    ) -> list[BreakdownItem]:
         items: list[BreakdownItem] = []
-        for code, count in counter.most_common(limit):
+        for code, count in rows[:limit]:
             airline = reference.get_airline_by_iata(code)
             items.append(
                 BreakdownItem(
@@ -681,9 +917,11 @@ class DashboardService:
         return items
 
     @staticmethod
-    def _top_with_airport_names(counter: Counter[str], *, limit: int = 5) -> list[BreakdownItem]:
+    def _top_with_airport_names(
+        rows: list[tuple[str, int]], *, limit: int = 5
+    ) -> list[BreakdownItem]:
         items: list[BreakdownItem] = []
-        for code, count in counter.most_common(limit):
+        for code, count in rows[:limit]:
             airport = reference.get_airport_by_iata(code)
             items.append(
                 BreakdownItem(
