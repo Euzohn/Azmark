@@ -27,9 +27,11 @@ import { Markdown } from "@/components/markdown";
 import { PageHeader } from "@/components/page-header";
 import { api, ApiError } from "@/lib/api";
 import { buildChatHistory } from "@/lib/ai-history";
+import { consumeDeepLinkPrompt } from "@/lib/ai-deeplink";
 import {
   activeConversation,
   appendMessage,
+  baseConversation,
   createConversation,
   emptyStore,
   loadStore,
@@ -332,21 +334,12 @@ export default function AiChatPage() {
   const [storeOwner, setStoreOwner] = useState<string | null>(
     () => useAuth.getState().user?.id ?? null,
   );
-  // A trip page can deep-link here with a prefilled request, e.g.
-  // /ai?q=<journal prompt>. Guarded like the wrapped page: the shell renders
-  // after auth hydration, so this never runs on the server.
-  const [input, setInput] = useState(() => {
-    if (typeof window === "undefined") return "";
-    return new URLSearchParams(window.location.search).get("q") ?? "";
-  });
-  // Consume the one-shot deep-link prompt so a refresh does not refill input.
-  useEffect(() => {
-    if (window.location.search.includes("q=")) {
-      const url = new URL(window.location.href);
-      url.searchParams.delete("q");
-      window.history.replaceState(null, "", url.toString());
-    }
-  }, []);
+  // A trip page can deep-link here with a one-shot prompt, e.g.
+  // /ai?q=<journal prompt>. It is auto-sent by the effect below once the
+  // account's conversation store is ready (never pre-filled: the button is an
+  // explicit "write this" action). Guarded like the wrapped page: the shell
+  // renders after auth hydration, so this never runs on the server.
+  const [input, setInput] = useState("");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
   const [streamingId, setStreamingId] = useState<string | null>(null);
@@ -514,7 +507,7 @@ export default function AiChatPage() {
   );
 
   const handleSend = useCallback(
-    async (text?: string) => {
+    async (text?: string, opts?: { freshConversation?: boolean }) => {
       const messageText = (text ?? input).trim();
       if (!messageText && !imagePreview) return;
       if (streamingId) return;
@@ -524,7 +517,9 @@ export default function AiChatPage() {
 
       // Prior turns (with proposal outcomes) give the stateless backend enough
       // context to follow up without re-proposing what the user already saved.
-      const history = buildChatHistory(messages);
+      // A fresh conversation starts with no context: the deep-linked journal
+      // request must not inherit the previous thread's topic.
+      const history = opts?.freshConversation ? [] : buildChatHistory(messages);
 
       const userMsg: ChatMessage = {
         id: uuid(),
@@ -538,8 +533,7 @@ export default function AiChatPage() {
       // on the latest store even if another render happened since the callback
       // was created.
       commit((prev) => {
-        const base =
-          prev.conversations.find((c) => c.id === prev.activeId) ?? createConversation();
+        const base = baseConversation(prev, opts?.freshConversation);
         const withUser = appendMessage(base, userMsg);
         const withAssistant = appendMessage(withUser, {
           id: assistantId,
@@ -610,6 +604,33 @@ export default function AiChatPage() {
       updateActive,
     ],
   );
+
+  // One-shot deep-link prompt (`/ai?q=...`, e.g. the trip page's「AI 写回忆」).
+  // Wait until the account's conversation store is loaded — sending earlier
+  // would write into a store that the load effect then replaces, or into
+  // another account's key. The URL parameter is consumed before sending, so a
+  // refresh or StrictMode's doubled mount never replays the request; the ref
+  // is a second guard in case replaceState is unavailable.
+  const deepLinkSent = useRef(false);
+  useEffect(() => {
+    if (deepLinkSent.current) return;
+    if (!userId || storeOwner !== userId) return;
+    // Wait for the provider status: when AI is unconfigured the page shows the
+    // setup guide instead of the chat, so auto-sending would persist an error
+    // conversation the user never sees.
+    if (!aiSettings) return;
+    const consumed = consumeDeepLinkPrompt(window.location.href);
+    if (!consumed) return;
+    deepLinkSent.current = true;
+    window.history.replaceState(null, "", consumed.href);
+    if (aiSettings.configured && consumed.prompt.trim()) {
+      // Deferred like the store-load effect above: sending patches the local
+      // conversation store, and React forbids setState during an effect pass.
+      queueMicrotask(() => {
+        void handleSend(consumed.prompt, { freshConversation: true });
+      });
+    }
+  }, [aiSettings, handleSend, storeOwner, userId]);
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ["flights"] });

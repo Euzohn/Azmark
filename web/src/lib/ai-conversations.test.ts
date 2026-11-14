@@ -10,6 +10,7 @@ import { test } from "node:test";
 
 import {
   appendMessage,
+  baseConversation,
   conversationsKey,
   createConversation,
   deriveTitle,
@@ -157,6 +158,42 @@ test("mergeLegacyStores prefers the shared multi-key and combines leftovers", ()
     [legacy.conversations[0].id, "c-shared"],
   );
   assert.equal(combined?.activeId, "c-shared");
+});
+
+test("normal sends continue the active conversation", () => {
+  const existing = appendMessage(createConversation(NOW), msg("m1", "user", "旧问题"), NOW);
+  const store: ConversationStore = {
+    version: 1,
+    activeId: existing.id,
+    conversations: [existing],
+  };
+  assert.equal(baseConversation(store).id, existing.id);
+
+  const empty = emptyStore();
+  const created = baseConversation(empty);
+  assert.ok(!empty.conversations.some((c) => c.id === created.id));
+});
+
+test("fresh sends never append to an existing conversation", () => {
+  const existing = appendMessage(createConversation(NOW), msg("m1", "user", "旧问题"), NOW);
+  const store: ConversationStore = {
+    version: 1,
+    activeId: existing.id,
+    conversations: [existing],
+  };
+  const fresh = baseConversation(store, true);
+  assert.notEqual(fresh.id, existing.id);
+  assert.deepEqual(fresh.messages, []);
+});
+
+test("fresh sends reuse an already-empty active conversation", () => {
+  const empty = createConversation(NOW);
+  const store: ConversationStore = {
+    version: 1,
+    activeId: empty.id,
+    conversations: [empty],
+  };
+  assert.equal(baseConversation(store, true).id, empty.id);
 });
 
 test("mergeLegacyStores falls back to whichever side has data", () => {

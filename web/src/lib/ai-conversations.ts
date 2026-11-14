@@ -98,6 +98,20 @@ export function activeConversation(store: ConversationStore): Conversation | und
   return findConversation(store, store.activeId);
 }
 
+/**
+ * Conversation a new send lands in.
+ *
+ * Normal sends continue the active thread (creating one when none exists).
+ * `fresh` sends — e.g. the trip page's「AI 写回忆」deep link — must never
+ * append to an existing conversation; they start a new one, reusing the
+ * active conversation only while it is still empty (same rule as `newChat`).
+ */
+export function baseConversation(store: ConversationStore, fresh = false): Conversation {
+  const active = activeConversation(store);
+  if (!fresh) return active ?? createConversation();
+  return active && active.messages.length === 0 ? active : createConversation();
+}
+
 /** Append a message, promoting the first user message to the conversation title. */
 export function appendMessage(
   conversation: Conversation,
