@@ -190,9 +190,11 @@ export default function TripDetailPage() {
       </Link>
 
       <div className="flex animate-fade-in-up flex-wrap items-start justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="font-display text-3xl font-semibold tracking-tight">{data.name}</h1>
+            <h1 className="break-words font-display text-2xl font-semibold tracking-tight md:text-3xl">
+              {data.name}
+            </h1>
             <TripStatusBadge status={data.status} />
           </div>
           {(data.origin || data.destination) && (
@@ -260,7 +262,9 @@ export default function TripDetailPage() {
                   aria-label={t("trips.changeTimeDirection")}
                 >
                   {direction === "asc" ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
-                  {direction === "asc" ? t("trips.timeAscending") : t("trips.timeDescending")}
+                  <span className="hidden sm:inline">
+                    {direction === "asc" ? t("trips.timeAscending") : t("trips.timeDescending")}
+                  </span>
                 </Button>
               ) : null}
               <Button
@@ -269,11 +273,18 @@ export default function TripDetailPage() {
                 size="sm"
                 disabled={update.isPending}
                 onClick={toggleOrderMode}
+                aria-label={
+                  data.timeline_order_mode === "manual"
+                    ? t("trips.switchToChronological")
+                    : t("trips.switchToManual")
+                }
               >
                 <ArrowUpDown className="h-4 w-4" />
-                {data.timeline_order_mode === "manual"
-                  ? t("trips.switchToChronological")
-                  : t("trips.switchToManual")}
+                <span className="hidden sm:inline">
+                  {data.timeline_order_mode === "manual"
+                    ? t("trips.switchToChronological")
+                    : t("trips.switchToManual")}
+                </span>
               </Button>
               {needsRepair ? (
                 <Button
@@ -282,9 +293,10 @@ export default function TripDetailPage() {
                   size="sm"
                   disabled={repairTimeline.isPending}
                   onClick={() => repairTimeline.mutate()}
+                  aria-label={t("trips.repairTimeline")}
                 >
                   <RefreshCw className="h-4 w-4" />
-                  {t("trips.repairTimeline")}
+                  <span className="hidden sm:inline">{t("trips.repairTimeline")}</span>
                 </Button>
               ) : null}
             </div>
@@ -324,7 +336,7 @@ export default function TripDetailPage() {
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7"
+                    className="h-9 w-9 md:h-7 md:w-7"
                     disabled={itemIndex <= 0 || reorder.isPending}
                     onClick={() => moveItem(item.id, -1)}
                     title={t("trips.moveUp")}
@@ -336,7 +348,7 @@ export default function TripDetailPage() {
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7"
+                    className="h-9 w-9 md:h-7 md:w-7"
                     disabled={itemIndex >= items.length - 1 || reorder.isPending}
                     onClick={() => moveItem(item.id, 1)}
                     title={t("trips.moveDown")}
@@ -357,8 +369,8 @@ export default function TripDetailPage() {
                     className="group animate-fade-in-up"
                     style={{ animationDelay: `${index * 40}ms` }}
                   >
-                    <CardContent className="flex items-center gap-4 p-4">
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-warning/10 text-warning">
+                    <CardContent className="flex items-center gap-4 p-3 md:p-4">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-warning/10 text-warning md:h-10 md:w-10">
                         <CalendarDays className="h-4 w-4" strokeWidth={1.75} />
                       </span>
                       <div className="min-w-0 flex-1">
@@ -414,12 +426,12 @@ export default function TripDetailPage() {
                     className="group animate-fade-in-up"
                     style={{ animationDelay: `${index * 40}ms` }}
                   >
-                    <CardContent className="flex items-center gap-4 p-4">
+                    <CardContent className="flex items-center gap-4 p-3 md:p-4">
                       <Link
                         href={`/hotels/${hotel.id}`}
                         className="flex min-w-0 flex-1 items-center gap-4"
                       >
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary md:h-10 md:w-10">
                           <BedDouble className="h-4 w-4" strokeWidth={1.75} />
                         </span>
                         <div className="min-w-0">
@@ -457,33 +469,33 @@ export default function TripDetailPage() {
                   className="group animate-fade-in-up"
                   style={{ animationDelay: `${index * 40}ms` }}
                 >
-                  <CardContent className="flex items-center gap-4 p-4">
+                  <CardContent className="flex items-center gap-4 p-3 md:p-4">
                     <Link
                       href={detailHref}
                       className="flex min-w-0 flex-1 items-center gap-4"
                     >
                       {isTrain ? (
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-warning/10 text-warning">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-warning/10 text-warning md:h-10 md:w-10">
                           <TrainFront className="h-4 w-4" strokeWidth={1.75} />
                         </span>
                       ) : isOther ? (
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-warning/10 text-warning">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-warning/10 text-warning md:h-10 md:w-10">
                           <Bus className="h-4 w-4" strokeWidth={1.75} />
                         </span>
                       ) : (
-                        <AirlineLogo code={record.airline_code} className="h-10 w-10" />
+                        <AirlineLogo code={record.airline_code} className="h-9 w-9 md:h-10 md:w-10" />
                       )}
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-display text-base font-semibold tracking-tight">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                          <span className="min-w-0 truncate font-display text-base font-semibold tracking-tight">
                             {record.origin ? <AirportName value={record.origin} /> : "—"}
                           </span>
-                          <ArrowRight className="h-3.5 w-3.5 text-primary transition-transform group-hover:translate-x-0.5" strokeWidth={2.25} />
-                          <span className="font-display text-base font-semibold tracking-tight">
+                          <ArrowRight className="h-3.5 w-3.5 shrink-0 text-primary transition-transform group-hover:translate-x-0.5" strokeWidth={2.25} />
+                          <span className="min-w-0 truncate font-display text-base font-semibold tracking-tight">
                             {record.destination ? <AirportName value={record.destination} /> : "—"}
                           </span>
                           {record.service_number ? (
-                            <span className="ml-1 text-xs font-medium text-muted-foreground">
+                            <span className="shrink-0 text-xs font-medium text-muted-foreground">
                               {record.service_number}
                             </span>
                           ) : null}
