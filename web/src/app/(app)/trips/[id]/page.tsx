@@ -241,7 +241,7 @@ export default function TripDetailPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <div className="flex flex-col gap-3">
+        <div className="flex min-w-0 flex-col gap-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               {t("trips.records")} · {displayItems.length}
@@ -522,7 +522,7 @@ export default function TripDetailPage() {
           )}
         </div>
 
-        <Card className="self-start">
+        <Card className="min-w-0 self-start">
           <CardContent className="p-5">
             <h2 className="mb-4 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               {t("trips.edit")}
