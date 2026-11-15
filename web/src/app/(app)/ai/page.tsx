@@ -363,12 +363,23 @@ export default function AiChatPage() {
   // The store is loaded lazily (see useState initializer) — safe because the
   // AppShell only renders children after auth hydration, so this never runs on
   // the server. Persist every change straight back to localStorage.
+  //
+  // Desktop keeps the chat area as its own scroll container; on mobile the page
+  // itself scrolls (the composer is fixed above the bottom nav), so pin the
+  // window instead — scrolling the non-scrollable inner div would be a no-op.
+  const pinToBottom = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (window.matchMedia("(min-width: 768px)").matches) {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    } else {
+      window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" });
+    }
+  }, []);
+
   useEffect(() => {
-    scrollRef.current?.scrollTo({
-      top: scrollRef.current.scrollHeight,
-      behavior: "smooth",
-    });
-  }, [store, streamingId]);
+    pinToBottom();
+  }, [pinToBottom, store, streamingId]);
 
   useEffect(() => {
     const el = textareaRef.current;
@@ -807,7 +818,7 @@ export default function AiChatPage() {
   };
 
   return (
-    <div className="flex h-[calc(100dvh-8rem)] w-full flex-col gap-4 md:h-[calc(100dvh-4rem)] md:flex-row">
+    <div className="flex w-full flex-col gap-4 md:h-[calc(100dvh-4rem)] md:flex-row">
       <ConversationList
         store={store}
         activeId={store.activeId}
@@ -872,10 +883,10 @@ export default function AiChatPage() {
           <div
             ref={scrollRef}
             onPaste={handlePaste}
-            className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto py-4"
+            className="flex flex-col gap-4 pb-6 pt-4 md:min-h-0 md:flex-1 md:overflow-y-auto md:py-4"
           >
             {messages.length === 0 ? (
-              <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center gap-4 text-center">
+              <div className="mx-auto flex min-h-[50vh] w-full max-w-3xl flex-col items-center justify-center gap-4 text-center md:min-h-0 md:flex-1">
                 <Bot className="h-10 w-10 text-muted-foreground" strokeWidth={1.5} />
                 <div>
                   <p className="font-display text-lg font-medium">{t("ai.empty")}</p>
@@ -980,7 +991,14 @@ export default function AiChatPage() {
             ))}
           </div>
 
-          <div className="mx-auto flex w-full max-w-3xl flex-col gap-2 border-t border-border/60 pb-1 pt-3">
+          {/* Mobile: fixed above the bottom nav so the composer is always
+              reachable — the page scrolls naturally behind it, and main's
+              bottom padding (7rem + safe area) reserves exactly this strip.
+              4.3125rem = the nav's real height (border 1px + py-2 16px +
+              icon 32px + gap 4px + label 16px); keep it in sync with the
+              bottom nav in app-shell.tsx. Desktop: back in the chat column,
+              pinned by the frame height. */}
+          <div className="fixed inset-x-0 bottom-[calc(4.3125rem+env(safe-area-inset-bottom))] z-10 mx-auto flex w-full max-w-3xl flex-col gap-2 border-t border-border/60 bg-background/95 px-4 pb-2 pt-3 backdrop-blur-md md:static md:bg-transparent md:px-0 md:pb-1 md:backdrop-blur-none">
             {imagePreview && (
               <div className="relative inline-flex items-center gap-2 self-start">
                 <ChatImage src={imagePreview} className="h-16 w-16 rounded-lg border border-border object-cover" />
