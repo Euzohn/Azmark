@@ -4,6 +4,7 @@ from app.core.security import hash_password, verify_password
 from app.models.user import User, UserRole, UserStatus
 from app.repositories.user import UserRepository
 from app.services.attachment import AttachmentService
+from app.services.photo import PhotoService
 
 
 class AuthError(Exception):
@@ -77,6 +78,7 @@ class AuthService:
         user: User,
         password: str,
         attachments: AttachmentService | None = None,
+        photos: PhotoService | None = None,
     ) -> None:
         """Permanently delete the account and owned data (spec #48).
 
@@ -94,4 +96,6 @@ class AuthService:
             raise LastAdminError
         if attachments is not None:
             attachments.delete_for_user(user_id=user.id)
+        if photos is not None:
+            photos.delete_for_user(user_id=user.id)
         self.users.delete_account(user)

@@ -2,7 +2,9 @@
 
 import asyncio
 import json
+from io import BytesIO
 
+from PIL import Image
 from sqlalchemy import select
 
 from app.models.user import User
@@ -70,6 +72,12 @@ def _flight(**overrides) -> dict:
     return payload
 
 
+def _jpeg() -> bytes:
+    buffer = BytesIO()
+    Image.new("RGB", (16, 16), (30, 90, 140)).save(buffer, format="JPEG")
+    return buffer.getvalue()
+
+
 def _train(**overrides) -> dict:
     payload = {
         "origin": "上海虹桥",
@@ -105,6 +113,12 @@ def test_trip_scope_bundles_only_that_trip(client, db):
         },
         headers=headers,
     )
+    client.post(
+        "/api/v1/photos",
+        data={"trip_id": trip["id"]},
+        files={"file": ("kyoto.jpg", _jpeg(), "image/jpeg")},
+        headers=headers,
+    )
 
     bundle = asyncio.run(
         _generate_trip_summary(db, _user_id(db, "journal_trip"), {"trip_id": trip["id"]})
@@ -119,6 +133,7 @@ def test_trip_scope_bundles_only_that_trip(client, db):
     # The activity only stores place_id; the referenced place is resolved too.
     assert [place["name"] for place in bundle["places"]] == ["外滩"]
     assert [note["title"] for note in bundle["notes"]] == ["Singapore packing list"]
+    assert [photo["filename"] for photo in bundle["photos"]] == ["kyoto.jpg"]
     assert bundle["totals"] == {
         "records": 1,
         "hotels": 1,
@@ -126,6 +141,7 @@ def test_trip_scope_bundles_only_that_trip(client, db):
         "places": 1,
         "notes": 1,
         "expenses": 1,
+        "photos": 1,
     }
     assert float(bundle["expense_summary"]["converted_total"]) == 12.50
     assert not any(bundle["truncated"].values())

@@ -24,9 +24,10 @@ Azmark 内置一个**只读** MCP Server（spec #85）。Claude、Cursor 等 MCP
 | `get_record` | 按 id 取单条记录（含 notes） |
 | `search_hotels` / `get_hotel` | 搜索 / 读取住宿记录 |
 | `list_trips` | 最近的行程列表，用于拿 `trip_id` |
-| `get_trip` | 单个行程 + 统一时间线（交通 / 酒店 / 活动，含地点摘要、未安排分区与排序模式）+ 花费摘要 + 笔记和交通附件，成员口径与网页一致 |
+| `get_trip` | 单个行程 + 统一时间线（交通 / 酒店 / 活动，含地点摘要、未安排分区与排序模式）+ 花费摘要 + 笔记、交通附件与照片元数据，成员口径与网页一致 |
 | `get_statistics` | 汇总统计：国家/城市/旅程/里程，按年/月/航司/机场/舱位/铁路运营方拆分 |
 | `search_expenses` / `search_notes` / `search_places` / `search_activities` | 按关键词、类别或类型检索开销 / 笔记 / 地点 / 活动，用于先拿到 id 再改/删（删除在网页操作） |
+| `search_photos` / `get_photo` | 按文件名（可限定 `trip_id`）检索照片 / 按 id 读取单张照片的元数据；只返回拍摄时间、经纬度、归档行程等元数据，**不返回图片二进制、缩略图或 `storage_key`** |
 
 所有结果都不含 PNR、票号、证件号等敏感字段（spec #45、#75、#96），并且只包含令牌所属用户的数据；别人的 id 一律返回 `not found`（spec #57）。
 

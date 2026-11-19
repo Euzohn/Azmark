@@ -489,7 +489,7 @@ Place 中的 `airport/train_station/...` 类型仅用于用户收藏。
 
 ---
 
-## 8. Note、Attachment 与未来 Photo
+## 8. Note、Attachment 与 Photo
 
 ### 8.1 Note
 
@@ -514,17 +514,19 @@ Note 继续作为自由文本内容：
 
 聚合查询必须同时校验附件与来源记录的 `user_id`；交通记录移出后，附件随来源从该行程聚合视图消失，但不修改附件归属。删除 Trip 不删除交通记录附件。未来扩展附件资源类型时，另行定义来源删除及二进制清理规则，并使用第 3.1 节的类型适配边界。
 
-### 8.3 Photo（未来）
+### 8.3 Photo
 
-Photo 建议作为 Attachment 的扩展，而不是另起一套记录体系：
+Photo 是独立记录（spec #20），不是 Attachment 的扩展：
 
-- 关联 Trip / Activity / Place；
-- 带 `captured_at`、经纬度等元数据；
-- 不进入时间线。
+- 字段：`storage_key` / `filename` / `mime_type` / `size` / `captured_at` / 经纬度 / `trip_id`；
+- 二进制与缩略图都走 StorageProvider（`storage_key`、`storage_key + "/thumb"`），数据库只存元数据；
+- 上传时由服务端用 Pillow 校验字节确实是图片，并提取 EXIF（拍摄时间、GPS）；提取不到时允许手工补录；
+- 支持 JPEG / PNG / WebP / GIF；SVG / HTML 一律拒绝（内联渲染可执行脚本），HEIC 提示转 JPEG；
+- 图片从认证端点内联返回（`nosniff` + image-only MIME + CSP sandbox），`storage_key` 永不出现在 API 响应里；
+- 不进入 `TripItem` 时间线：`trip_id` 只是归档归属，行程详情以独立照片区展示；删除行程只解除归档，不删除照片；
+- 地图按经纬度渲染为独立「照片」图层；JSON 导出只含元数据（不含二进制，导入不重建）；AI / MCP 通过只读 `search_photos` / `get_photo` 读取元数据，绝不把图片二进制发给外部模型。
 
-本期不实现。
-
-当前决定（2026-11）：Photo 不单独实现。图片通过网页 AI 助手识图提取字段，原图默认不持久化；需要留存的图片走 Attachment（当前支持交通、酒店、活动）。OCR 与独立登机牌解析同理不单独建模块。
+历史决定（2026-11 早先「Photo 不单独实现」）已被本条取代：P1 收官把 Photo 作为实体落地，AI 识图仍由助手承担，不设 OCR 任务。
 
 ---
 

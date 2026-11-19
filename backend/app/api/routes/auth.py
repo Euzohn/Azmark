@@ -5,6 +5,7 @@ from app.api.deps import (
     get_audit_service,
     get_auth_service,
     get_current_user,
+    get_photo_service,
     get_system_settings_service,
 )
 from app.core.captcha import (
@@ -39,6 +40,7 @@ from app.services.auth import (
     LastAdminError,
     UsernameTakenError,
 )
+from app.services.photo import PhotoService
 from app.services.system_setting import SystemSettingsService, effective_registration_captcha
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -296,6 +298,7 @@ def delete_account(
     current_user: User = Depends(get_current_user),
     service: AuthService = Depends(get_auth_service),
     attachments: AttachmentService = Depends(get_attachment_service),
+    photos: PhotoService = Depends(get_photo_service),
     audit: AuditService = Depends(get_audit_service),
 ) -> None:
     """Delete the account and owned data, keeping an anonymised audit trail (#48)."""
@@ -306,6 +309,7 @@ def delete_account(
             user=current_user,
             password=payload.password,
             attachments=attachments,
+            photos=photos,
         )
     except InvalidCredentialsError:
         raise HTTPException(

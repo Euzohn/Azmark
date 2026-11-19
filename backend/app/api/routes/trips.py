@@ -83,6 +83,7 @@ def get_trip(
     summary = service.expense_summary(user_id=current_user.id, trip_id=trip_id)
     notes = service.list_notes(user_id=current_user.id, trip_id=trip_id)
     attachments = service.list_attachments(user_id=current_user.id, trip_id=trip_id)
+    photos = service.list_photos(user_id=current_user.id, trip_id=trip_id)
     return TripDetail.model_validate(trip, from_attributes=True).model_copy(
         update={
             "records": records,
@@ -91,6 +92,7 @@ def get_trip(
             "expense_summary": summary,
             "notes": notes,
             "attachments": attachments,
+            "photos": photos,
         }
     )
 

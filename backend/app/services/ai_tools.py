@@ -286,6 +286,7 @@ _JOURNAL_LIMITS = {
     "places": 30,
     "notes": 20,
     "expenses": 50,
+    "photos": 20,
 }
 _JOURNAL_NOTE_CHARS = 600
 _JOURNAL_PAGE_SIZE = 100
@@ -341,6 +342,7 @@ def _journal_bundle(
     places: list,
     notes: list,
     expenses: list,
+    photos: list,
     report_currency: str,
 ) -> dict:
     """Serialize one journal context pack. Lists are sliced; totals are exact."""
@@ -356,6 +358,10 @@ def _journal_bundle(
         e for e in expenses if e.occurred_at is None
     ]
     notes = sorted(notes, key=lambda n: n.updated_at or n.created_at, reverse=True)
+    photos = sorted(
+        photos,
+        key=lambda p: (p.captured_at is None, p.captured_at or p.created_at),
+    )
 
     limits = _JOURNAL_LIMITS
     note_items = [_compact_note(note) for note in notes[: limits["notes"]]]
@@ -374,6 +380,7 @@ def _journal_bundle(
             "places": len(places),
             "notes": len(notes),
             "expenses": len(expenses),
+            "photos": len(photos),
         },
         "records": [_compact_record(r) for r in records[: limits["records"]]],
         "hotels": [_compact_hotel(h) for h in hotels[: limits["hotels"]]],
@@ -381,6 +388,7 @@ def _journal_bundle(
         "places": [_compact_place(p) for p in places[: limits["places"]]],
         "notes": note_items,
         "expenses": [_compact_expense(e) for e in expenses[: limits["expenses"]]],
+        "photos": [_compact_photo(p) for p in photos[: limits["photos"]]],
         "expense_summary": _compact_expense_summary(summarize_expenses(expenses, report_currency)),
         "truncated": {
             "records": len(records) > limits["records"],
@@ -389,6 +397,7 @@ def _journal_bundle(
             "places": len(places) > limits["places"],
             "notes": len(notes) > limits["notes"],
             "expenses": len(expenses) > limits["expenses"],
+            "photos": len(photos) > limits["photos"],
         },
         "hint": (
             "Facts only: write the journal from these fields. Empty lists mean "
@@ -407,6 +416,7 @@ async def _generate_trip_summary(db: Session, user_id: uuid.UUID, args: dict) ->
     The article itself is written by the chat model from these facts.
     """
     from app.models.user import User
+    from app.repositories.photo import PhotoRepository
     from app.repositories.transport import TransportRepository
     from app.services.activity import ActivityService
     from app.services.expense import ExpenseService
@@ -469,6 +479,7 @@ async def _generate_trip_summary(db: Session, user_id: uuid.UUID, args: dict) ->
             places=places,
             notes=notes,
             expenses=trip_service.list_expenses(user_id=user_id, trip_id=parsed_id),
+            photos=PhotoRepository(db).list_for_trip(user_id=user_id, trip_id=parsed_id),
             report_currency=report_currency,
         )
 
@@ -538,6 +549,11 @@ async def _generate_trip_summary(db: Session, user_id: uuid.UUID, args: dict) ->
             places=places,
             notes=notes,
             expenses=expenses,
+            photos=[
+                p
+                for p in PhotoRepository(db).list_for_user(user_id=user_id)
+                if p.captured_at is not None and p.captured_at.year == year
+            ],
             report_currency=report_currency,
         )
 
@@ -568,6 +584,7 @@ async def _generate_trip_summary(db: Session, user_id: uuid.UUID, args: dict) ->
         places=places,
         notes=[],
         expenses=[],
+        photos=[],
         report_currency=report_currency,
     )
 
@@ -1217,6 +1234,20 @@ def _compact_note(note) -> dict:
     }
 
 
+def _compact_photo(photo) -> dict:
+    """Photo metadata for the AI/MCP layer — never the bytes or storage key."""
+    return {
+        "id": str(photo.id),
+        "filename": photo.filename,
+        "mime_type": photo.mime_type,
+        "size": photo.size,
+        "captured_at": photo.captured_at.isoformat() if photo.captured_at else None,
+        "latitude": photo.latitude,
+        "longitude": photo.longitude,
+        "trip_id": str(photo.trip_id) if photo.trip_id else None,
+    }
+
+
 def _compact_place(place) -> dict:
     return {
         "id": str(place.id),
@@ -1284,6 +1315,49 @@ async def _search_notes(db: Session, user_id: uuid.UUID, args: dict) -> dict:
         page_size=limit,
     )
     return {"count": len(notes), "total": total, "items": [_compact_note(n) for n in notes]}
+
+
+async def _search_photos(db: Session, user_id: uuid.UUID, args: dict) -> dict:
+    from app.repositories.photo import PhotoRepository
+
+    query = str(args.get("query") or "").strip()
+    limit = _clamp_limit(args.get("limit"), 20)
+    trip_id = args.get("trip_id")
+    parsed_trip_id = None
+    if trip_id:
+        try:
+            parsed_trip_id = uuid.UUID(str(trip_id))
+        except (ValueError, TypeError):
+            return {"error": "invalid trip id"}
+    photos, total = PhotoRepository(db).list(
+        user_id=user_id,
+        search=query or None,
+        trip_id=parsed_trip_id,
+        sort="newest",
+        page=1,
+        page_size=limit,
+    )
+    return {
+        "count": len(photos),
+        "total": total,
+        "items": [_compact_photo(photo) for photo in photos],
+    }
+
+
+async def _get_photo(db: Session, user_id: uuid.UUID, args: dict) -> dict:
+    from app.repositories.photo import PhotoRepository
+
+    photo_id = args.get("photo_id") or args.get("id")
+    if not photo_id:
+        return {"error": "photo_id is required"}
+    try:
+        parsed_id = uuid.UUID(str(photo_id))
+    except (ValueError, TypeError):
+        return {"error": "invalid photo id"}
+    photo = PhotoRepository(db).get(user_id=user_id, photo_id=parsed_id)
+    if photo is None:
+        return {"error": "photo not found"}
+    return _compact_photo(photo)
 
 
 async def _search_places(db: Session, user_id: uuid.UUID, args: dict) -> dict:
@@ -2284,6 +2358,43 @@ TOOLS: dict[str, ToolDef] = {
         permission=ToolPermission.READ,
         read=_search_notes,
     ),
+    "search_photos": ToolDef(
+        name="search_photos",
+        description=(
+            "Search the user's travel photos by filename, optionally limited to one "
+            "trip. Returns metadata only (capture time, coordinates, trip); the "
+            "image bytes and storage key are never exposed."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Keyword from the filename"},
+                "trip_id": {
+                    "type": "string",
+                    "description": "Only photos filed into this trip UUID",
+                },
+                "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+            },
+        },
+        permission=ToolPermission.READ,
+        read=_search_photos,
+    ),
+    "get_photo": ToolDef(
+        name="get_photo",
+        description=(
+            "Get one photo's metadata by id (capture time, coordinates, trip). "
+            "Does not return the image itself."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "photo_id": {"type": "string", "description": "The photo UUID"},
+            },
+            "required": ["photo_id"],
+        },
+        permission=ToolPermission.READ,
+        read=_get_photo,
+    ),
     "search_places": ToolDef(
         name="search_places",
         description=(
@@ -2749,6 +2860,8 @@ MCP_READ_TOOL_NAMES: tuple[str, ...] = (
     "get_statistics",
     "search_expenses",
     "search_notes",
+    "search_photos",
+    "get_photo",
     "search_places",
     "search_activities",
 )

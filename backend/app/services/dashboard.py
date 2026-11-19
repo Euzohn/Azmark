@@ -19,6 +19,7 @@ from app.core.timezones import in_timezone
 from app.models.activity import Activity
 from app.models.expense import Expense
 from app.models.hotel import Hotel
+from app.models.photo import Photo
 from app.models.place import Place
 from app.models.transport_record import TransportRecord
 from app.models.trip import Trip
@@ -30,6 +31,7 @@ from app.schemas.dashboard import (
     DashboardRead,
     DashboardStats,
     MapHotel,
+    MapPhoto,
     MapPlace,
     MapPoint,
     MapRoute,
@@ -1020,4 +1022,29 @@ class DashboardService:
                 .order_by(Place.name)
             )
         ]
-        return MapRoutesRead(items=items, total=len(items), hotels=hotels, places=places)
+        photos = [
+            MapPhoto(
+                id=photo.id,
+                filename=photo.filename,
+                lat=photo.latitude,
+                lon=photo.longitude,
+                captured_at=photo.captured_at,
+                trip_id=photo.trip_id,
+            )
+            for photo in self.db.scalars(
+                select(Photo)
+                .where(
+                    Photo.user_id == user_id,
+                    Photo.latitude.isnot(None),
+                    Photo.longitude.isnot(None),
+                )
+                .order_by(
+                    Photo.captured_at.desc().nulls_last(),
+                    Photo.created_at.desc(),
+                    Photo.id,
+                )
+            )
+        ]
+        return MapRoutesRead(
+            items=items, total=len(items), hotels=hotels, places=places, photos=photos
+        )

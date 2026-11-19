@@ -18,6 +18,7 @@ from app.repositories.attachment import AttachmentRepository
 from app.repositories.expense import ExpenseRepository
 from app.repositories.hotel import HotelRepository
 from app.repositories.note import NoteRepository
+from app.repositories.photo import PhotoRepository
 from app.repositories.place import PlaceRepository
 from app.repositories.transport import TransportRepository
 from app.repositories.trip import TripRepository
@@ -135,6 +136,7 @@ class TripService:
         self.expenses = ExpenseRepository(db)
         self.notes = NoteRepository(db)
         self.attachments = AttachmentRepository(db)
+        self.photos = PhotoRepository(db)
 
     def list_trips(
         self,
@@ -167,6 +169,10 @@ class TripService:
 
     def list_notes(self, *, user_id: uuid.UUID, trip_id: uuid.UUID) -> list[Note]:
         return self.notes.list_for_trip(user_id=user_id, trip_id=trip_id)
+
+    def list_photos(self, *, user_id: uuid.UUID, trip_id: uuid.UUID):
+        """Photos filed into this trip; the trip is a cabinet, not an owner."""
+        return self.photos.list_for_trip(user_id=user_id, trip_id=trip_id)
 
     def list_attachments(self, *, user_id: uuid.UUID, trip_id: uuid.UUID) -> list[Attachment]:
         """Aggregate attachments of the trip's transport records (docs §8.2).

@@ -22,6 +22,7 @@ from app.models.hotel import Hotel
 from app.models.import_mapping import ImportBundleMapping
 from app.models.migration import PlaceVisitMapping, TimelineMigrationArchive
 from app.models.note import Note
+from app.models.photo import Photo
 from app.models.place import Place
 from app.models.transport_record import TransportRecord
 from app.models.trip import Trip
@@ -211,6 +212,7 @@ V1_IGNORED_ARRAYS = (
     "notes",
     "places",
     "activities",
+    "photos",
     "trip_items",
     "timeline_archives",
     "place_visit_mappings",
@@ -460,6 +462,20 @@ class DataTransferService:
             "notes": activity.notes,
         }
 
+    def _export_photo(self, photo: Photo) -> dict[str, Any]:
+        """Metadata only — the image itself never enters a JSON export."""
+        return {
+            "id": str(photo.id),
+            "filename": photo.filename,
+            "mime_type": photo.mime_type,
+            "size": photo.size,
+            "captured_at": iso_full(photo.captured_at) if photo.captured_at else None,
+            "latitude": photo.latitude,
+            "longitude": photo.longitude,
+            "trip_id": str(photo.trip_id) if photo.trip_id else None,
+            "created_at": iso_full(photo.created_at),
+        }
+
     def _export_trip_v2(self, trip: Trip) -> dict[str, Any]:
         return {
             "id": str(trip.id),
@@ -538,6 +554,9 @@ class DataTransferService:
             "notes": [self._export_note_v2(n) for n in self._all_notes(user_id)],
             "places": [self._export_place(p) for p in self._all_places(user_id)],
             "activities": [self._export_activity_v2(a) for a in self._all_activities(user_id)],
+            # Photos are metadata-only in JSON: the binaries stay in storage.
+            # Import ignores this section (there is nothing to rebuild from).
+            "photos": [self._export_photo(p) for p in self._all_photos(user_id)],
             "trip_items": [self._export_trip_item_v2(i) for i in self._all_trip_items(user_id)],
             "timeline_archives": [
                 self._export_timeline_archive_v2(a) for a in self._all_timeline_archives(user_id)
@@ -1406,6 +1425,15 @@ class DataTransferService:
         return list(
             self.db.scalars(
                 select(Note).where(Note.user_id == user_id).order_by(Note.created_at.asc(), Note.id)
+            )
+        )
+
+    def _all_photos(self, user_id: uuid.UUID) -> list[Photo]:
+        return list(
+            self.db.scalars(
+                select(Photo)
+                .where(Photo.user_id == user_id)
+                .order_by(Photo.created_at.asc(), Photo.id)
             )
         )
 

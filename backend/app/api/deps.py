@@ -258,6 +258,15 @@ def get_attachment_service(
     return AttachmentService(db, storage)
 
 
+def get_photo_service(
+    db: Session = Depends(get_db),
+    storage: StorageProvider = Depends(get_storage_provider),
+):
+    from app.services.photo import PhotoService
+
+    return PhotoService(db, storage)
+
+
 def get_record_service(db: Session = Depends(get_db)):
     from app.services.record import RecordService
 

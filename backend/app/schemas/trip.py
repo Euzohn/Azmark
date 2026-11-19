@@ -9,6 +9,7 @@ from app.schemas.attachment import AttachmentRead
 from app.schemas.expense import ExpenseRead, ExpenseSummary
 from app.schemas.hotel import HotelRead
 from app.schemas.note import NoteRead
+from app.schemas.photo import PhotoRead
 from app.schemas.status import TripStatus
 from app.schemas.transport import FlightRead
 
@@ -129,6 +130,7 @@ class TripDetail(TripRead):
     expense_summary: ExpenseSummary | None = None
     notes: list[NoteRead] = []
     attachments: list[AttachmentRead] = []
+    photos: list[PhotoRead] = []
 
 
 class TripList(BaseModel):

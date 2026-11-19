@@ -16,6 +16,7 @@ from app.api.routes import (
     hotels,
     notes,
     pending_actions,
+    photos,
     places,
     records,
     reference,
@@ -38,6 +39,7 @@ api_router.include_router(places.router)
 api_router.include_router(activities.router)
 api_router.include_router(expenses.router)
 api_router.include_router(notes.router)
+api_router.include_router(photos.router)
 api_router.include_router(records.router)
 api_router.include_router(attachments.router)
 api_router.include_router(reference.router)

@@ -11,6 +11,7 @@ from app.models.migration import PlaceVisitMapping, TimelineMigrationArchive
 from app.models.note import Note
 from app.models.pending_action import PendingAction, PendingActionKind, PendingActionStatus
 from app.models.personal_access_token import PersonalAccessToken, TokenScope
+from app.models.photo import Photo
 from app.models.place import Place
 from app.models.provider_setting import ProviderSetting
 from app.models.transport_record import TransportRecord
@@ -33,6 +34,7 @@ __all__ = [
     "PendingActionKind",
     "PendingActionStatus",
     "PersonalAccessToken",
+    "Photo",
     "Place",
     "PlaceVisitMapping",
     "ProviderSetting",

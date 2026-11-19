@@ -140,6 +140,17 @@ class MapPlace(BaseModel):
     city: str | None = None
 
 
+class MapPhoto(BaseModel):
+    """A geotagged photo, rendered as a small dot on the map (spec #20, #27)."""
+
+    id: uuid.UUID
+    filename: str
+    lat: float
+    lon: float
+    captured_at: datetime | None = None
+    trip_id: uuid.UUID | None = None
+
+
 class MapRoutesRead(BaseModel):
     items: list[MapRoute]
     total: int
@@ -147,3 +158,5 @@ class MapRoutesRead(BaseModel):
     hotels: list[MapHotel] = []
     # Saved places (spec #14) render as their own layer (spec #27).
     places: list[MapPlace] = []
+    # Photos with EXIF GPS, shown as their own toggleable layer (spec #20).
+    photos: list[MapPhoto] = []
