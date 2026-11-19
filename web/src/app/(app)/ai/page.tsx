@@ -28,6 +28,7 @@ import { PageHeader } from "@/components/page-header";
 import { api, ApiError } from "@/lib/api";
 import { buildChatHistory } from "@/lib/ai-history";
 import { consumeDeepLinkPrompt } from "@/lib/ai-deeplink";
+import { composerKeyboardInset } from "@/lib/keyboard-inset";
 import {
   activeConversation,
   appendMessage,
@@ -380,6 +381,55 @@ export default function AiChatPage() {
   useEffect(() => {
     pinToBottom();
   }, [pinToBottom, store, streamingId]);
+
+  // Soft-keyboard fallback (mobile): iOS shrinks only the visual viewport,
+  // which would leave the fixed composer hidden behind the keyboard. Lift it
+  // by the viewport overlap while the keyboard is open (lib/keyboard-inset).
+  // Browsers that resize the layout viewport instead report ~0 overlap, so
+  // the CSS default (above the bottom nav) is kept there.
+  const [keyboardInset, setKeyboardInset] = useState(0);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const desktop = window.matchMedia("(min-width: 768px)");
+    const wasOpen = { current: false };
+    const update = () => {
+      const inset = composerKeyboardInset(
+        window.innerHeight,
+        vv.height,
+        vv.offsetTop,
+        desktop.matches,
+        vv.scale,
+      );
+      setKeyboardInset(inset);
+      // The moment the keyboard opens, snap to the latest message so it stays
+      // visible above the lifted composer (instant — a smooth scroll would
+      // fight the keyboard animation).
+      if (inset > 0 && !wasOpen.current && !desktop.matches) {
+        window.scrollTo({ top: document.documentElement.scrollHeight });
+      }
+      wasOpen.current = inset > 0;
+    };
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    // MediaQueryList.addEventListener is Safari 14+; older iOS (still in the
+    // support window — see the dvh fallback) only has the legacy addListener.
+    if (typeof desktop.addEventListener === "function") {
+      desktop.addEventListener("change", update);
+    } else {
+      desktop.addListener(update);
+    }
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+      if (typeof desktop.removeEventListener === "function") {
+        desktop.removeEventListener("change", update);
+      } else {
+        desktop.removeListener(update);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const el = textareaRef.current;
@@ -996,9 +1046,14 @@ export default function AiChatPage() {
               bottom padding (7rem + safe area) reserves exactly this strip.
               4.3125rem = the nav's real height (border 1px + py-2 16px +
               icon 32px + gap 4px + label 16px); keep it in sync with the
-              bottom nav in app-shell.tsx. Desktop: back in the chat column,
-              pinned by the frame height. */}
-          <div className="fixed inset-x-0 bottom-[calc(4.3125rem+env(safe-area-inset-bottom))] z-10 mx-auto flex w-full max-w-3xl flex-col gap-2 border-t border-border/60 bg-background/95 px-4 pb-2 pt-3 backdrop-blur-md md:static md:bg-transparent md:px-0 md:pb-1 md:backdrop-blur-none">
+              bottom nav in app-shell.tsx. While the soft keyboard is open,
+              keyboardInset overrides the bottom offset to sit directly above
+              the keyboard (the nav is hidden behind it). Desktop: back in the
+              chat column, pinned by the frame height. */}
+          <div
+            className="fixed inset-x-0 bottom-[calc(4.3125rem+env(safe-area-inset-bottom))] z-10 mx-auto flex w-full max-w-3xl flex-col gap-2 border-t border-border/60 bg-background/95 px-4 pb-2 pt-3 backdrop-blur-md md:static md:bg-transparent md:px-0 md:pb-1 md:backdrop-blur-none"
+            style={keyboardInset > 0 ? { bottom: `${keyboardInset}px` } : undefined}
+          >
             {imagePreview && (
               <div className="relative inline-flex items-center gap-2 self-start">
                 <ChatImage src={imagePreview} className="h-16 w-16 rounded-lg border border-border object-cover" />
