@@ -42,6 +42,7 @@ import type {
   WrappedTotals,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { wrappedClosingKey } from "@/lib/wrapped-closing";
 
 /** Chapter visibility, shared down the tree so CountUp and bars key off the
  *  same reveal beat as the staggered opacity animation. */
@@ -821,7 +822,7 @@ function WrappedContent() {
           <div className="flex flex-col items-center gap-6 py-16 text-center sm:py-24">
             <span aria-hidden className="h-px w-16 bg-border" />
             <p className="max-w-md font-display text-xl leading-relaxed text-foreground/90 sm:text-2xl">
-              {t("wrapped.closing")}
+              {t(wrappedClosingKey(wrapped.year))}
             </p>
             <Link
               href="/statistics"
