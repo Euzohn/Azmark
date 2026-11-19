@@ -451,6 +451,43 @@ export interface NoteList {
   page_size: number;
 }
 
+export interface Photo {
+  id: string;
+  user_id: string;
+  filename: string;
+  mime_type: string;
+  size: number;
+  captured_at: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  trip_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PhotoInput {
+  filename?: string;
+  captured_at?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  trip_id?: string | null;
+}
+
+export interface PhotoFilters {
+  search?: string;
+  trip_id?: string;
+  sort?: "newest" | "oldest" | "uploaded";
+  page?: number;
+  page_size?: number;
+}
+
+export interface PhotoList {
+  items: Photo[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 export type PlaceType =
   | "airport"
   | "train_station"
@@ -667,6 +704,7 @@ export interface TripDetail extends Trip {
   expense_summary: ExpenseSummary | null;
   notes: Note[];
   attachments: Attachment[];
+  photos: Photo[];
 }
 
 export interface Attachment {
@@ -1087,6 +1125,16 @@ export interface MapRoutesRead {
   total: number;
   hotels: MapHotel[];
   places: MapPlace[];
+  photos: MapPhoto[];
+}
+
+export interface MapPhoto {
+  id: string;
+  filename: string;
+  lat: number;
+  lon: number;
+  captured_at: string | null;
+  trip_id: string | null;
 }
 
 export interface MapPlace {

@@ -46,7 +46,7 @@ const TILES_DARK = process.env.NEXT_PUBLIC_MAP_TILES_DARK;
 const ATTRIBUTION =
   '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
-type LayerFilter = "all" | "flights" | "ground" | "places" | "hotels";
+type LayerFilter = "all" | "flights" | "ground" | "places" | "hotels" | "photos";
 
 // Colours mirror the map layers, so the filter row doubles as a legend.
 const LAYER_FILTERS = [
@@ -55,6 +55,7 @@ const LAYER_FILTERS = [
   { value: "ground", key: "map.layers.ground", dot: "bg-[#0f766e] dark:bg-[#61b8a8]" },
   { value: "places", key: "map.layers.places", dot: "bg-[#2563eb] dark:bg-[#7aa2f7]" },
   { value: "hotels", key: "map.layers.hotels", dot: "bg-[#c66b4e] dark:bg-[#d98a70]" },
+  { value: "photos", key: "map.layers.photos", dot: "bg-[#7c3aed] dark:bg-[#a78bfa]" },
 ] as const satisfies { value: LayerFilter; key: string; dot?: string }[];
 
 // Stops closer than this collapse into one city-level label below DETAIL_ZOOM
@@ -173,6 +174,7 @@ export default function MapPage() {
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [selectedHotelId, setSelectedHotelId] = useState<string | null>(null);
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
+  const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
   const [layer, setLayer] = useState<LayerFilter>("all");
 
   const { data, isLoading, isError, refetch } = useQuery({
@@ -214,10 +216,14 @@ export default function MapPage() {
     () => (data?.places ?? []).filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lon)),
     [data],
   );
+  const photos = useMemo(
+    () => (data?.photos ?? []).filter((photo) => Number.isFinite(photo.lat) && Number.isFinite(photo.lon)),
+    [data],
+  );
   const showMap =
     !isLoading &&
     !isError &&
-    (routes.length > 0 || hotels.length > 0 || places.length > 0);
+    (routes.length > 0 || hotels.length > 0 || places.length > 0 || photos.length > 0);
 
   const summary = useMemo(() => {
     const stops = new Set<string>();
@@ -325,6 +331,7 @@ export default function MapPage() {
       const showGround = active === "all" || active === "ground";
       const showPlaces = active === "all" || active === "places";
       const showHotels = active === "all" || active === "hotels";
+      const showPhotos = active === "all" || active === "photos";
 
       // A redraw (layer toggle, style swap, locale change) invalidates any
       // hover highlight — the feature it pointed at may be gone.
@@ -496,11 +503,34 @@ export default function MapPage() {
       }));
       const placeData = { type: "FeatureCollection" as const, features: placeFeatures };
 
+      // Geotagged photos render as small dots; popup data rides in the feature
+      // properties so the click handler never captures a stale array.
+      const photoFeatures = (showPhotos ? photos : []).map((photo) => ({
+        type: "Feature" as const,
+        properties: {
+          id: photo.id,
+          filename: photo.filename,
+          captured: photo.captured_at
+            ? new Date(photo.captured_at).toLocaleDateString(locale, {
+                year: "numeric",
+                month: "short",
+                day: "numeric",
+              })
+            : "",
+        },
+        geometry: {
+          type: "Point" as const,
+          coordinates: [photo.lon, photo.lat] as LonLat,
+        },
+      }));
+      const photoData = { type: "FeatureCollection" as const, features: photoFeatures };
+
       const dark = isDarkTheme(themeRef.current);
       const accent = dark ? "#e0a737" : "#b45309";
       const groundColor = dark ? "#61b8a8" : "#0f766e";
       const hotelColor = dark ? "#d98a70" : "#c66b4e";
       const placeColor = dark ? "#7aa2f7" : "#2563eb";
+      const photoColor = dark ? "#a78bfa" : "#7c3aed";
       const stroke = dark ? "#12161b" : "#f6f7f8";
 
       const labelColor = dark ? "#e5e7eb" : "#1f2937";
@@ -524,6 +554,7 @@ export default function MapPage() {
         map.addSource("stops", { type: "geojson", data: stopData });
         map.addSource("hotels", { type: "geojson", data: hotelData });
         map.addSource("places", { type: "geojson", data: placeData });
+        map.addSource("photos", { type: "geojson", data: photoData });
         map.addLayer({
           id: "flights-line",
           type: "line",
@@ -620,6 +651,17 @@ export default function MapPage() {
             "circle-color": placeColor,
             "circle-stroke-color": stroke,
             "circle-stroke-width": 1.5,
+          },
+        });
+        map.addLayer({
+          id: "photos-point",
+          type: "circle",
+          source: "photos",
+          paint: {
+            "circle-radius": 3.5,
+            "circle-color": photoColor,
+            "circle-stroke-color": stroke,
+            "circle-stroke-width": 1,
           },
         });
         // Symbol layers let MapLibre hide colliding labels for us instead of
@@ -801,6 +843,39 @@ export default function MapPage() {
           map.on("mouseleave", "places-point", () => {
             map.getCanvas().style.cursor = "";
           });
+
+          map.on("click", "photos-point", (event) => {
+            const feature = event.features?.[0];
+            if (!feature) return;
+            const props = feature.properties as Record<string, string>;
+            if (window.matchMedia("(max-width: 767px)").matches) {
+              setSelectedPhotoId(props.id);
+              return;
+            }
+            const node = document.createElement("div");
+            node.className = "text-xs leading-relaxed";
+            const title = document.createElement("a");
+            title.className = "font-semibold underline-offset-2 hover:underline";
+            title.href = `/photos/${props.id}`;
+            title.textContent = props.filename;
+            node.appendChild(title);
+            if (props.captured) {
+              const subNode = document.createElement("div");
+              subNode.textContent = props.captured;
+              node.appendChild(subNode);
+            }
+            popupRef.current?.remove();
+            popupRef.current = new maplibregl.Popup({ closeButton: false, offset: 8 })
+              .setLngLat(event.lngLat)
+              .setDOMContent(node)
+              .addTo(map);
+          });
+          map.on("mouseenter", "photos-point", () => {
+            map.getCanvas().style.cursor = "pointer";
+          });
+          map.on("mouseleave", "photos-point", () => {
+            map.getCanvas().style.cursor = "";
+          });
         }
       } else {
         (map.getSource("flights") as GeoJSONSource).setData(flightData);
@@ -809,6 +884,7 @@ export default function MapPage() {
         (map.getSource("stops") as GeoJSONSource).setData(stopData);
         (map.getSource("hotels") as GeoJSONSource).setData(hotelData);
         (map.getSource("places") as GeoJSONSource).setData(placeData);
+        (map.getSource("photos") as GeoJSONSource).setData(photoData);
       }
 
       // Fit view from the FULL dataset (not the layer-filtered view) so
@@ -825,8 +901,9 @@ export default function MapPage() {
         ]),
         ...hotels.map((hotel) => [hotel.lon, hotel.lat] as LonLat),
         ...places.map((place) => [place.lon, place.lat] as LonLat),
+        ...photos.map((photo) => [photo.lon, photo.lat] as LonLat),
       ];
-      const fittedKey = `${routes.length}|${hotels.length}|${places.length}`;
+      const fittedKey = `${routes.length}|${hotels.length}|${places.length}|${photos.length}`;
       if (boundsCoords.length > 0 && fittedKey !== fittedKeyRef.current) {
         fittedKeyRef.current = fittedKey;
         let minLon = Infinity;
@@ -859,20 +936,27 @@ export default function MapPage() {
     return () => {
       map.off("style.load", draw);
     };
-  }, [routes, flightRoutes, groundRoutes, hotels, places, ready, layer, locale]);
+  }, [routes, flightRoutes, groundRoutes, hotels, places, photos, ready, layer, locale]);
 
   const selectedRoute = routes.find((route) => route.id === selectedRouteId);
   const selectedHotel = hotels.find((hotel) => hotel.id === selectedHotelId);
   const selectedPlace = places.find((place) => place.id === selectedPlaceId);
+  const selectedPhoto = photos.find((photo) => photo.id === selectedPhotoId);
   const subtitle = !data
     ? undefined
-    : hotels.length > 0 || places.length > 0
-      ? t("map.subtitle", {
-          routes: routes.length,
-          hotels: hotels.length,
-          places: places.length,
-        })
-      : t("map.routes", { count: routes.length });
+    : (() => {
+        const base =
+          hotels.length > 0 || places.length > 0
+            ? t("map.subtitle", {
+                routes: routes.length,
+                hotels: hotels.length,
+                places: places.length,
+              })
+            : t("map.routes", { count: routes.length });
+        return photos.length > 0
+          ? `${base} · ${t("map.subtitlePhotos", { count: photos.length })}`
+          : base;
+      })();
 
   const hasGround = groundRoutes.length > 0;
 
@@ -894,7 +978,12 @@ export default function MapPage() {
         </div>
       ) : null}
 
-      {!isLoading && !isError && routes.length === 0 && hotels.length === 0 && places.length === 0 ? (
+      {!isLoading &&
+      !isError &&
+      routes.length === 0 &&
+      hotels.length === 0 &&
+      places.length === 0 &&
+      photos.length === 0 ? (
         <EmptyState icon={MapIcon} title={t("map.empty")} hint={t("map.emptyHint")} />
       ) : null}
 
@@ -981,6 +1070,7 @@ export default function MapPage() {
             {t("map.coverageHint")} {t("map.greatCircleNote")}
             {hasGround ? ` ${t("map.groundNote")}` : ""}
             {routes.length > 0 ? ` ${t("map.zoomHint")}` : ""}
+            {photos.length > 0 ? ` ${t("map.photosNote")}` : ""}
           </p>
           <BottomSheet
             open={selectedRoute !== undefined}
@@ -1033,6 +1123,30 @@ export default function MapPage() {
                 <span className="min-w-0 truncate">{selectedPlace.name}</span>
                 <span className="shrink-0 text-xs text-muted-foreground">
                   {t(`places.type.${selectedPlace.type}`)}
+                </span>
+              </Link>
+            ) : null}
+          </BottomSheet>
+          <BottomSheet
+            open={selectedPhoto !== undefined}
+            onClose={() => setSelectedPhotoId(null)}
+            title={t("photos.detail")}
+          >
+            {selectedPhoto ? (
+              <Link
+                href={`/photos/${selectedPhoto.id}`}
+                onClick={() => setSelectedPhotoId(null)}
+                className="flex items-center justify-between gap-4 rounded-lg border border-border p-4 text-sm font-medium"
+              >
+                <span className="min-w-0 truncate">{selectedPhoto.filename}</span>
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {selectedPhoto.captured_at
+                    ? new Date(selectedPhoto.captured_at).toLocaleDateString(locale, {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })
+                    : t("photos.noDate")}
                 </span>
               </Link>
             ) : null}

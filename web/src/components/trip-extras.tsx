@@ -1,10 +1,11 @@
 "use client";
 
-import { Download, Paperclip, Plus, Receipt, StickyNote } from "lucide-react";
+import { Download, Image as ImageIcon, Paperclip, Plus, Receipt, StickyNote, Upload } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
+import { PhotoImage } from "@/components/photo-image";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -23,6 +24,7 @@ const RESOURCE_LABELS = {
 } as const;
 
 const MAX_VISIBLE = 5;
+const MAX_VISIBLE_PHOTOS = 12;
 
 function saveBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -70,6 +72,7 @@ export function TripExtras({ trip }: { trip: TripDetail }) {
   const expenses = trip.expenses ?? [];
   const notes = trip.notes ?? [];
   const attachments = trip.attachments ?? [];
+  const photos = trip.photos ?? [];
   const returnTo = encodeURIComponent(pathname);
   const addExpenseHref = `/expenses/new?trip_id=${trip.id}&return_to=${returnTo}`;
   const addNoteHref = `/notes/new?trip_id=${trip.id}&return_to=${returnTo}`;
@@ -204,6 +207,57 @@ export function TripExtras({ trip }: { trip: TripDetail }) {
           )}
         </section>
       </div>
+
+      <section className="overflow-hidden rounded-xl border border-border bg-card">
+        <SectionHeader
+          icon={<ImageIcon className="h-4 w-4" />}
+          title={t("trips.photos")}
+          hint={
+            photos.length > 0
+              ? t("trips.photosCount", { count: photos.length })
+              : t("trips.photosHint")
+          }
+          action={
+            <Link href={`/photos?trip_id=${trip.id}`}>
+              <Button variant="outline" size="sm">
+                <Upload className="h-4 w-4" />
+                {t("photos.upload")}
+              </Button>
+            </Link>
+          }
+        />
+        {photos.length === 0 ? (
+          <p className="px-5 py-6 text-sm text-muted-foreground">{t("trips.photosEmpty")}</p>
+        ) : (
+          <div className="grid grid-cols-3 gap-3 p-5 sm:grid-cols-4 lg:grid-cols-6">
+            {photos.slice(0, MAX_VISIBLE_PHOTOS).map((photo) => (
+              <Link
+                key={photo.id}
+                href={`/photos/${photo.id}?from=${returnTo}`}
+                className="focus-visible:outline-none"
+              >
+                <div className="aspect-square overflow-hidden rounded-lg border border-border bg-muted">
+                  <PhotoImage
+                    id={photo.id}
+                    alt={photo.filename}
+                    className="h-full w-full object-cover transition-transform duration-200 hover:scale-[1.03]"
+                  />
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+        {photos.length > MAX_VISIBLE_PHOTOS ? (
+          <div className="border-t border-border px-5 py-3">
+            <Link
+              href={`/photos?trip_id=${trip.id}`}
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              {t("common.viewAll")}
+            </Link>
+          </div>
+        ) : null}
+      </section>
 
       <section className="overflow-hidden rounded-xl border border-border bg-card">
         <SectionHeader

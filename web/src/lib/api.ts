@@ -68,6 +68,10 @@ import type {
   NoteFilters,
   NoteInput,
   NoteList,
+  Photo,
+  PhotoFilters,
+  PhotoInput,
+  PhotoList,
   Activity,
   ActivityFilters,
   ActivityInput,
@@ -83,6 +87,14 @@ import type {
 // Empty by default → requests go to the same origin (/api/v1/...), and the
 // Next.js server proxies them to the backend (see next.config.ts rewrites).
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
+
+/**
+ * Authenticated image URL for a photo. The session travels in an HttpOnly
+ * cookie, so a plain `<img src>` works — no Authorization header needed.
+ */
+export function photoImageUrl(id: string, variant: "full" | "thumb" = "thumb"): string {
+  return `${API_BASE}/api/v1/photos/${encodeURIComponent(id)}/image?variant=${variant}`;
+}
 
 export class ApiError extends Error {
   status: number;
@@ -325,6 +337,30 @@ export const api = {
   updateNote: (id: string, data: NoteInput) =>
     request<Note>(`/notes/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteNote: (id: string) => request<void>(`/notes/${id}`, { method: "DELETE" }),
+
+  listPhotos: (params: PhotoFilters = {}) => {
+    const query = new URLSearchParams();
+    if (params.search) query.set("search", params.search);
+    if (params.trip_id) query.set("trip_id", params.trip_id);
+    if (params.sort) query.set("sort", params.sort);
+    if (params.page) query.set("page", String(params.page));
+    if (params.page_size) query.set("page_size", String(params.page_size));
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return request<PhotoList>(`/photos${suffix}`);
+  },
+  uploadPhoto: (file: File, options: { trip_id?: string | null } = {}) => {
+    const form = new FormData();
+    form.append("file", file);
+    if (options.trip_id) form.append("trip_id", options.trip_id);
+    // EXIF wall-clock times are local; send the browser's offset so the server
+    // stores the right instant when the photo has no offset tag of its own.
+    form.append("utc_offset_minutes", String(-new Date().getTimezoneOffset()));
+    return request<Photo>("/photos", { method: "POST", body: form });
+  },
+  getPhoto: (id: string) => request<Photo>(`/photos/${id}`),
+  updatePhoto: (id: string, data: PhotoInput) =>
+    request<Photo>(`/photos/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deletePhoto: (id: string) => request<void>(`/photos/${id}`, { method: "DELETE" }),
 
   listPlaces: (params: PlaceFilters = {}) => {
     const query = new URLSearchParams();

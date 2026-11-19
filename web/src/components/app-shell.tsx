@@ -10,6 +10,7 @@ import {
   ChevronRight,
   ClipboardCheck,
   Home,
+  Image as ImageIcon,
   List as ListIcon,
   LogOut,
   type LucideIcon,
@@ -71,6 +72,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/activities", key: "nav.activities", icon: CalendarDays },
       { href: "/expenses", key: "nav.expenses", icon: Receipt },
       { href: "/notes", key: "nav.notes", icon: StickyNote },
+      { href: "/photos", key: "nav.photos", icon: ImageIcon },
     ],
   },
   {
@@ -114,6 +116,7 @@ const MOBILE_MORE: NavItem[] = [
   { href: "/activities", key: "nav.activities", icon: CalendarDays },
   { href: "/expenses", key: "nav.expenses", icon: Receipt },
   { href: "/notes", key: "nav.notes", icon: StickyNote },
+  { href: "/photos", key: "nav.photos", icon: ImageIcon },
   { href: "/ai", key: "nav.ai", icon: Bot },
   { href: "/pending", key: "nav.pending", icon: ClipboardCheck },
   { href: "/statistics", key: "nav.stats", icon: BarChart3 },
