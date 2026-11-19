@@ -14,7 +14,7 @@ import { Fab } from "@/components/ui/fab";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { saveScroll, takeScroll } from "@/lib/scroll-memory";
 import { useI18n } from "@/lib/i18n";
 import { usePageTitle } from "@/lib/page-title";
@@ -69,27 +69,41 @@ function PhotosContent() {
     requestAnimationFrame(() => window.scrollTo(0, y));
   }, [data]);
 
+  // Map the server's rejection to a specific, translated reason instead of
+  // one catch-all message (HEIC hints and size limits were being swallowed).
+  const uploadReason = (error: unknown): string => {
+    if (error instanceof ApiError) {
+      if (error.status === 413) return t("photos.uploadTooLarge");
+      if (error.status === 415) return t("photos.uploadUnsupported");
+      if (error.status === 502) return t("photos.uploadStorageDown");
+    }
+    return t("photos.uploadFailed");
+  };
+
   const handleFiles = async (files: File[]) => {
     if (files.length === 0) return;
     setUploadError(null);
     setProgress({ done: 0, total: files.length });
     let failed = 0;
+    let reason: string | null = null;
     // Sequential uploads keep memory flat and let each file report its own
     // failure without cancelling the rest of the batch.
     for (const file of files) {
       try {
         await api.uploadPhoto(file, { trip_id: tripId });
-      } catch {
+      } catch (error) {
         failed += 1;
+        reason ??= uploadReason(error);
       }
       setProgress((prev) => (prev ? { ...prev, done: prev.done + 1 } : prev));
     }
     setProgress(null);
     if (failed > 0) {
+      const detail = reason ?? t("photos.uploadFailed");
       setUploadError(
         failed === files.length
-          ? t("photos.uploadFailed")
-          : t("photos.uploadPartial", { count: failed }),
+          ? detail
+          : `${t("photos.uploadPartial", { count: failed })} · ${detail}`,
       );
     }
     await queryClient.invalidateQueries({ queryKey: ["photos"] });

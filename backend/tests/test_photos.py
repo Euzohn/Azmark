@@ -50,6 +50,20 @@ def _png() -> bytes:
     return buffer.getvalue()
 
 
+def _mpo() -> bytes:
+    """DJI-style multi-frame JPEG container: first frame is a plain JPEG."""
+    first = Image.new("RGB", (64, 48), (120, 30, 30))
+    meta = Image.Exif()
+    meta[306] = "2026:05:01 10:30:00"
+    buffer = BytesIO()
+    first.save(buffer, format="JPEG", exif=meta.tobytes())
+    second = Image.new("RGB", (64, 48), (30, 30, 120))
+    out = BytesIO()
+    with Image.open(BytesIO(buffer.getvalue())) as frame:
+        frame.save(out, format="MPO", save_all=True, append_images=[second], exif=meta.tobytes())
+    return out.getvalue()
+
+
 def _upload(
     client,
     headers,
@@ -146,6 +160,27 @@ def test_actual_bytes_decide_the_type_not_the_declared_mime(client):
     response = _upload(client, headers, _jpeg(), name="IMG_0001.txt", mime="text/plain")
     assert response.status_code == 201, response.text
     assert response.json()["mime_type"] == "image/jpeg"
+
+
+def test_upload_accepts_dji_mpo_container_as_jpeg(client):
+    """DJI drones save multi-frame MPO containers named .JPG (first frame is JPEG)."""
+    token = register_and_login(client, "photo_mpo")["access_token"]
+    headers = auth_headers(token)
+    data = _mpo()
+
+    response = _upload(client, headers, data, name="DJI_0001_D.JPG")
+    assert response.status_code == 201, response.text
+    photo = response.json()
+    assert photo["mime_type"] == "image/jpeg"
+    assert photo["captured_at"] is not None
+
+    # Original bytes are stored unchanged; browsers render the first frame.
+    image = client.get(f"/api/v1/photos/{photo['id']}/image", headers=headers)
+    assert image.status_code == 200
+    assert image.content == data
+    thumb = client.get(f"/api/v1/photos/{photo['id']}/image?variant=thumb", headers=headers)
+    assert thumb.status_code == 200
+    assert thumb.headers["content-type"] == "image/jpeg"
 
 
 @pytest.mark.parametrize(

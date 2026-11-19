@@ -237,6 +237,11 @@ def process_photo(
     try:
         with Image.open(io.BytesIO(data)) as img:
             fmt = (img.format or "").upper()
+            # DJI drones and dual-lens cameras wrap extra frames in an MPO
+            # container named .JPG. The first frame is a plain JPEG that
+            # browsers render, so accept it as JPEG instead of rejecting it.
+            if fmt == "MPO":
+                fmt = "JPEG"
             mime = ALLOWED_PHOTO_FORMATS.get(fmt)
             if mime is None:
                 raise UnsupportedPhotoTypeError(fmt or "unknown")
