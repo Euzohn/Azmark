@@ -267,13 +267,22 @@ def get_photo_service(
     return PhotoService(db, storage)
 
 
+def get_photo_organization_service(db: Session = Depends(get_db)):
+    from app.services.photo_organization import PhotoOrganizationService
+
+    return PhotoOrganizationService(db)
+
+
 def get_record_service(db: Session = Depends(get_db)):
     from app.services.record import RecordService
 
     return RecordService(db)
 
 
-def get_pending_action_service(db: Session = Depends(get_db)):
+def get_pending_action_service(
+    db: Session = Depends(get_db),
+    storage: StorageProvider = Depends(get_storage_provider),
+):
     from app.services.pending_action import PendingActionService
 
-    return PendingActionService(db)
+    return PendingActionService(db, storage)

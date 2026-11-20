@@ -1027,6 +1027,11 @@ def _update_trip_proposal(args: dict) -> AiProposal:
     return _update_proposal(args, action="update_trip", record_type="trip", label="trip")
 
 
+def _update_photo_proposal(args: dict) -> AiProposal:
+    """Propose updating photo metadata, e.g. filing it into a trip (spec #20, #69)."""
+    return _update_proposal(args, action="update_photo", record_type="photo", label="photo")
+
+
 def _delete_proposal(args: dict, *, action: str, record_type: str, label: str) -> AiProposal:
     """Shared shape for destructive deletes: only a ``record_id`` is carried."""
     record_id = args.get("record_id") or args.get("id") or ""
@@ -1358,6 +1363,43 @@ async def _get_photo(db: Session, user_id: uuid.UUID, args: dict) -> dict:
     if photo is None:
         return {"error": "photo not found"}
     return _compact_photo(photo)
+
+
+async def _suggest_photo_organization(db: Session, user_id: uuid.UUID, args: dict) -> dict:
+    """Facts for filing unassigned photos into trips (P2 AI Photo Organization).
+
+    Deterministic EXIF-time / GPS matching, not a guess: the agent reads the
+    candidates and proposes ``update_photo`` assignments the user confirms.
+    """
+    from app.services.photo_organization import PhotoOrganizationService
+
+    limit = _clamp_limit(args.get("limit"), 20)
+    items, unassigned_total = PhotoOrganizationService(db).suggest(user_id=user_id)
+    return {
+        "unassigned_total": unassigned_total,
+        "count": min(len(items), limit),
+        "items": [
+            {
+                "photo": _compact_photo(photo),
+                "candidates": [
+                    {
+                        "trip_id": str(candidate.trip.id),
+                        "trip_name": candidate.trip.name,
+                        "reasons": candidate.reasons,
+                        "confidence": candidate.confidence,
+                        "distance_km": candidate.distance_km,
+                    }
+                    for candidate in candidates
+                ],
+            }
+            for photo, candidates in items[:limit]
+        ],
+        "hint": (
+            "Facts only. Propose update_photo with data.trip_id for the best "
+            "candidate; never file a photo without the user's confirmation. "
+            "For large batches, point the user to the album's organize view."
+        ),
+    }
 
 
 async def _search_places(db: Session, user_id: uuid.UUID, args: dict) -> dict:
@@ -2395,6 +2437,51 @@ TOOLS: dict[str, ToolDef] = {
         permission=ToolPermission.READ,
         read=_get_photo,
     ),
+    "suggest_photo_organization": ToolDef(
+        name="suggest_photo_organization",
+        description=(
+            "List unfiled photos with deterministic trip candidates (EXIF capture "
+            "time inside the trip dates, GPS near the trip's hotels/places). "
+            "Returns facts only — metadata, never image bytes. Use it before "
+            "proposing update_photo assignments; the user must confirm each one."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+            },
+        },
+        permission=ToolPermission.READ,
+        read=_suggest_photo_organization,
+    ),
+    "update_photo": ToolDef(
+        name="update_photo",
+        description=(
+            "Propose updating a photo's metadata: file it into a trip (data.trip_id), "
+            "or correct filename / captured_at / latitude / longitude. This never "
+            "executes directly — the user must confirm. Use suggest_photo_organization "
+            "or search_photos first to find the photo and trip ids."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "record_id": {"type": "string", "description": "The photo UUID"},
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "trip_id": {"type": "string", "description": "Trip UUID to file into"},
+                        "filename": {"type": "string"},
+                        "captured_at": {"type": "string", "description": "ISO 8601 instant"},
+                        "latitude": {"type": "number", "minimum": -90, "maximum": 90},
+                        "longitude": {"type": "number", "minimum": -180, "maximum": 180},
+                    },
+                },
+            },
+            "required": ["record_id", "data"],
+        },
+        permission=ToolPermission.WRITE,
+        proposal=_update_photo_proposal,
+    ),
     "search_places": ToolDef(
         name="search_places",
         description=(
@@ -2862,6 +2949,7 @@ MCP_READ_TOOL_NAMES: tuple[str, ...] = (
     "search_notes",
     "search_photos",
     "get_photo",
+    "suggest_photo_organization",
     "search_places",
     "search_activities",
 )

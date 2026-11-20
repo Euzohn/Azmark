@@ -23,6 +23,7 @@ from app.schemas.activity import ActivityCreate, ActivityUpdate
 from app.schemas.expense import ExpenseCreate, ExpenseUpdate
 from app.schemas.hotel import HotelCreate, HotelUpdate
 from app.schemas.note import NoteCreate, NoteUpdate
+from app.schemas.photo import PhotoUpdate
 from app.schemas.place import PlaceCreate, PlaceUpdate
 from app.schemas.transport import (
     FlightCreate,
@@ -37,7 +38,9 @@ from app.services.activity import ActivityNotFoundError, ActivityService, Invali
 from app.services.expense import ExpenseNotFoundError, ExpenseService
 from app.services.hotel import DuplicateHotelError, HotelService
 from app.services.note import NoteNotFoundError, NoteService
+from app.services.photo import PhotoNotFoundError
 from app.services.place import PlaceNotFoundError, PlaceService
+from app.services.storage import StorageProvider
 from app.services.transport import (
     DuplicateRecordError,
     FlightService,
@@ -62,6 +65,7 @@ RECORD_TYPES = (
     "note",
     "place",
     "activity",
+    "photo",
 )
 
 _CREATE_SCHEMAS = {
@@ -86,6 +90,8 @@ _UPDATE_SCHEMAS = {
     "note": NoteUpdate,
     "place": PlaceUpdate,
     "activity": ActivityUpdate,
+    # Photos are uploaded via multipart, so only UPDATE is proposable.
+    "photo": PhotoUpdate,
 }
 
 #: Record types whose times are anchored by an IANA ``*_timezone`` field; agent
@@ -121,6 +127,7 @@ _LABELS = {
     "note": "Note",
     "place": "Place",
     "activity": "Activity",
+    "photo": "Photo",
 }
 
 
@@ -186,7 +193,12 @@ def validate_create(record_type: str, data: dict[str, Any]) -> dict[str, Any]:
     schema = _CREATE_SCHEMAS.get(record_type)
     if schema is None:
         raise InvalidProposalError(
-            [{"field": "record_type", "message": f"must be one of {', '.join(RECORD_TYPES)}"}]
+            [
+                {
+                    "field": "record_type",
+                    "message": f"must be one of {', '.join(_CREATE_SCHEMAS)}",
+                }
+            ]
         )
     if not isinstance(data, dict):
         raise InvalidProposalError([{"field": "data", "message": "must be an object"}])
@@ -283,8 +295,11 @@ def _as_utc(value):
 
 
 class PendingActionService:
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, storage: StorageProvider | None = None) -> None:
         self.db = db
+        # Photo confirmations touch object storage; routes inject the provider
+        # so tests keep using the in-memory fake.
+        self.storage = storage
 
     # -- creation ---------------------------------------------------------
 
@@ -411,7 +426,14 @@ class PendingActionService:
         if record.status != PendingActionStatus.PENDING:
             raise PendingActionStateError(record.status)
 
-        service = _SERVICES[record.record_type](self.db)
+        if record.record_type == "photo":
+            from app.services.photo import PhotoService
+            from app.services.storage import build_storage_provider
+
+            storage = self.storage if self.storage is not None else build_storage_provider()
+            service = PhotoService(self.db, storage)
+        else:
+            service = _SERVICES[record.record_type](self.db)
         payload = record.payload or {}
         try:
             if record.action == PendingActionKind.CREATE:
@@ -463,6 +485,7 @@ class PendingActionService:
             NoteNotFoundError,
             PlaceNotFoundError,
             ActivityNotFoundError,
+            PhotoNotFoundError,
             InvalidActivityWindowError,
             PendingActionInvalidError,
             ValueError,

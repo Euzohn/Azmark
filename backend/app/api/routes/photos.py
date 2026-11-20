@@ -17,10 +17,24 @@ from fastapi import (
     status,
 )
 
-from app.api.deps import get_audit_service, get_current_user, get_photo_service
+from app.api.deps import (
+    get_audit_service,
+    get_current_user,
+    get_photo_organization_service,
+    get_photo_service,
+)
 from app.models.audit_log import AuditAction
 from app.models.user import User
-from app.schemas.photo import PhotoList, PhotoRead, PhotoUpdate
+from app.schemas.photo import (
+    PhotoList,
+    PhotoOrganizeInput,
+    PhotoOrganizeResult,
+    PhotoRead,
+    PhotoSuggestion,
+    PhotoSuggestions,
+    PhotoTripCandidate,
+    PhotoUpdate,
+)
 from app.services.audit import AuditService
 from app.services.photo import (
     EmptyPhotoError,
@@ -32,6 +46,7 @@ from app.services.photo import (
     PhotoTripAssignmentError,
     UnsupportedPhotoTypeError,
 )
+from app.services.photo_organization import PhotoOrganizationService
 
 router = APIRouter(prefix="/photos", tags=["photos"])
 
@@ -115,6 +130,66 @@ def list_photos(
         page_size=page_size,
     )
     return PhotoList(items=items, total=total, page=page, page_size=page_size)
+
+
+# Declared before /{photo_id}: a literal path must not be parsed as a UUID.
+@router.get("/suggestions", response_model=PhotoSuggestions)
+def photo_suggestions(
+    current_user: User = Depends(get_current_user),
+    service: PhotoOrganizationService = Depends(get_photo_organization_service),
+) -> PhotoSuggestions:
+    items, unassigned_total = service.suggest(user_id=current_user.id)
+    return PhotoSuggestions(
+        items=[
+            PhotoSuggestion(
+                photo=PhotoRead.model_validate(photo),
+                candidates=[
+                    PhotoTripCandidate(
+                        trip_id=candidate.trip.id,
+                        trip_name=candidate.trip.name,
+                        start_date=candidate.trip.start_date,
+                        end_date=candidate.trip.end_date,
+                        reasons=candidate.reasons,
+                        distance_km=candidate.distance_km,
+                        confidence=candidate.confidence,
+                    )
+                    for candidate in candidates
+                ],
+            )
+            for photo, candidates in items
+        ],
+        unassigned_total=unassigned_total,
+    )
+
+
+@router.post("/organize", response_model=PhotoOrganizeResult)
+def organize_photos(
+    payload: PhotoOrganizeInput,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    service: PhotoOrganizationService = Depends(get_photo_organization_service),
+    audit: AuditService = Depends(get_audit_service),
+) -> PhotoOrganizeResult:
+    """Apply a batch the user reviewed and confirmed in the album UI."""
+    try:
+        updated = service.organize(
+            user_id=current_user.id,
+            assignments=[(item.photo_id, item.trip_id) for item in payload.assignments],
+        )
+    except PhotoTripAssignmentError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found"
+        ) from None
+    except PhotoNotFoundError:
+        raise _not_found() from None
+    audit.log(
+        action=AuditAction.UPDATE_RECORD,
+        user_id=current_user.id,
+        resource_type="photo",
+        meta={"organized_count": updated},
+        request=request,
+    )
+    return PhotoOrganizeResult(updated=updated)
 
 
 @router.get("/{photo_id}", response_model=PhotoRead)

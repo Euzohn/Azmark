@@ -28,6 +28,7 @@ Azmark 内置一个**只读** MCP Server（spec #85）。Claude、Cursor 等 MCP
 | `get_statistics` | 汇总统计：国家/城市/旅程/里程，按年/月/航司/机场/舱位/铁路运营方拆分 |
 | `search_expenses` / `search_notes` / `search_places` / `search_activities` | 按关键词、类别或类型检索开销 / 笔记 / 地点 / 活动，用于先拿到 id 再改/删（删除在网页操作） |
 | `search_photos` / `get_photo` | 按文件名（可限定 `trip_id`）检索照片 / 按 id 读取单张照片的元数据；只返回拍摄时间、经纬度、归档行程等元数据，**不返回图片二进制、缩略图或 `storage_key`** |
+| `suggest_photo_organization` | 列出未归档照片及确定性行程候选（EXIF 拍摄时间落在行程日期内、GPS 距行程酒店/地点 ≤50km），附 reasons / confidence / distance_km；只返回事实，归档须用 `update_record`（`record_type: photo`）提案并经用户确认 |
 
 所有结果都不含 PNR、票号、证件号等敏感字段（spec #45、#75、#96），并且只包含令牌所属用户的数据；别人的 id 一律返回 `not found`（spec #57）。
 
@@ -38,7 +39,7 @@ Azmark 内置一个**只读** MCP Server（spec #85）。Claude、Cursor 等 MCP
 | 工具 | 说明 |
 | --- | --- |
 | `create_record` | 提议新建一条记录，`record_type` 支持 `flight` / `train` / `other` / `hotel` / `trip` / `expense` / `note` / `place` / `activity`。`expense` 可带 `source_type` + `source_id`（transport / hotel / activity），此时行程由来源派生，显式冲突的 `trip_id` 会被拒绝。**不会立即写入**，返回 `pending_action_id`，需用户在网页「待确认」里批准 |
-| `update_record` | 提议修改已有记录的字段，`record_type` 覆盖同样 9 类。同样只生成提案，等待批准 |
+| `update_record` | 提议修改已有记录的字段，`record_type` 覆盖同样 9 类，另支持 `photo`（归档 `trip_id`、文件名、拍摄时间、经纬度；照片只能更新，不能经 MCP 新建）。同样只生成提案，等待批准 |
 | `get_pending_action` | 查询某个提案的状态（pending / confirmed / rejected / failed / expired）。任何 scope 的令牌都能用 |
 
 写入流程（spec #69）：agent 调 `create_record` → Azmark 落一条 `pending_action`（**不碰业务数据**）→ agent 拿到 id 并提示用户去网页确认 → 用户在「待确认」页面点 Confirm → 记录才真正写入，审计日志记录是哪个令牌发起的。
