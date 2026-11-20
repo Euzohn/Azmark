@@ -803,6 +803,9 @@ export interface AdminUser {
   status: "ACTIVE" | "DISABLED";
   records: number;
   trips: number;
+  used_bytes: number;
+  storage_quota_bytes: number | null;
+  effective_quota_bytes: number;
   created_at: string;
 }
 
@@ -835,6 +838,7 @@ export interface AdminSettings {
   smtp_sender: string | null;
   smtp_starttls: boolean;
   smtp_password_set: boolean;
+  default_storage_quota_bytes: number;
 }
 
 export interface AdminSettingsUpdateInput {
@@ -849,6 +853,14 @@ export interface AdminSettingsUpdateInput {
   smtp_password?: string;
   smtp_sender?: string;
   smtp_starttls?: boolean;
+  default_storage_quota_bytes?: number;
+}
+
+export interface StorageUsage {
+  used_bytes: number;
+  /** 0 when unlimited. */
+  quota_bytes: number;
+  unlimited: boolean;
 }
 
 export interface AdminUserCreateInput {

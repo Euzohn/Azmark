@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, KeyRound, Trash2 } from "lucide-react";
+import { Download, HardDrive, KeyRound, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -14,12 +14,14 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { TimezoneSelect } from "@/components/ui/timezone-select";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-store";
+import { formatBytes } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { usePageTitle } from "@/lib/page-title";
-import type { AccessToken, AccessTokenScope } from "@/lib/types";
+import type { AccessToken, AccessTokenScope, StorageUsage } from "@/lib/types";
 
 const PROVIDER_LABELS: Record<string, string> = {
   aerodatabox: "AeroDataBox",
@@ -31,6 +33,65 @@ const PROVIDER_LABELS: Record<string, string> = {
 };
 
 type SettingsSection = "profile" | "integrations" | "security";
+
+/** Storage usage card shown on the profile tab (spec #44 / #57). */
+function StorageUsageCard() {
+  const { t } = useI18n();
+  const usage = useQuery({ queryKey: ["storage-usage"], queryFn: api.getStorageUsage });
+
+  return (
+    <Card className="animate-fade-in-up" style={{ animationDelay: "100ms" }}>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <HardDrive className="h-4 w-4" />
+          {t("settings.storage")}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {usage.isLoading ? <Skeleton className="h-10 w-full" /> : null}
+        {usage.data ? <StorageUsageBody data={usage.data} /> : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function StorageUsageBody({ data }: { data: StorageUsage }) {
+  const { t } = useI18n();
+  if (data.unlimited) {
+    return (
+      <>
+        <p className="text-sm text-muted-foreground">{t("settings.storageUnlimitedHint")}</p>
+        <p className="text-sm">
+          {t("settings.storageUsage", { used: formatBytes(data.used_bytes) })}
+        </p>
+      </>
+    );
+  }
+  const full = data.used_bytes >= data.quota_bytes;
+  const percent = Math.min(
+    100,
+    Math.round((data.used_bytes / Math.max(1, data.quota_bytes)) * 100),
+  );
+  return (
+    <>
+      <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+        <span>{t("settings.storageUsage", { used: formatBytes(data.used_bytes) })}</span>
+        <span className="text-muted-foreground">
+          {t("settings.storageOf", { quota: formatBytes(data.quota_bytes) })}
+        </span>
+      </div>
+      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${
+            full ? "bg-danger" : "bg-gradient-to-r from-primary to-[#96670c]"
+          }`}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      {full ? <p className="text-xs text-danger">{t("settings.storageFull")}</p> : null}
+    </>
+  );
+}
 
 /**
  * The account page splits the old monolithic settings view across three
@@ -278,61 +339,65 @@ export function SettingsPanel({
       )}
 
       {section === "profile" ? (
-        <Card className="animate-fade-in-up" style={{ animationDelay: "50ms" }}>
-          <CardHeader>
-            <CardTitle>{t("settings.profile")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form
-              className="grid gap-4 md:grid-cols-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                setProfileSaved(false);
-                updateProfile.mutate();
-              }}
-            >
-              <div>
-                <Label className="mb-1.5 block">{t("settings.displayName")}</Label>
-                <Input
-                  value={profile.display_name}
-                  onChange={(e) => setProfile({ ...profile, display_name: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label className="mb-1.5 block">{t("settings.email")}</Label>
-                <Input
-                  type="email"
-                  value={profile.email}
-                  onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label className="mb-1.5 block">{t("settings.timezone")}</Label>
-                <TimezoneSelect
-                  value={profile.timezone}
-                  onChange={(timezone) => setProfile({ ...profile, timezone })}
-                  allowEmpty={false}
-                />
-              </div>
-              <div>
-                <Label className="mb-1.5 block">{t("settings.currency")}</Label>
-                <CurrencySelect
-                  value={profile.currency}
-                  onChange={(currency) => setProfile({ ...profile, currency })}
-                  allowEmpty={false}
-                />
-              </div>
-              <div className="flex items-center gap-3 md:col-span-2">
-                <Button type="submit" disabled={updateProfile.isPending}>
-                  {t("common.save")}
-                </Button>
-                {profileSaved ? (
-                  <span className="text-sm text-primary">{t("settings.saved")}</span>
-                ) : null}
-              </div>
-            </form>
-          </CardContent>
-        </Card>
+        <>
+          <Card className="animate-fade-in-up" style={{ animationDelay: "50ms" }}>
+            <CardHeader>
+              <CardTitle>{t("settings.profile")}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form
+                className="grid gap-4 md:grid-cols-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  setProfileSaved(false);
+                  updateProfile.mutate();
+                }}
+              >
+                <div>
+                  <Label className="mb-1.5 block">{t("settings.displayName")}</Label>
+                  <Input
+                    value={profile.display_name}
+                    onChange={(e) => setProfile({ ...profile, display_name: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label className="mb-1.5 block">{t("settings.email")}</Label>
+                  <Input
+                    type="email"
+                    value={profile.email}
+                    onChange={(e) => setProfile({ ...profile, email: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label className="mb-1.5 block">{t("settings.timezone")}</Label>
+                  <TimezoneSelect
+                    value={profile.timezone}
+                    onChange={(timezone) => setProfile({ ...profile, timezone })}
+                    allowEmpty={false}
+                  />
+                </div>
+                <div>
+                  <Label className="mb-1.5 block">{t("settings.currency")}</Label>
+                  <CurrencySelect
+                    value={profile.currency}
+                    onChange={(currency) => setProfile({ ...profile, currency })}
+                    allowEmpty={false}
+                  />
+                </div>
+                <div className="flex items-center gap-3 md:col-span-2">
+                  <Button type="submit" disabled={updateProfile.isPending}>
+                    {t("common.save")}
+                  </Button>
+                  {profileSaved ? (
+                    <span className="text-sm text-primary">{t("settings.saved")}</span>
+                  ) : null}
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+
+          <StorageUsageCard />
+        </>
       ) : null}
 
       {section === "integrations" ? (

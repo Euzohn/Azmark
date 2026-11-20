@@ -249,6 +249,7 @@ function PhotosContent() {
       if (error.status === 413) return t("photos.uploadTooLarge");
       if (error.status === 415) return t("photos.uploadUnsupported");
       if (error.status === 502) return t("photos.uploadStorageDown");
+      if (error.status === 507) return t("photos.uploadQuotaExceeded");
     }
     return t("photos.uploadFailed");
   };
@@ -280,6 +281,8 @@ function PhotosContent() {
       );
     }
     await queryClient.invalidateQueries({ queryKey: ["photos"] });
+    // Uploads consume quota; keep the settings usage card in sync.
+    await queryClient.invalidateQueries({ queryKey: ["storage-usage"] });
   };
 
   const uploading = progress !== null;

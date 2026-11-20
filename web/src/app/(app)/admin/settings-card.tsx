@@ -60,6 +60,11 @@ function SettingsForm({ initial }: { initial: AdminSettings }) {
   const [smtpPassword, setSmtpPassword] = useState("");
   const [smtpSender, setSmtpSender] = useState(initial.smtp_sender ?? "");
   const [smtpStarttls, setSmtpStarttls] = useState(initial.smtp_starttls);
+  const [defaultQuotaMb, setDefaultQuotaMb] = useState(
+    initial.default_storage_quota_bytes > 0
+      ? String(Math.round((initial.default_storage_quota_bytes / (1024 * 1024)) * 100) / 100)
+      : "",
+  );
   const [testTo, setTestTo] = useState("");
   const [notice, setNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
@@ -77,10 +82,15 @@ function SettingsForm({ initial }: { initial: AdminSettings }) {
         smtp_sender: smtpSender.trim(),
         smtp_starttls: smtpStarttls,
         ...(smtpPassword ? { smtp_password: smtpPassword } : {}),
+        default_storage_quota_bytes: defaultQuotaMb.trim()
+          ? Math.round(Number(defaultQuotaMb) * 1024 * 1024)
+          : 0,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       queryClient.invalidateQueries({ queryKey: ["admin-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["storage-usage"] });
       setSmtpPassword("");
       setTurnstileSecret("");
       setNotice({ kind: "ok", text: t("admin.saved") });
@@ -102,6 +112,10 @@ function SettingsForm({ initial }: { initial: AdminSettings }) {
       setNotice({ kind: "error", text: t("admin.testEmailFailed", { error: detail }) });
     },
   });
+
+  const quotaInvalid =
+    defaultQuotaMb.trim() !== "" &&
+    (!Number.isFinite(Number(defaultQuotaMb)) || Number(defaultQuotaMb) < 0);
 
   return (
     <div className="flex flex-col gap-6">
@@ -173,6 +187,26 @@ function SettingsForm({ initial }: { initial: AdminSettings }) {
             ) : null}
           </div>
         ) : null}
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <h3 className="text-sm font-semibold text-foreground">{t("admin.storageTitle")}</h3>
+        <p className="text-xs text-muted-foreground">{t("admin.storageHint")}</p>
+        <div className="max-w-xs">
+          <Label className="mb-1.5 block" htmlFor="default-quota-mb">
+            {t("admin.defaultQuotaMB")}
+          </Label>
+          <Input
+            id="default-quota-mb"
+            type="number"
+            min={0}
+            step="any"
+            value={defaultQuotaMb}
+            onChange={(event) => setDefaultQuotaMb(event.target.value)}
+            placeholder={t("admin.storageUnlimited")}
+          />
+          <p className="mt-1.5 text-xs text-muted-foreground">{t("admin.defaultQuotaHint")}</p>
+        </div>
       </section>
 
       <section className="flex flex-col gap-3">
@@ -277,7 +311,7 @@ function SettingsForm({ initial }: { initial: AdminSettings }) {
       ) : null}
 
       <div className="flex justify-end">
-        <Button onClick={() => save.mutate()} disabled={save.isPending}>
+        <Button onClick={() => save.mutate()} disabled={save.isPending || quotaInvalid}>
           {t("common.save")}
         </Button>
       </div>

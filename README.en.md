@@ -47,7 +47,7 @@ See [`AGENTS.md`](./AGENTS.md) for repository conventions, [`CHANGELOG.md`](./CH
 | Module | Capabilities |
 | --- | --- |
 | Accounts | Login (JWT bearer), current user, change username / password (no email required); self-registration is closed by default and admins can open it with a bot challenge (built-in arithmetic / Cloudflare Turnstile) |
-| Admin | Admin-created accounts, password reset, enable / disable and role changes; system settings (registration toggle, captcha, SMTP — credentials encrypted at rest, never echoed back); global action log and system stats |
+| Admin | Admin-created accounts, password reset, enable / disable and role changes; system settings (registration toggle, captcha, SMTP — credentials encrypted at rest, never echoed back); per-user storage quotas (instance default + per-user override, 0 = unlimited, uploads over the cap are rejected); global action log and system stats |
 | Flights | Detail, edit, delete, AI / form entry |
 | Trains | Detail, edit, delete, AI / form entry |
 | Other transport | Detail, edit, delete, AI / form entry |
@@ -58,7 +58,7 @@ See [`AGENTS.md`](./AGENTS.md) for repository conventions, [`CHANGELOG.md`](./CH
 | Notes | Free-form notes, optionally linked to a trip |
 | Records | Unified records list (flight / train / other): search, type / status / trip / date filters, sorting and pagination |
 | Trips | A trip groups flights, trains, hotels and activities, and aggregates its expenses and notes; ordering within a trip |
-| Attachments | Upload / download / delete boarding passes and receipts per record (transport, hotel, activity; S3-compatible storage · MinIO) |
+| Attachments | Upload / download / delete boarding passes and receipts per record (transport, hotel, activity; S3-compatible storage · MinIO); uploads are subject to per-user storage quotas |
 | Photos | Standalone album: JPEG / PNG / WebP / GIF uploads (incl. DJI-style MPO multi-frame JPEG), EXIF capture time & GPS extraction, thumbnails; trip photo section, map photo layer; smart organize suggests trip filing by capture time / location, applied only after confirmation |
 | Map | Flight great-circle arcs + schematic train / other-transport lines + place / stay pins and photo dots, switchable layers; stop labels follow zoom (city clusters ↔ individual stations, collision-aware) (MapLibre GL · OpenFreeMap; optional station registry, city-level fallback) |
 | Timeline | Every transport record in chronological order |
@@ -152,7 +152,7 @@ First admin (pick one):
 docker compose exec api python -m app create-admin --username admin --email you@example.com
 ```
 
-After an admin logs in, an "Admin" entry appears in the sidebar with users, the global action log and system statistics — admins can also create users, reset passwords, open self-registration and configure the bot challenge (arithmetic / Turnstile) and SMTP email settings.
+After an admin logs in, an "Admin" entry appears in the sidebar with users, the global action log and system statistics — admins can also create users, reset passwords, open self-registration and configure the bot challenge (arithmetic / Turnstile) and SMTP email settings, and set storage quotas for regular users (an instance default in system settings, per-user overrides in the user list; 0 = unlimited).
 
 Attachments use the MinIO bundled in compose. Change `S3_SECRET_KEY` in `.env` (at least 8 characters). The bucket is created automatically by the API on first upload. `deploy.sh` only backs up the PostgreSQL database; attachments live in the `minio_data` volume — back that volume up separately (e.g. periodic volume snapshots / exports). For external S3 / R2 / OSS, set `S3_ENDPOINT`, `S3_REGION`, `S3_USE_SSL`, `S3_ADDRESSING_STYLE` and create the bucket in advance.
 

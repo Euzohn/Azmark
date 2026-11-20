@@ -6,7 +6,7 @@ import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 
 type ResourceType = "flight" | "train" | "transport" | "hotel" | "activity";
@@ -45,10 +45,13 @@ export function AttachmentPanel({ resourceType, resourceId }: AttachmentPanelPro
     enabled: Boolean(resourceId),
   });
 
-  const invalidate = () =>
-    queryClient.invalidateQueries({
+  const invalidate = () => {
+    void queryClient.invalidateQueries({
       queryKey: ["attachments", resourceType, resourceId],
     });
+    // Uploads and deletions move the quota needle.
+    void queryClient.invalidateQueries({ queryKey: ["storage-usage"] });
+  };
 
   const upload = useMutation({
     mutationFn: (file: File) => api.uploadAttachment(resourceType, resourceId, file),
@@ -57,7 +60,12 @@ export function AttachmentPanel({ resourceType, resourceId }: AttachmentPanelPro
       setError(null);
       void invalidate();
     },
-    onError: () => setError(t("attachments.uploadFailed")),
+    onError: (err) =>
+      setError(
+        err instanceof ApiError && err.status === 507
+          ? t("attachments.quotaExceeded")
+          : t("attachments.uploadFailed"),
+      ),
   });
 
   const remove = useMutation({

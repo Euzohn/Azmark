@@ -39,6 +39,7 @@ import type {
   RecordFilters,
   RecordList,
   StatisticsRead,
+  StorageUsage,
   TimelineRecord,
   TokenResponse,
   Train,
@@ -158,7 +159,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return (await response.json()) as T;
 }
 
-async function fetchBlob(path: string): Promise<Blob> {
+/** Fetch a binary response, keeping the server-provided download filename. */
+async function fetchDownload(path: string): Promise<{ blob: Blob; filename: string | null }> {
   const response = await fetch(`${API_BASE}/api/v1${path}`, {
     credentials: "include",
   });
@@ -168,7 +170,14 @@ async function fetchBlob(path: string): Promise<Blob> {
   if (!response.ok) {
     throw new ApiError(response.status, response.statusText);
   }
-  return response.blob();
+  // Content-Disposition: attachment; filename="azmark-export-2026-11-20.json"
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const match = /filename="?([^";]+)"?/.exec(disposition);
+  return { blob: await response.blob(), filename: match ? match[1] : null };
+}
+
+async function fetchBlob(path: string): Promise<Blob> {
+  return (await fetchDownload(path)).blob;
 }
 
 function importForm(file: File, mapping?: Record<string, string>): FormData {
@@ -519,6 +528,8 @@ export const api = {
   deleteProviderKey: (provider: string) =>
     request<void>(`/settings/provider-keys/${provider}`, { method: "DELETE" }),
 
+  getStorageUsage: () => request<StorageUsage>("/settings/storage"),
+
   getAiSettings: () => request<AiSettingsRead>("/settings/ai"),
   setAiSettings: (data: AiSettingsWrite) =>
     request<AiSettingsRead>("/settings/ai", { method: "PUT", body: JSON.stringify(data) }),
@@ -577,7 +588,15 @@ export const api = {
     const suffix = query.toString() ? `?${query.toString()}` : "";
     return request<AdminUserList>(`/admin/users${suffix}`);
   },
-  updateAdminUser: (id: string, data: { role?: string; status?: string; new_password?: string }) =>
+  updateAdminUser: (
+    id: string,
+    data: {
+      role?: string;
+      status?: string;
+      new_password?: string;
+      storage_quota_bytes?: number | null;
+    },
+  ) =>
     request<AdminUser>(`/admin/users/${id}`, {
       method: "PATCH",
       body: JSON.stringify(data),
@@ -629,7 +648,7 @@ export const api = {
     request<void>(`/attachments/${id}`, { method: "DELETE" }),
   downloadAttachment: (id: string) => fetchBlob(`/attachments/${id}/download`),
   exportData: (format: "json" | "csv", includeSensitive = false) =>
-    fetchBlob(`/export?format=${format}&include_sensitive=${includeSensitive}`),
+    fetchDownload(`/export?format=${format}&include_sensitive=${includeSensitive}`),
   importTemplate: (format: "json" | "csv" = "csv") =>
     fetchBlob(`/import/template?format=${format}`),
   previewImport: (file: File, mapping?: Record<string, string>) =>

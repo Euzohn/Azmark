@@ -509,6 +509,7 @@ Note 继续作为自由文本内容：
 - 数据库只存元数据；
 - `resource_type/resource_id` 作为多态归属；
 - 不进入时间线。
+- 上传受用户存储配额约束：`users.storage_quota_bytes`（NULL=跟随实例默认，0=不限）覆盖 `system_settings.default_storage_quota_bytes`（默认 0=不限）。用量为本人附件与照片原图大小之和（缩略图不计，删除即释放）；两条上传路径在用户写锁内、写存储前校验「已用 + 本次 > 配额」，超限返回 HTTP 507；ADMIN 豁免强制。
 
 当前 AttachmentService 只接受交通记录（`flight/train/transport`，最后一个映射 `other`）。本期行程附件区聚合**当前属于该行程的交通记录附件**，按附件 ID 去重，标明来源记录；不声称已支持直接向 Trip、Hotel、Activity、Place 上传附件。
 
@@ -525,6 +526,7 @@ Photo 是独立记录（spec #20），不是 Attachment 的扩展：
 - 图片从认证端点内联返回（`nosniff` + image-only MIME + CSP sandbox），`storage_key` 永不出现在 API 响应里；
 - 不进入 `TripItem` 时间线：`trip_id` 只是归档归属，行程详情以独立照片区展示；删除行程只解除归档，不删除照片；
 - 地图按经纬度渲染为独立「照片」图层；JSON 导出只含元数据（不含二进制，导入不重建）；AI / MCP 通过只读 `search_photos` / `get_photo` 读取元数据，绝不把图片二进制发给外部模型。
+- 上传同样受用户存储配额约束（见 §8.2）：只有原图大小计入用量，缩略图不计。
 
 历史决定（2026-11 早先「Photo 不单独实现」）已被本条取代：P1 收官把 Photo 作为实体落地，AI 识图仍由助手承担，不设 OCR 任务。
 

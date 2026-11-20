@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api, ApiError } from "@/lib/api";
 import { AUDIT_ACTION_LABELS } from "@/lib/audit-actions";
 import { useAuth } from "@/lib/auth-store";
+import { formatBytes } from "@/lib/format";
 import { useI18n, type TranslationKey } from "@/lib/i18n";
 import { usePageTitle } from "@/lib/page-title";
 import type { AdminUser } from "@/lib/types";
@@ -211,6 +212,104 @@ function ResetPasswordDialog({ user, onClose }: { user: AdminUser; onClose: () =
   );
 }
 
+function QuotaDialog({ user, onClose }: { user: AdminUser; onClose: () => void }) {
+  const { t } = useI18n();
+  const queryClient = useQueryClient();
+  const [mode, setMode] = useState<"default" | "unlimited" | "custom">(
+    user.storage_quota_bytes === null
+      ? "default"
+      : user.storage_quota_bytes === 0
+        ? "unlimited"
+        : "custom",
+  );
+  const [mb, setMb] = useState(
+    user.storage_quota_bytes && user.storage_quota_bytes > 0
+      ? String(Math.round((user.storage_quota_bytes / (1024 * 1024)) * 100) / 100)
+      : "",
+  );
+  const [error, setError] = useState<string | null>(null);
+
+  const save = useMutation({
+    mutationFn: () =>
+      api.updateAdminUser(user.id, {
+        storage_quota_bytes:
+          mode === "default"
+            ? null
+            : mode === "unlimited"
+              ? 0
+              : Math.round(Number(mb) * 1024 * 1024),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-logs"] });
+      onClose();
+    },
+    onError: () => setError(t("admin.quotaFailed")),
+  });
+
+  const customValid = mode !== "custom" || Number(mb) > 0;
+
+  return (
+    <Dialog open onClose={onClose} title={t("admin.storageQuota")}>
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (customValid) save.mutate();
+        }}
+      >
+        <p className="text-xs text-muted-foreground">
+          {t("admin.quotaHint", { username: user.username, used: formatBytes(user.used_bytes) })}
+        </p>
+        <div className="flex flex-col gap-2">
+          {(
+            [
+              ["default", t("admin.quotaFollowDefault")],
+              ["unlimited", t("admin.quotaUnlimited")],
+              ["custom", t("admin.quotaCustom")],
+            ] as const
+          ).map(([value, label]) => (
+            <label key={value} className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="quota-mode"
+                className="h-4 w-4 accent-primary"
+                checked={mode === value}
+                onChange={() => setMode(value)}
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+        {mode === "custom" ? (
+          <div>
+            <Label className="mb-1.5 block" htmlFor="quota-mb">
+              {t("admin.quotaMB")}
+            </Label>
+            <Input
+              id="quota-mb"
+              type="number"
+              step="any"
+              value={mb}
+              onChange={(event) => setMb(event.target.value)}
+              required
+            />
+          </div>
+        ) : null}
+        {error ? <p className="text-sm text-danger">{error}</p> : null}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onClose}>
+            {t("common.cancel")}
+          </Button>
+          <Button type="submit" disabled={save.isPending || !customValid}>
+            {t("common.save")}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
 export default function AdminPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { t } = useI18n();
   // Embedded instances live inside the account page tabs; only the standalone
@@ -226,6 +325,7 @@ export default function AdminPage({ embedded = false }: { embedded?: boolean } =
   const [logPage, setLogPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
   const [resetTarget, setResetTarget] = useState<AdminUser | null>(null);
+  const [quotaTarget, setQuotaTarget] = useState<AdminUser | null>(null);
 
   const usersQuery = useQuery({
     queryKey: ["admin-users", search, page],
@@ -373,7 +473,7 @@ export default function AdminPage({ embedded = false }: { embedded?: boolean } =
 
           {users.length > 0 ? (
             <div className="overflow-x-auto rounded-xl border border-border">
-              <table className="w-full min-w-[720px] text-left text-sm">
+              <table className="w-full min-w-[880px] text-left text-sm">
                 <thead className="bg-muted/70 text-xs uppercase tracking-wider text-muted-foreground">
                   <tr>
                     <th className="px-4 py-3 font-semibold">{t("admin.username")}</th>
@@ -382,6 +482,7 @@ export default function AdminPage({ embedded = false }: { embedded?: boolean } =
                     <th className="px-4 py-3 font-semibold">{t("admin.status")}</th>
                     <th className="px-4 py-3 font-semibold">{t("admin.records")}</th>
                     <th className="px-4 py-3 font-semibold">{t("admin.trips")}</th>
+                    <th className="px-4 py-3 font-semibold">{t("admin.storage")}</th>
                     <th className="px-4 py-3 font-semibold">{t("admin.joined")}</th>
                     <th className="px-4 py-3 font-semibold">{t("common.actions")}</th>
                   </tr>
@@ -432,19 +533,38 @@ export default function AdminPage({ embedded = false }: { embedded?: boolean } =
                         <td className="px-4 py-3 text-muted-foreground">{item.records}</td>
                         <td className="px-4 py-3 text-muted-foreground">{item.trips}</td>
                         <td className="px-4 py-3 text-muted-foreground">
+                          <div>{formatBytes(item.used_bytes)}</div>
+                          <div className="text-xs">
+                            {item.role === "ADMIN" || item.effective_quota_bytes <= 0
+                              ? t("admin.storageUnlimited")
+                              : `/ ${formatBytes(item.effective_quota_bytes)}`}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">
                           {formatDate(item.created_at)}
                         </td>
                         <td className="px-4 py-3">
                           {isSelf ? (
                             <span className="text-xs text-muted-foreground">—</span>
                           ) : (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setResetTarget(item)}
-                            >
-                              {t("admin.resetPassword")}
-                            </Button>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setResetTarget(item)}
+                              >
+                                {t("admin.resetPassword")}
+                              </Button>
+                              {item.role === "USER" ? (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setQuotaTarget(item)}
+                                >
+                                  {t("admin.storageQuota")}
+                                </Button>
+                              ) : null}
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -592,6 +712,9 @@ export default function AdminPage({ embedded = false }: { embedded?: boolean } =
       {createOpen ? <CreateUserDialog onClose={() => setCreateOpen(false)} /> : null}
       {resetTarget ? (
         <ResetPasswordDialog user={resetTarget} onClose={() => setResetTarget(null)} />
+      ) : null}
+      {quotaTarget ? (
+        <QuotaDialog user={quotaTarget} onClose={() => setQuotaTarget(null)} />
       ) : null}
     </div>
   );

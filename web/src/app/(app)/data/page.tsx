@@ -67,8 +67,9 @@ export default function DataPage({ embedded = false }: { embedded?: boolean } = 
     setError(null);
     setExporting(format);
     try {
-      const blob = await api.exportData(format, includeSensitive);
-      saveBlob(blob, `azmark-export.${format}`);
+      const { blob, filename } = await api.exportData(format, includeSensitive);
+      // Prefer the server's date-stamped name (azmark-export-YYYY-MM-DD.ext).
+      saveBlob(blob, filename ?? `azmark-export.${format}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {

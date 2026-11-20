@@ -85,7 +85,7 @@ function PhotoDetail() {
     mutationFn: () => api.deletePhoto(id),
     onSuccess: async () => {
       await Promise.all(
-        ["photos", "photo", "trips", "trip"].map((key) =>
+        ["photos", "photo", "trips", "trip", "storage-usage"].map((key) =>
           queryClient.invalidateQueries({ queryKey: [key] }),
         ),
       );
