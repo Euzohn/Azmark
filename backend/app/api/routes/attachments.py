@@ -31,6 +31,7 @@ from app.services.attachment import (
     UnsupportedResourceTypeError,
 )
 from app.services.audit import AuditService
+from app.services.storage_quota import StorageQuotaExceededError
 
 router = APIRouter(prefix="/attachments", tags=["attachments"])
 
@@ -71,6 +72,11 @@ def upload_attachment(
         ) from None
     except FileTooLargeError:
         raise HTTPException(status_code=413, detail="File is too large") from None
+    except StorageQuotaExceededError:
+        raise HTTPException(
+            status_code=status.HTTP_507_INSUFFICIENT_STORAGE,
+            detail="Storage quota exceeded",
+        ) from None
     except EmptyFileError:
         raise HTTPException(status_code=422, detail="File is empty") from None
     except StorageUnavailableError:

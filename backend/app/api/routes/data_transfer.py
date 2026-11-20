@@ -1,5 +1,6 @@
 """Import / export endpoints (spec #42/#43). Fully user-scoped (#57)."""
 
+from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 from fastapi import (
@@ -64,14 +65,16 @@ def export_data(
     service: DataTransferService = Depends(get_data_transfer_service),
     audit: AuditService = Depends(get_audit_service),
 ) -> Response:
+    # Date-stamped (UTC) so repeated exports don't overwrite each other on disk.
+    stamp = datetime.now(UTC).strftime("%Y-%m-%d")
     if format == "csv":
         content = service.export_csv(user_id=current_user.id, include_sensitive=include_sensitive)
         media_type = "text/csv"
-        filename = "azmark-export.csv"
+        filename = f"azmark-export-{stamp}.csv"
     else:
         content = service.export_json(user_id=current_user.id, include_sensitive=include_sensitive)
         media_type = "application/json"
-        filename = "azmark-export.json"
+        filename = f"azmark-export-{stamp}.json"
     audit.log(
         action=AuditAction.EXPORT,
         user_id=current_user.id,

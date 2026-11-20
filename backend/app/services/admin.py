@@ -14,12 +14,15 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.db import SessionLocal
 from app.core.security import hash_password
+from app.models.attachment import Attachment
 from app.models.audit_log import AuditLog
+from app.models.photo import Photo
 from app.models.transport_record import TransportRecord
 from app.models.trip import Trip
 from app.models.user import User, UserRole, UserStatus
 from app.repositories.user import UserRepository
 from app.schemas.admin import AdminSystemRead, AdminUserRead, AdminUserUpdate
+from app.services.storage_quota import default_quota_bytes, used_bytes
 
 
 class AdminUserNotFoundError(Exception):
@@ -186,6 +189,21 @@ class AdminService:
                 .group_by(Trip.user_id)
             ).all()
         )
+        attachment_bytes = dict(
+            self.db.execute(
+                select(Attachment.user_id, func.coalesce(func.sum(Attachment.size), 0))
+                .where(Attachment.user_id.in_(ids))
+                .group_by(Attachment.user_id)
+            ).all()
+        )
+        photo_bytes = dict(
+            self.db.execute(
+                select(Photo.user_id, func.coalesce(func.sum(Photo.size), 0))
+                .where(Photo.user_id.in_(ids))
+                .group_by(Photo.user_id)
+            ).all()
+        )
+        default_quota = default_quota_bytes(self.db)
 
         items = [
             AdminUserRead(
@@ -197,6 +215,13 @@ class AdminService:
                 status=user.status,
                 records=int(record_counts.get(user.id, 0)),
                 trips=int(trip_counts.get(user.id, 0)),
+                used_bytes=int(attachment_bytes.get(user.id, 0)) + int(photo_bytes.get(user.id, 0)),
+                storage_quota_bytes=user.storage_quota_bytes,
+                effective_quota_bytes=(
+                    int(user.storage_quota_bytes)
+                    if user.storage_quota_bytes is not None
+                    else default_quota
+                ),
                 created_at=user.created_at,
             )
             for user in users
@@ -212,6 +237,11 @@ class AdminService:
         trips = self.db.scalar(
             select(func.count()).select_from(Trip).where(Trip.user_id == user.id)
         )
+        quota = (
+            int(user.storage_quota_bytes)
+            if user.storage_quota_bytes is not None
+            else default_quota_bytes(self.db)
+        )
         return AdminUserRead(
             id=user.id,
             username=user.username,
@@ -221,6 +251,9 @@ class AdminService:
             status=user.status,
             records=int(records or 0),
             trips=int(trips or 0),
+            used_bytes=used_bytes(self.db, user.id),
+            storage_quota_bytes=user.storage_quota_bytes,
+            effective_quota_bytes=quota,
             created_at=user.created_at,
         )
 
@@ -259,7 +292,12 @@ class AdminService:
 
         data = payload.model_dump(exclude_unset=True, exclude_none=True)
         new_password = data.pop("new_password", None)
-        if not data and new_password is None:
+        # ``exclude_none`` would swallow an explicit null, but null is exactly
+        # how an admin resets a user back to the instance default quota.
+        quota_explicit = "storage_quota_bytes" in payload.model_fields_set
+        quota_value = payload.storage_quota_bytes if quota_explicit else None
+        data.pop("storage_quota_bytes", None)
+        if not data and new_password is None and not quota_explicit:
             return self.read_user(user), []
 
         if user.id == actor.id:
@@ -272,6 +310,9 @@ class AdminService:
         for field, value in data.items():
             setattr(user, field, value)
         fields = sorted(data.keys())
+        if quota_explicit:
+            user.storage_quota_bytes = quota_value
+            fields.append("storage_quota_bytes")
         if new_password is not None:
             user.password_hash = hash_password(new_password)
             fields.append("new_password")

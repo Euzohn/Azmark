@@ -60,6 +60,8 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        # Let cross-origin clients read the download filename (export, etc.).
+        expose_headers=["Content-Disposition"],
     )
     app.include_router(api_router, prefix=settings.api_v1_prefix)
     if mcp_mount is not None:

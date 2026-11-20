@@ -1,21 +1,29 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy.orm import Session
 
 import app.providers as providers
 from app.api.deps import (
     get_ai_settings_service,
     get_audit_service,
     get_current_user,
+    get_db,
     get_provider_keys_service,
 )
 from app.core.config import settings
 from app.core.url_guard import validate_base_url
 from app.models.audit_log import AuditAction
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.ai_settings import AiSettingsRead, AiSettingsWrite
-from app.schemas.settings import ProviderKeysRead, ProviderKeyStatus, ProviderKeyWrite
+from app.schemas.settings import (
+    ProviderKeysRead,
+    ProviderKeyStatus,
+    ProviderKeyWrite,
+    StorageUsageRead,
+)
 from app.services.ai_settings import AiSettingsService
 from app.services.audit import AuditService
 from app.services.provider_keys import ProviderKeyStore
+from app.services.storage_quota import effective_quota_bytes, used_bytes
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -36,6 +44,22 @@ def _guard_searxng_base_url(provider: str, api_key: str) -> None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
         ) from exc
+
+
+@router.get("/storage", response_model=StorageUsageRead)
+def read_storage_usage(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> StorageUsageRead:
+    """How much of the user's storage quota is used (spec #44, #57)."""
+    quota = effective_quota_bytes(db, current_user)
+    # Admins are exempt from enforcement; never show them a blocking limit.
+    unlimited = quota <= 0 or current_user.role == UserRole.ADMIN
+    return StorageUsageRead(
+        used_bytes=used_bytes(db, current_user.id),
+        quota_bytes=0 if unlimited else quota,
+        unlimited=unlimited,
+    )
 
 
 @router.get("/provider-keys", response_model=ProviderKeysRead)

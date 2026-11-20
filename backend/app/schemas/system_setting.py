@@ -19,6 +19,8 @@ class AdminSettingsRead(BaseModel):
     smtp_sender: str | None
     smtp_starttls: bool
     smtp_password_set: bool
+    #: Instance-wide default storage cap in bytes; 0 = unlimited.
+    default_storage_quota_bytes: int
 
 
 class AdminSettingsUpdate(BaseModel):
@@ -35,6 +37,7 @@ class AdminSettingsUpdate(BaseModel):
     smtp_password: str | None = Field(default=None, max_length=255)
     smtp_sender: str | None = Field(default=None, max_length=255)
     smtp_starttls: bool | None = None
+    default_storage_quota_bytes: int | None = Field(default=None, ge=0)
 
 
 class AdminTestEmailRequest(BaseModel):

@@ -19,6 +19,7 @@ from app.services.storage import (
     StorageObjectNotFound,
     StorageProvider,
 )
+from app.services.storage_quota import enforce_storage_quota
 from app.services.write_lock import lock_user_writes
 
 logger = logging.getLogger(__name__)
@@ -166,6 +167,9 @@ class AttachmentService:
             raise EmptyFileError
         if len(data) > max_bytes:
             raise FileTooLargeError
+
+        # Inside the user write lock: concurrent uploads cannot overshoot.
+        enforce_storage_quota(self.db, user_id=user_id, incoming_bytes=len(data))
 
         attachment_id = uuid.uuid4()
         storage_key = f"users/{user_id}/attachments/{attachment_id}"

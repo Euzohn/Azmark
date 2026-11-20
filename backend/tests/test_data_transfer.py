@@ -1,6 +1,7 @@
 import csv
 import io
 import json
+from datetime import UTC, datetime
 
 from tests.conftest import auth_headers, register_and_login
 
@@ -59,6 +60,9 @@ def test_export_json_bundle(client):
     response = client.get("/api/v1/export?format=json", headers=headers)
     assert response.status_code == 200
     assert "attachment" in response.headers["content-disposition"]
+    # Date-stamped filename: azmark-export-YYYY-MM-DD.json (UTC).
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    assert f'filename="azmark-export-{today}.json"' in response.headers["content-disposition"]
     bundle = response.json()
     assert bundle["version"] == 2
     assert bundle["bundle_id"]

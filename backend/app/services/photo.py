@@ -29,6 +29,7 @@ from app.services.storage import (
     StorageObjectNotFound,
     StorageProvider,
 )
+from app.services.storage_quota import enforce_storage_quota
 from app.services.write_lock import lock_user_writes
 
 logger = logging.getLogger(__name__)
@@ -329,6 +330,9 @@ class PhotoService:
             raise EmptyPhotoError
         if len(data) > max_bytes:
             raise PhotoTooLargeError
+
+        # Inside the user write lock: concurrent uploads cannot overshoot.
+        enforce_storage_quota(self.db, user_id=user_id, incoming_bytes=len(data))
 
         metadata, thumbnail = process_photo(data, utc_offset_minutes=utc_offset_minutes)
 

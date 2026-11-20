@@ -9,7 +9,7 @@ are Fernet-encrypted with a key derived from SECRET_KEY — see
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String
+from sqlalchemy import BigInteger, Boolean, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -45,6 +45,9 @@ class SystemSetting(Base):
     smtp_password_enc: Mapped[str | None] = mapped_column(String(512))
     smtp_sender: Mapped[str | None] = mapped_column(String(255))
     smtp_starttls: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    #: Instance-wide default storage cap in bytes; 0 = unlimited (opt-in).
+    #: Per-user overrides live on ``users.storage_quota_bytes``.
+    default_storage_quota_bytes: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )

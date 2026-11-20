@@ -47,6 +47,7 @@ from app.services.photo import (
     UnsupportedPhotoTypeError,
 )
 from app.services.photo_organization import PhotoOrganizationService
+from app.services.storage_quota import StorageQuotaExceededError
 
 router = APIRouter(prefix="/photos", tags=["photos"])
 
@@ -95,6 +96,11 @@ def upload_photo(
         raise _unsupported() from None
     except PhotoTooLargeError:
         raise HTTPException(status_code=413, detail="Photo is too large") from None
+    except StorageQuotaExceededError:
+        raise HTTPException(
+            status_code=status.HTTP_507_INSUFFICIENT_STORAGE,
+            detail="Storage quota exceeded",
+        ) from None
     except EmptyPhotoError:
         raise HTTPException(status_code=422, detail="File is empty") from None
     except PhotoStorageUnavailableError:

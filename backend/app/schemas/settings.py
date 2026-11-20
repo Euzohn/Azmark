@@ -12,3 +12,11 @@ class ProviderKeyStatus(BaseModel):
 
 class ProviderKeysRead(BaseModel):
     providers: list[ProviderKeyStatus]
+
+
+class StorageUsageRead(BaseModel):
+    """User-facing storage usage; ``quota_bytes`` 0 means unlimited."""
+
+    used_bytes: int
+    quota_bytes: int
+    unlimited: bool

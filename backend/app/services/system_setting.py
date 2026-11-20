@@ -80,6 +80,7 @@ class SystemSettingsService:
             smtp_sender=row.smtp_sender,
             smtp_starttls=row.smtp_starttls,
             smtp_password_set=bool(row.smtp_password_enc),
+            default_storage_quota_bytes=row.default_storage_quota_bytes,
         )
 
     def update(self, payload: AdminSettingsUpdate) -> AdminSettingsRead:
@@ -96,6 +97,7 @@ class SystemSettingsService:
                 "registration_captcha_enabled",
                 "captcha_provider",
                 "smtp_starttls",
+                "default_storage_quota_bytes",
             ):
                 continue
             setattr(row, field, value)

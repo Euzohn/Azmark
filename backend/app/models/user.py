@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, String, Uuid
+from sqlalchemy import BigInteger, DateTime, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -36,6 +36,9 @@ class User(Base):
     locale: Mapped[str] = mapped_column(String(10), default="zh-CN", nullable=False)
     timezone: Mapped[str] = mapped_column(String(64), default="UTC", nullable=False)
     currency: Mapped[str] = mapped_column(String(3), default="CNY", nullable=False)
+    #: Total object-storage cap in bytes. NULL = follow the instance default;
+    #: 0 = unlimited; > 0 = per-user cap. Enforced on attachment/photo upload.
+    storage_quota_bytes: Mapped[int | None] = mapped_column(BigInteger)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )

@@ -16,6 +16,10 @@ class AdminUserRead(BaseModel):
     status: str
     records: int
     trips: int
+    #: Attachment + photo bytes; 0 in either quota field means unlimited.
+    used_bytes: int
+    storage_quota_bytes: int | None
+    effective_quota_bytes: int
     created_at: datetime
 
 
@@ -41,6 +45,8 @@ class AdminUserUpdate(BaseModel):
     role: Literal["USER", "ADMIN"] | None = None
     status: Literal["ACTIVE", "DISABLED"] | None = None
     new_password: str | None = Field(default=None, min_length=6, max_length=128)
+    #: Explicit null resets the user to the instance default; 0 = unlimited.
+    storage_quota_bytes: int | None = Field(default=None, ge=0)
 
 
 class AdminSystemRead(BaseModel):
