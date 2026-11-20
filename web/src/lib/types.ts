@@ -481,6 +481,26 @@ export interface PhotoFilters {
   page_size?: number;
 }
 
+export interface PhotoTripCandidate {
+  trip_id: string;
+  trip_name: string;
+  start_date: string | null;
+  end_date: string | null;
+  reasons: string[];
+  distance_km: number | null;
+  confidence: string;
+}
+
+export interface PhotoSuggestion {
+  photo: Photo;
+  candidates: PhotoTripCandidate[];
+}
+
+export interface PhotoSuggestions {
+  items: PhotoSuggestion[];
+  unassigned_total: number;
+}
+
 export interface PhotoList {
   items: Photo[];
   total: number;

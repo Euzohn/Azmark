@@ -59,7 +59,8 @@ See [`AGENTS.md`](./AGENTS.md) for repository conventions, [`CHANGELOG.md`](./CH
 | Records | Unified records list (flight / train / other): search, type / status / trip / date filters, sorting and pagination |
 | Trips | A trip groups flights, trains, hotels and activities, and aggregates its expenses and notes; ordering within a trip |
 | Attachments | Upload / download / delete boarding passes and receipts per record (transport, hotel, activity; S3-compatible storage · MinIO) |
-| Map | Flight great-circle arcs + schematic train / other-transport lines + place & stay pins, switchable layers; stop labels follow zoom (city clusters ↔ individual stations, collision-aware) (MapLibre GL · OpenFreeMap; optional station registry, city-level fallback) |
+| Photos | Standalone album: JPEG / PNG / WebP / GIF uploads (incl. DJI-style MPO multi-frame JPEG), EXIF capture time & GPS extraction, thumbnails; trip photo section, map photo layer; smart organize suggests trip filing by capture time / location, applied only after confirmation |
+| Map | Flight great-circle arcs + schematic train / other-transport lines + place / stay pins and photo dots, switchable layers; stop labels follow zoom (city clusters ↔ individual stations, collision-aware) (MapLibre GL · OpenFreeMap; optional station registry, city-level fallback) |
 | Timeline | Every transport record in chronological order |
 | Dashboard | Key metrics, upcoming departures, recent records across types |
 | Statistics | Flight / train breakdowns, year / month / day distributions, expense composition (no overlap with dashboard metrics) |
@@ -260,8 +261,8 @@ docker compose exec api python -c "from app.core.db import SessionLocal; from ap
 ## Roadmap
 
 - **MVP (done)** — accounts; flight / train / other transport records; trips; attachments; map / timeline / dashboard / statistics; audit log; AI chat with natural-language entry (including the confirmation flow); CSV / JSON import / export; zh-CN / en-US and mobile adaptation; personal access tokens.
-- **P1 (done)** — hotels / stays, places, activities, expenses, notes. Photos / OCR / boarding-pass parsing are not built as separate modules: image extraction is handled by the web AI assistant (images are not persisted; upload them as attachments when they need to be kept).
-- **P2** — Travel Wrapped (Year in Review) and AI travel journal (done); remaining: email import, automation rules, advanced OCR, AI photo organization.
+- **P1 (done)** — hotels / stays, places, activities, expenses, notes, photos (standalone album + smart organize). OCR / boarding-pass parsing are not separate modules: image extraction is handled by the web AI assistant.
+- **P2** — Travel Wrapped (Year in Review), AI travel journal, MCP, AI photo organization (done); remaining: email import, automation rules.
 - **P3** — trip collaboration, family accounts, multi-user shared trips, public trip pages, native mobile apps, plugin ecosystem.
 
 ## Star History

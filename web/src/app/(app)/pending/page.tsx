@@ -41,6 +41,7 @@ const RECORD_PATH: Record<string, string> = {
   note: "/notes",
   place: "/places",
   activity: "/activities",
+  photo: "/photos",
 };
 
 function formatDateTime(value: string | null, locale: string): string {

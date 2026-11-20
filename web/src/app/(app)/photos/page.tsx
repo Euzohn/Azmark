@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Image as ImageIcon, Plus, Search, Upload } from "lucide-react";
+import { Image as ImageIcon, Plus, Search, Sparkles, Upload } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
@@ -9,6 +9,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { PhotoImage } from "@/components/photo-image";
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Fab } from "@/components/ui/fab";
 import { Input } from "@/components/ui/input";
@@ -18,13 +19,184 @@ import { api, ApiError } from "@/lib/api";
 import { saveScroll, takeScroll } from "@/lib/scroll-memory";
 import { useI18n } from "@/lib/i18n";
 import { usePageTitle } from "@/lib/page-title";
-import type { PhotoFilters } from "@/lib/types";
+import type { PhotoFilters, PhotoSuggestion, PhotoTripCandidate } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 function formatDay(value: string | null, locale: string): string {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return date.toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric" });
+}
+
+/** Review deterministic trip suggestions, then file the checked photos.
+ * Nothing is written until the user presses the confirm button (spec #33). */
+function OrganizeDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t, locale } = useI18n();
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useQuery({
+    queryKey: ["photo-suggestions"],
+    queryFn: api.getPhotoSuggestions,
+    enabled: open,
+  });
+  const [overrides, setOverrides] = useState<
+    Record<string, { tripId?: string; included?: boolean }>
+  >({});
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // Defaults derive from the query data (strongest candidate, included);
+  // user edits live in `overrides`, so no effect has to sync state.
+  const choiceFor = (item: PhotoSuggestion) => {
+    const override = overrides[item.photo.id] ?? {};
+    return {
+      tripId: override.tripId ?? item.candidates[0]?.trip_id ?? "",
+      included: override.included ?? true,
+    };
+  };
+
+  const close = () => {
+    setOverrides({});
+    setError(null);
+    onClose();
+  };
+
+  const items = data?.items ?? [];
+  const selected = items.filter((item) => {
+    const choice = choiceFor(item);
+    return choice.included && choice.tripId;
+  });
+
+  const apply = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await api.organizePhotos(
+        selected.map((item) => ({
+          photo_id: item.photo.id,
+          trip_id: choiceFor(item).tripId,
+        })),
+      );
+      await queryClient.invalidateQueries({ queryKey: ["photos"] });
+      await queryClient.invalidateQueries({ queryKey: ["photo-suggestions"] });
+      close();
+    } catch {
+      setError(t("photos.organizeFailed"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const reasonLabel = (candidate: PhotoTripCandidate): string =>
+    candidate.reasons
+      .map((reason) =>
+        reason === "time"
+          ? t("photos.organizeReasonTime")
+          : t("photos.organizeReasonGeo", { distance: candidate.distance_km ?? 0 }),
+      )
+      .join(" · ");
+
+  return (
+    <Dialog
+      open={open}
+      onClose={close}
+      title={t("photos.organizeTitle")}
+      variant="responsive"
+      className="md:max-w-lg"
+    >
+      {isLoading ? (
+        <div className="flex flex-col gap-3">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-20 w-full rounded-lg" />
+          ))}
+        </div>
+      ) : items.length === 0 ? (
+        <div className="py-6 text-center">
+          <p className="text-sm font-medium">{t("photos.organizeEmpty")}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{t("photos.organizeEmptyHint")}</p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <p className="text-xs text-muted-foreground">{t("photos.organizeHint")}</p>
+          {items.map((item) => {
+            const choice = choiceFor(item);
+            const active = item.candidates.find((c) => c.trip_id === choice.tripId);
+            return (
+              <div key={item.photo.id} className="flex gap-3 rounded-lg border border-border p-3">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 shrink-0 accent-primary"
+                  checked={choice.included}
+                  aria-label={item.photo.filename}
+                  onChange={(event) =>
+                    setOverrides((prev) => ({
+                      ...prev,
+                      [item.photo.id]: { ...prev[item.photo.id], included: event.target.checked },
+                    }))
+                  }
+                />
+                <div className="h-14 w-14 shrink-0 overflow-hidden rounded-md border border-border bg-muted">
+                  <PhotoImage
+                    id={item.photo.id}
+                    alt={item.photo.filename}
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{item.photo.filename}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatDay(item.photo.captured_at, locale) || t("photos.noDate")}
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {item.candidates.map((candidate) => (
+                      <button
+                        key={candidate.trip_id}
+                        type="button"
+                        onClick={() =>
+                          setOverrides((prev) => ({
+                            ...prev,
+                            [item.photo.id]: {
+                              ...prev[item.photo.id],
+                              tripId: candidate.trip_id,
+                              included: true,
+                            },
+                          }))
+                        }
+                        className={cn(
+                          "rounded-full border px-2.5 py-1 text-xs transition-colors",
+                          choice.tripId === candidate.trip_id
+                            ? "border-primary bg-primary/10 font-medium text-primary"
+                            : "border-border text-muted-foreground hover:bg-muted",
+                        )}
+                      >
+                        {candidate.trip_name}
+                      </button>
+                    ))}
+                  </div>
+                  {active ? (
+                    <p className="mt-1 text-[11px] text-muted-foreground">{reasonLabel(active)}</p>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+          {error ? (
+            <p role="alert" className="text-sm text-danger">
+              {error}
+            </p>
+          ) : null}
+          <Button
+            className="w-full"
+            disabled={saving || selected.length === 0}
+            onClick={() => void apply()}
+          >
+            <Sparkles className="h-4 w-4" />
+            {t("photos.organizeApply", { count: selected.length })}
+          </Button>
+        </div>
+      )}
+    </Dialog>
+  );
 }
 
 function PhotosContent() {
@@ -37,6 +209,7 @@ function PhotosContent() {
   const [sort, setSort] = useState<PhotoFilters["sort"]>("newest");
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [organizeOpen, setOrganizeOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { data, isLoading, isError, refetch } = useQuery({
@@ -121,14 +294,35 @@ function PhotosContent() {
         title={t("photos.title")}
         subtitle={data ? t("records.total", { count: data.total }) : t("photos.subtitle")}
         actions={
-          <Button
-            className="hidden md:inline-flex"
-            disabled={uploading}
-            onClick={() => inputRef.current?.click()}
-          >
-            <Upload className="h-4 w-4" />
-            {uploading ? t("photos.uploading", progress ?? undefined) : t("photos.upload")}
-          </Button>
+          <>
+            <Button
+              variant="outline"
+              size="icon"
+              className="md:hidden"
+              aria-label={t("photos.organize")}
+              disabled={uploading}
+              onClick={() => setOrganizeOpen(true)}
+            >
+              <Sparkles className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              className="hidden md:inline-flex"
+              disabled={uploading}
+              onClick={() => setOrganizeOpen(true)}
+            >
+              <Sparkles className="h-4 w-4" />
+              {t("photos.organize")}
+            </Button>
+            <Button
+              className="hidden md:inline-flex"
+              disabled={uploading}
+              onClick={() => inputRef.current?.click()}
+            >
+              <Upload className="h-4 w-4" />
+              {uploading ? t("photos.uploading", progress ?? undefined) : t("photos.upload")}
+            </Button>
+          </>
         }
       />
 
@@ -239,6 +433,8 @@ function PhotosContent() {
           })}
         </div>
       )}
+
+      <OrganizeDialog open={organizeOpen} onClose={() => setOrganizeOpen(false)} />
 
       <Fab
         label={t("photos.upload")}

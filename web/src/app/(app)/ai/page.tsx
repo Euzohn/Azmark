@@ -58,6 +58,7 @@ import type {
   HotelInput,
   NoteInput,
   OtherTransportInput,
+  PhotoInput,
   PlaceInput,
   TrainInput,
   TripInput,
@@ -160,7 +161,7 @@ function formatProposalData(
   const lines: string[] = [];
 
   // Transport proposals (flight/train/other) carry origin/destination times etc.
-  if (!["trip", "hotel", "expense", "note", "place", "activity"].includes(proposal.record_type)) {
+  if (!["trip", "hotel", "expense", "note", "place", "activity", "photo"].includes(proposal.record_type)) {
     if (data.origin || data.destination) {
       lines.push(`${data.origin ?? "?"} → ${data.destination ?? "?"}`);
     }
@@ -277,6 +278,16 @@ function formatProposalData(
     case "note": {
       if (data.title) lines.push(`${t("notes.noteTitle")}: ${data.title}`);
       if (data.content) lines.push(`${t("notes.content")}: ${data.content}`);
+      return lines;
+    }
+    case "photo": {
+      if (data.trip_id) lines.push(`${t("ai.proposal.photoTrip")}: ${data.trip_id}`);
+      if (data.filename) lines.push(`${t("photos.filename")}: ${data.filename}`);
+      if (data.captured_at) {
+        lines.push(
+          `${t("photos.capturedAt")}: ${formatZonedDateTime(String(data.captured_at), locale, null)}`,
+        );
+      }
       return lines;
     }
     case "place": {
@@ -703,6 +714,7 @@ export default function AiChatPage() {
     queryClient.invalidateQueries({ queryKey: ["notes"] });
     queryClient.invalidateQueries({ queryKey: ["places"] });
     queryClient.invalidateQueries({ queryKey: ["activities"] });
+    queryClient.invalidateQueries({ queryKey: ["photos"] });
     queryClient.invalidateQueries({ queryKey: ["timeline"] });
     queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     queryClient.invalidateQueries({ queryKey: ["statistics"] });
@@ -747,6 +759,9 @@ export default function AiChatPage() {
         }
         if (proposal.record_type === "activity") {
           return api.updateActivity(id, fields as unknown as ActivityInput);
+        }
+        if (proposal.record_type === "photo") {
+          return api.updatePhoto(id, fields as unknown as PhotoInput);
         }
         return api.updateOtherTransport(
           id,

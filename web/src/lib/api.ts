@@ -72,6 +72,7 @@ import type {
   PhotoFilters,
   PhotoInput,
   PhotoList,
+  PhotoSuggestions,
   Activity,
   ActivityFilters,
   ActivityInput,
@@ -358,6 +359,12 @@ export const api = {
     return request<Photo>("/photos", { method: "POST", body: form });
   },
   getPhoto: (id: string) => request<Photo>(`/photos/${id}`),
+  getPhotoSuggestions: () => request<PhotoSuggestions>("/photos/suggestions"),
+  organizePhotos: (assignments: { photo_id: string; trip_id: string }[]) =>
+    request<{ updated: number }>("/photos/organize", {
+      method: "POST",
+      body: JSON.stringify({ assignments }),
+    }),
   updatePhoto: (id: string, data: PhotoInput) =>
     request<Photo>(`/photos/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deletePhoto: (id: string) => request<void>(`/photos/${id}`, { method: "DELETE" }),
