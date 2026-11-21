@@ -84,7 +84,7 @@ export function deriveTitle(content: string, max = 40): string {
 
 /** Newest activity first — the list shows recent conversations on top. */
 export function sortByUpdated(conversations: Conversation[]): Conversation[] {
-  return [...conversations].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return conversations.toSorted((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
 export function findConversation(

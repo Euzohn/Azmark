@@ -634,8 +634,16 @@ export function SettingsPanel({
             }}
           >
             <div>
-              <Label className="mb-1.5 block">{t("settings.newUsername")}</Label>
+              <Label className="mb-1.5 block" htmlFor="new-username">
+                {t("settings.newUsername")}
+              </Label>
               <Input
+                id="new-username"
+                name="username"
+                autoComplete="username"
+                spellCheck={false}
+                autoCapitalize="off"
+                autoCorrect="off"
                 value={newUsername}
                 onChange={(e) => setNewUsername(e.target.value)}
                 minLength={3}
@@ -643,9 +651,14 @@ export function SettingsPanel({
               />
             </div>
             <div>
-              <Label className="mb-1.5 block">{t("settings.currentPassword")}</Label>
+              <Label className="mb-1.5 block" htmlFor="username-current-password">
+                {t("settings.currentPassword")}
+              </Label>
               <Input
+                id="username-current-password"
+                name="current-password"
                 type="password"
+                autoComplete="current-password"
                 value={usernamePassword}
                 onChange={(e) => setUsernamePassword(e.target.value)}
                 required
@@ -673,18 +686,28 @@ export function SettingsPanel({
             }}
           >
             <div>
-              <Label className="mb-1.5 block">{t("settings.currentPassword")}</Label>
+              <Label className="mb-1.5 block" htmlFor="change-current-password">
+                {t("settings.currentPassword")}
+              </Label>
               <Input
+                id="change-current-password"
+                name="current-password"
                 type="password"
+                autoComplete="current-password"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 required
               />
             </div>
             <div>
-              <Label className="mb-1.5 block">{t("settings.newPassword")}</Label>
+              <Label className="mb-1.5 block" htmlFor="change-new-password">
+                {t("settings.newPassword")}
+              </Label>
               <Input
+                id="change-new-password"
+                name="new-password"
                 type="password"
+                autoComplete="new-password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 minLength={6}

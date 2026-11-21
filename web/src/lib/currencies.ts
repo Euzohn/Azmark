@@ -49,5 +49,5 @@ const intl = Intl as typeof Intl & {
 /** All ISO 4217 codes the runtime knows, alphabetically. */
 export function allCurrencyCodes(): string[] {
   const codes = intl.supportedValuesOf?.("currency") ?? [];
-  return [...codes].sort((a, b) => a.localeCompare(b));
+  return codes.toSorted((a, b) => a.localeCompare(b));
 }
