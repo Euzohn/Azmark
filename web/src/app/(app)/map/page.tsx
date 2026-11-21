@@ -449,7 +449,7 @@ export default function MapPage() {
             .filter((key): key is string => key !== null),
         );
         const sharedCity = cityKeys.size === 1 ? [...cityKeys][0] : null;
-        const top = cluster.members.toSorted((a, b) => b.degree - a.degree)[0]!;
+        const top = [...cluster.members].sort((a, b) => b.degree - a.degree)[0]!;
         return {
           type: "Feature" as const,
           properties: {

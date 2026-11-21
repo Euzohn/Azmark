@@ -366,7 +366,7 @@ function buildSection(
         formatLabel: translate(SEAT_TYPE_KEYS),
       },
     ],
-    time: [{ key: "day", title: t("stats.byDay"), items: data.by_day.toReversed() }],
+    time: [{ key: "day", title: t("stats.byDay"), items: [...data.by_day].reverse() }],
   };
 }
 
@@ -625,7 +625,7 @@ export default function StatisticsPage() {
                       <CardTitle>{t("stats.expenseMonthly")}</CardTitle>
                       {spendYears.length > 1 ? (
                         <div className="flex flex-wrap gap-1.5">
-                          {spendYears.toReversed().map((year) => (
+                          {[...spendYears].reverse().map((year) => (
                             <button
                               key={year}
                               type="button"
@@ -749,7 +749,7 @@ export default function StatisticsPage() {
                   <CardTitle>{t("stats.monthly")}</CardTitle>
                   {years.length > 1 ? (
                     <div className="flex flex-wrap gap-1.5">
-                      {years.toReversed().map((year) => (
+                      {[...years].reverse().map((year) => (
                         <button
                           key={year}
                           type="button"
