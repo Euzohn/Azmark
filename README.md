@@ -16,6 +16,8 @@
   <img src="https://img.shields.io/badge/PostgreSQL-PostGIS-78816A" alt="PostgreSQL + PostGIS">
   &nbsp;
   <a href="https://github.com/Euzohn/Azmark/actions/workflows/ci.yml"><img src="https://github.com/Euzohn/Azmark/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  &nbsp;
+  <a href="https://github.com/Euzohn/Azmark/releases"><img src="https://img.shields.io/github/v/release/Euzohn/Azmark?color=C66B4E&label=release" alt="Release"></a>
 </p>
 
 **Azmark（行迹）** 是一个开源、自托管、AI 原生的个人旅行记录与数据管理系统。它把你每一段航班、火车与旅程，记录成一份只属于你自己的旅行手账——数据在你自己的服务器上，不依赖任何第三方云账号。

@@ -16,6 +16,8 @@
   <img src="https://img.shields.io/badge/PostgreSQL-PostGIS-78816A" alt="PostgreSQL + PostGIS">
   &nbsp;
   <a href="https://github.com/Euzohn/Azmark/actions/workflows/ci.yml"><img src="https://github.com/Euzohn/Azmark/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  &nbsp;
+  <a href="https://github.com/Euzohn/Azmark/releases"><img src="https://img.shields.io/github/v/release/Euzohn/Azmark?color=C66B4E&label=release" alt="Release"></a>
 </p>
 
 **Azmark (行迹)** is an open-source, self-hosted, AI-native personal travel log and data management system. It turns every flight, train ride and journey into a travel logbook that belongs to you alone — the data lives on your own server, with no third-party cloud account in the loop.
