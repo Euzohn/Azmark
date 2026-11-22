@@ -48,16 +48,16 @@ See [`AGENTS.md`](./AGENTS.md) for repository conventions, [`CHANGELOG.md`](./CH
 | --- | --- |
 | Accounts | Login (JWT bearer), current user, change username / password (no email required); self-registration is closed by default and admins can open it with a bot challenge (built-in arithmetic / Cloudflare Turnstile) |
 | Admin | Admin-created accounts, password reset, enable / disable and role changes; system settings (registration toggle, captcha, SMTP — credentials encrypted at rest, never echoed back); per-user storage quotas (instance default + per-user override, 0 = unlimited, uploads over the cap are rejected); global action log and system stats |
-| Flights | Detail, edit, delete, AI / form entry |
-| Trains | Detail, edit, delete, AI / form entry |
-| Other transport | Detail, edit, delete, AI / form entry |
-| Hotels | Stay records (check-in / check-out, room type, encrypted confirmation number, address, price); trip grouping, deduplication, status inference |
+| Flights | Detail, edit, delete, AI / form entry; auto-completed once the end day passes |
+| Trains | Detail, edit, delete, AI / form entry; auto-completed once the end day passes |
+| Other transport | Detail, edit, delete, AI / form entry; auto-completed once the end day passes |
+| Hotels | Stay records (check-in / check-out, room type, encrypted confirmation number, address, price); trip grouping, deduplication, status inference (auto-completed after the check-out day) |
 | Places | Saved places (airport / station / city / restaurant etc.) with coordinates and timezone; linked to trips through activities |
 | Activities | Activity records (type, time, place, price, notes); trip members on the timeline |
 | Expenses | Multi-currency expenses with categories and exchange-rate conversion; linkable to transport / hotel / activity or trip, included in expense statistics |
 | Notes | Free-form notes, optionally linked to a trip |
 | Records | Unified records list (flight / train / other): search, type / status / trip / date filters, sorting and pagination |
-| Trips | A trip groups flights, trains, hotels and activities, and aggregates its expenses and notes; ordering within a trip |
+| Trips | A trip groups flights, trains, hotels and activities, and aggregates its expenses and notes; ordering within a trip; status advances with the dates (planned → ongoing → completed) |
 | Attachments | Upload / download / delete boarding passes and receipts per record (transport, hotel, activity; S3-compatible storage · MinIO); uploads are subject to per-user storage quotas |
 | Photos | Standalone album: JPEG / PNG / WebP / GIF uploads (incl. DJI-style MPO multi-frame JPEG), EXIF capture time & GPS extraction, thumbnails; trip photo section, map photo layer; smart organize suggests trip filing by capture time / location, applied only after confirmation |
 | Map | Flight great-circle arcs + schematic train / other-transport lines + place / stay pins and photo dots, switchable layers; stop labels follow zoom (city clusters ↔ individual stations, collision-aware) (MapLibre GL · OpenFreeMap; optional station registry, city-level fallback) |

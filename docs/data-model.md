@@ -487,6 +487,17 @@ Place.city / Place.lat / Place.lon
 
 Place 中的 `airport/train_station/...` 类型仅用于用户收藏。
 
+### 7.3 状态随时间自动推进
+
+状态是用户数据，但时间流逝不是：结束日期已过的行程/酒店不应永远停在 `scheduled` 等用户手工改。不引入调度器，由各读取入口（REST 列表/详情、仪表盘、导出、AI 工具、MCP 读取）为当前用户惰性落库应推进的状态（`status_refresh.refresh_user_statuses`）：
+
+- 交通 `scheduled` → `completed`：结束时间按 实际到达 → 计划到达 → 实际出发 → 计划出发 优先取值，在其**记录时区的当天过完**后视为完成；无时间的记录不动。以「天」为单位，避免仅填日期（00:00 时间戳）的记录在出发当天 00:01 就被判完成；
+- Hotel `scheduled` → `completed`：`check_out`（缺省取 `check_in`）< 今天，与创建时推断一致；
+- Trip `planned` → `ongoing`（start_date ≤ 今天且结束日未过）、`planned`/`ongoing` → `completed`（`end_date` < 今天）；
+- `cancelled` 与 `completed` 永不覆盖；推进只前进、不回退。
+
+落库是重新校验 status 的条件 UPDATE，并自带 commit（GET 请求生命周期不提交事务）；属派生状态而非用户操作，不记审计。交通创建时与 Hotel 一样对过去的结束日期推断 `completed`（v2 恢复传 `restore=True` 保留导出值，但恢复后的过期 `scheduled` 行仍会在首次读取时推进，见 §10.6）。只读令牌触发的这次落库不违反 spec #33/#85 的只读语义——禁止的是 agent 改写用户数据，而非时间流逝的物化。
+
 ---
 
 ## 8. Note、Attachment 与 Photo
@@ -666,7 +677,7 @@ trip_items.end_at
 - 每个阶段声明支持的实体与字段：阶段 1 增加 Trip/交通/酒店及排序和档案的 v2 往返，阶段 2 增加 Place/Activity 关系，阶段 3 完成 Expense/Note 关系。导入遇到尚不支持或缺失映射的关系必须明确报错，不得静默跳过；v1 仅保证原有交通/行程导入，额外数组不能被宣称恢复成功。
 - 过渡期默认全量导出若包含尚不支持的实体或 legacy place 关系，必须明确拒绝生成可恢复的 v2 bundle；可另提供用户明确选择的部分导出并标注缺失范围，不能称为全量备份。v1 的导入预览对未支持数组列出警告，提交前要求确认，不得静默宣称全部恢复。
 - 预览执行完整引用校验；本期 v2 以整个 bundle 为原子导入单位，任一关系失败回滚本次新增业务记录和映射。导入也复用业务 Service，由外层工作单元统一提交。
-- 复用方式是各 Service 的 `prepare_*` 阶段：导入与正常创建共用校验/派生（Activity 时区回退、交通座位推断、敏感字段加密、Hotel 状态推断、Expense 来源与行程派生）。引用已由 bundle 解析，导入不再查询尚未落盘的目标行；恢复语义还要保留导出值本身：`occurred_at` 为 null 时仍为 null，显式酒店状态不被创建时默认覆盖。
+- 复用方式是各 Service 的 `prepare_*` 阶段：导入与正常创建共用校验/派生（Activity 时区回退、交通座位推断、敏感字段加密、Hotel/Transport 状态推断、Expense 来源与行程派生）。引用已由 bundle 解析，导入不再查询尚未落盘的目标行；恢复语义还要保留导出值本身：`occurred_at` 为 null 时仍为 null，显式酒店/交通状态不被创建时默认覆盖（交通传 `restore=True`）。恢复后的过期 `scheduled` 行仍会在首次读取时推进为 `completed`（§7.3），因此新导出的往返是稳定的。
 - Attachment 二进制恢复仍使用数据库+对象存储备份流程；v2 记录 JSON 的往返验收不声称覆盖附件文件。行程附件区聚合规则独立按第 8.2 节验收。
 
 ---
@@ -801,3 +812,4 @@ trip_items.end_at
 | Note/Attachment | 不进入时间线 |
 | 本期行程附件区 | 聚合现有交通附件，不新增通用上传归属 |
 | 关联导入导出 | v2 稳定 ID 与用户隔离映射，随阶段交付 |
+| 状态自动推进 | 读时惰性落库：scheduled→completed、planned→ongoing→completed；cancelled/completed 永不覆盖，不记审计（§7.3） |
