@@ -101,7 +101,14 @@ class AuditService:
         resource_id: str | None = None,
         meta: dict[str, Any] | None = None,
         request: Request | None = None,
+        commit: bool = True,
     ) -> AuditLog:
+        """Append one audit row.
+
+        ``commit=False`` leaves the row pending in the caller's transaction so
+        it commits (or rolls back) atomically with the change it describes —
+        used by the status sweep, which commits once for updates + audit.
+        """
         if request is None:
             ip = None
         else:
@@ -118,8 +125,9 @@ class AuditService:
             request_id=request_id(request) if request is not None else None,
         )
         self.db.add(entry)
-        self.db.commit()
-        self.db.refresh(entry)
+        if commit:
+            self.db.commit()
+            self.db.refresh(entry)
         return entry
 
     @staticmethod

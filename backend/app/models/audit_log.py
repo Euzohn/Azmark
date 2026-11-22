@@ -64,3 +64,4 @@ class AuditAction:
     CREATE_PENDING_ACTION = "create_pending_action"
     CONFIRM_PENDING_ACTION = "confirm_pending_action"
     REJECT_PENDING_ACTION = "reject_pending_action"
+    STATUS_AUTO_ADVANCED = "status_auto_advanced"

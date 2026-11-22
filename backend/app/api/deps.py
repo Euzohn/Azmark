@@ -1,7 +1,7 @@
 import uuid
 from functools import lru_cache
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -93,6 +93,8 @@ def get_current_user(
 
 
 def refresh_record_statuses(
+    response: Response,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> None:
@@ -101,9 +103,14 @@ def refresh_record_statuses(
     Attached to routers that expose record/hotel/trip statuses. The sweep only
     advances ``scheduled``/``planned`` rows whose end day has passed — derived
     maintenance, not a user mutation, so it also runs for read-only tokens
-    (spec #33/#85 forbids agent *writes*, not the passage of time).
+    (spec #33/#85 forbids agent *writes*, not the passage of time). When rows
+    advanced, the total travels back in ``X-Status-Updated`` so the UI can show
+    a one-time toast; the sweep itself logs one aggregated audit row.
     """
-    refresh_user_statuses(db, current_user.id)
+    counts = refresh_user_statuses(db, current_user.id, request=request)
+    total = sum(counts.values())
+    if total:
+        response.headers["X-Status-Updated"] = str(total)
 
 
 def get_current_session_user(

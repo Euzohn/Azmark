@@ -8,6 +8,10 @@ completed`` for trips) without ever overwriting an explicit user choice.
 import uuid
 from datetime import UTC, date, datetime, timedelta
 
+from sqlalchemy import select
+
+from app.models.audit_log import AuditAction, AuditLog
+from app.models.hotel import Hotel
 from app.models.transport_record import TransportRecord
 from app.services.status_refresh import refresh_user_statuses
 from tests.conftest import auth_headers, register_and_login
@@ -278,3 +282,70 @@ def test_refresh_counts_and_idempotency(client, db):
     assert counts["transport"] == 1
     again = refresh_user_statuses(db, user_id, commit=False)
     assert again == {"transport": 0, "hotel": 0, "trip": 0}
+
+
+def test_sweep_logs_one_aggregated_audit_and_header(client, db):
+    headers = _headers(client, "status_audit")
+    flight = _flight(client, headers, "CA2001")
+    hotel = client.post(
+        "/api/v1/hotels",
+        json={
+            "hotel": "Audit Inn",
+            "check_in": TOMORROW.isoformat(),
+            "check_out": (TOMORROW + timedelta(days=1)).isoformat(),
+        },
+        headers=headers,
+    ).json()
+    client.post(
+        "/api/v1/trips",
+        json={
+            "name": "Audit Trip",
+            "start_date": YESTERDAY.isoformat(),
+            "end_date": YESTERDAY.isoformat(),
+        },
+        headers=headers,
+    )
+    # Age the flight and hotel via ORM so no intermediate request sweeps them
+    # one by one: the next read must advance all three tables in ONE sweep.
+    record = db.get(TransportRecord, uuid.UUID(flight["id"]))
+    record.departure_time = datetime.now(UTC) - timedelta(days=2)
+    record.status = "scheduled"
+    stay = db.get(Hotel, uuid.UUID(hotel["id"]))
+    stay.check_in = YESTERDAY - timedelta(days=1)
+    stay.check_out = YESTERDAY
+    stay.status = "scheduled"
+    db.flush()
+
+    resp = client.get("/api/v1/flights", headers=headers)
+    assert resp.headers["x-status-updated"] == "3"
+    entries = db.scalars(
+        select(AuditLog).where(
+            AuditLog.user_id == record.user_id,
+            AuditLog.action == AuditAction.STATUS_AUTO_ADVANCED,
+        )
+    ).all()
+    assert len(entries) == 1
+    assert entries[0].meta == {"counts": {"transport": 1, "hotel": 1, "trip": 1}}
+    assert entries[0].ip  # REST-triggered sweeps keep client traceability (#47)
+
+    # Nothing left to advance: no header, no second audit row.
+    resp2 = client.get("/api/v1/flights", headers=headers)
+    assert "x-status-updated" not in resp2.headers
+    entries2 = db.scalars(
+        select(AuditLog).where(
+            AuditLog.user_id == record.user_id,
+            AuditLog.action == AuditAction.STATUS_AUTO_ADVANCED,
+        )
+    ).all()
+    assert len(entries2) == 1
+
+
+def test_no_audit_when_nothing_advances(client, db):
+    headers = _headers(client, "status_noaudit")
+    _flight(client, headers, "CA2101")  # future: stays scheduled
+    resp = client.get("/api/v1/flights", headers=headers)
+    assert "x-status-updated" not in resp.headers
+    entries = db.scalars(
+        select(AuditLog).where(AuditLog.action == AuditAction.STATUS_AUTO_ADVANCED)
+    ).all()
+    assert entries == []

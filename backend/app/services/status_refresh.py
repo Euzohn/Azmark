@@ -18,20 +18,26 @@ Rules (forward-only; explicit user choices are never overwritten):
   has not passed; ``planned``/``ongoing`` → ``completed`` once end_date < today.
 - ``cancelled`` and ``completed`` rows are never touched.
 
-Transitions are derived state, not user actions, so they are not audited.
+Transitions are derived state, not user actions: each sweep that changes rows
+appends ONE aggregated audit row (per-table counts only, never row IDs or
+content) and reports the total via the ``X-Status-Updated`` response header so
+the UI can notify the user once.
 """
 
 import uuid
 from datetime import UTC, date, datetime
 from typing import Any
 
+from fastapi import Request
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.timezones import in_timezone
+from app.models.audit_log import AuditAction
 from app.models.hotel import Hotel
 from app.models.transport_record import TransportRecord
 from app.models.trip import Trip
+from app.services.audit import AuditService
 
 # SQLite has a bound-parameter limit; chunk bulk updates to stay portable.
 _UPDATE_CHUNK = 500
@@ -80,6 +86,7 @@ def refresh_user_statuses(
     now: datetime | None = None,
     today: date | None = None,
     commit: bool = True,
+    request: Request | None = None,
 ) -> dict[str, int]:
     """Materialize overdue statuses for one user; return per-table counts.
 
@@ -165,6 +172,18 @@ def refresh_user_statuses(
     )
     counts["trip"] += result.rowcount or 0
 
-    if commit and any(counts.values()):
-        db.commit()
+    if any(counts.values()):
+        # One aggregated audit row per sweep — counts only, never row IDs or
+        # content — so the change is traceable without flooding the log when
+        # many overdue rows advance at once. It stays pending in the same
+        # transaction as the updates and commits (or rolls back) with them.
+        AuditService(db).log(
+            action=AuditAction.STATUS_AUTO_ADVANCED,
+            user_id=user_id,
+            meta={"counts": {table: n for table, n in counts.items() if n}},
+            request=request,
+            commit=False,
+        )
+        if commit:
+            db.commit()
     return counts
