@@ -7,6 +7,9 @@ export interface User {
   locale: string;
   timezone: string;
   currency: string;
+  password_changed_at: string | null;
+  /** Server-computed: instance policy says the password is old enough to remind. */
+  password_change_due: boolean;
 }
 
 export interface Flight {
@@ -839,6 +842,7 @@ export interface AdminSettings {
   smtp_starttls: boolean;
   smtp_password_set: boolean;
   default_storage_quota_bytes: number;
+  password_max_age_days: number;
 }
 
 export interface AdminSettingsUpdateInput {
@@ -854,6 +858,7 @@ export interface AdminSettingsUpdateInput {
   smtp_sender?: string;
   smtp_starttls?: boolean;
   default_storage_quota_bytes?: number;
+  password_max_age_days?: number;
 }
 
 export interface StorageUsage {

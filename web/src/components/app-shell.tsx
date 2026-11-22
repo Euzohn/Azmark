@@ -30,6 +30,7 @@ import { useEffect, useState } from "react";
 import { AzmarkLoader } from "@/components/azmark-loader";
 import { AzmarkMark } from "@/components/azmark-mark";
 import { LanguageToggle } from "@/components/language-toggle";
+import { PasswordReminder } from "@/components/password-reminder";
 import { StatusToast } from "@/components/status-toast";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
@@ -409,7 +410,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </header>
 
       <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 px-4 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-6 outline-none md:px-8 md:pb-12 md:pt-9 lg:px-10">
-        <div className={cn("mx-auto w-full", pathname.startsWith("/map") ? "max-w-none" : "max-w-[1440px]")}>{children}</div>
+        <div className={cn("mx-auto w-full", pathname.startsWith("/map") ? "max-w-none" : "max-w-[1440px]")}>
+          <PasswordReminder />
+          {children}
+        </div>
       </main>
 
       <nav

@@ -155,7 +155,10 @@ export function SettingsPanel({
 
   const changePassword = useMutation({
     mutationFn: () => api.changePassword(currentPassword, newPassword),
-    onSuccess: () => {
+    onSuccess: (updated) => {
+      // Refresh the cached profile so the password-age banner clears at once
+      // and the "last changed" line reflects the new timestamp.
+      setUser(updated);
       setCurrentPassword("");
       setNewPassword("");
       setPasswordStatus("ok");
@@ -623,6 +626,17 @@ export function SettingsPanel({
       <Card className="animate-fade-in-up" style={{ animationDelay: "50ms" }}>
         <CardHeader>
           <CardTitle>{t("settings.security")}</CardTitle>
+          {user?.password_changed_at ? (
+            <p className="text-xs text-muted-foreground">
+              {t("settings.passwordChangedAt", {
+                date: new Date(user.password_changed_at).toLocaleDateString(locale, {
+                  year: "numeric",
+                  month: "2-digit",
+                  day: "2-digit",
+                }),
+              })}
+            </p>
+          ) : null}
         </CardHeader>
         <CardContent className="flex flex-col gap-8">
           <form

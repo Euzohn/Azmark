@@ -46,8 +46,8 @@ See [`AGENTS.md`](./AGENTS.md) for repository conventions, [`CHANGELOG.md`](./CH
 
 | Module | Capabilities |
 | --- | --- |
-| Accounts | Login (JWT bearer), current user, change username / password (no email required); self-registration is closed by default and admins can open it with a bot challenge (built-in arithmetic / Cloudflare Turnstile) |
-| Admin | Admin-created accounts, password reset, enable / disable and role changes; system settings (registration toggle, captcha, SMTP — credentials encrypted at rest, never echoed back); per-user storage quotas (instance default + per-user override, 0 = unlimited, uploads over the cap are rejected); global action log and system stats |
+| Accounts | Login (JWT bearer), current user, change username / password (no email required); password-change reminder (admin-configurable day threshold, 0 = off); self-registration is closed by default and admins can open it with a bot challenge (built-in arithmetic / Cloudflare Turnstile) |
+| Admin | Admin-created accounts, password reset, enable / disable and role changes; system settings (registration toggle, captcha, SMTP — credentials encrypted at rest, never echoed back — and the password-change reminder threshold); per-user storage quotas (instance default + per-user override, 0 = unlimited, uploads over the cap are rejected); global action log and system stats |
 | Flights | Detail, edit, delete, AI / form entry; auto-completed once the end day passes |
 | Trains | Detail, edit, delete, AI / form entry; auto-completed once the end day passes |
 | Other transport | Detail, edit, delete, AI / form entry; auto-completed once the end day passes |
@@ -255,6 +255,7 @@ docker compose exec api python -c "from app.core.db import SessionLocal; from ap
 - AI operates only through a tool layer bound to the current user and never touches the database directly; destructive operations require explicit user confirmation; web / email / file content is always treated as untrusted input, defending against prompt injection.
 - Attachments always download through the authenticated API stream; the storage bucket is never exposed.
 - Personal access tokens default to read-only, are revocable at any time, and are rate-limited per token.
+- The password-change reminder is a non-blocking banner: admins set the day threshold (0 = off); an overdue notice can be dismissed (hidden for 7 days). Password age is computed server-side — the client never decides the policy.
 - Minimal deployment surface: only `web` publishes a port; `api` / `postgres` / `redis` / `minio` stay on the internal network. Set strong `SECRET_KEY`, `S3_SECRET_KEY` and `POSTGRES_PASSWORD`.
 - Every schema change goes through an Alembic migration; direct database edits are forbidden.
 

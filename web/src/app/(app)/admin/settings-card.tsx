@@ -65,6 +65,9 @@ function SettingsForm({ initial }: { initial: AdminSettings }) {
       ? String(Math.round((initial.default_storage_quota_bytes / (1024 * 1024)) * 100) / 100)
       : "",
   );
+  const [passwordMaxAge, setPasswordMaxAge] = useState(
+    initial.password_max_age_days > 0 ? String(initial.password_max_age_days) : "",
+  );
   const [testTo, setTestTo] = useState("");
   const [notice, setNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
@@ -85,6 +88,7 @@ function SettingsForm({ initial }: { initial: AdminSettings }) {
         default_storage_quota_bytes: defaultQuotaMb.trim()
           ? Math.round(Number(defaultQuotaMb) * 1024 * 1024)
           : 0,
+        password_max_age_days: passwordMaxAge.trim() ? Math.floor(Number(passwordMaxAge)) : 0,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-settings"] });
@@ -116,6 +120,13 @@ function SettingsForm({ initial }: { initial: AdminSettings }) {
   const quotaInvalid =
     defaultQuotaMb.trim() !== "" &&
     (!Number.isFinite(Number(defaultQuotaMb)) || Number(defaultQuotaMb) < 0);
+
+  const ageInvalid =
+    passwordMaxAge.trim() !== "" &&
+    (!Number.isFinite(Number(passwordMaxAge)) ||
+      Number(passwordMaxAge) < 0 ||
+      Number(passwordMaxAge) > 3650 ||
+      !Number.isInteger(Number(passwordMaxAge)));
 
   return (
     <div className="flex flex-col gap-6">
@@ -187,6 +198,25 @@ function SettingsForm({ initial }: { initial: AdminSettings }) {
             ) : null}
           </div>
         ) : null}
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <h3 className="text-sm font-semibold text-foreground">{t("admin.securityTitle")}</h3>
+        <div className="max-w-xs">
+          <Label className="mb-1.5 block" htmlFor="password-max-age">
+            {t("admin.passwordMaxAge")}
+          </Label>
+          <Input
+            id="password-max-age"
+            type="number"
+            min={0}
+            step={1}
+            value={passwordMaxAge}
+            onChange={(event) => setPasswordMaxAge(event.target.value)}
+            placeholder="0"
+          />
+          <p className="mt-1.5 text-xs text-muted-foreground">{t("admin.passwordMaxAgeHint")}</p>
+        </div>
       </section>
 
       <section className="flex flex-col gap-3">
@@ -311,7 +341,7 @@ function SettingsForm({ initial }: { initial: AdminSettings }) {
       ) : null}
 
       <div className="flex justify-end">
-        <Button onClick={() => save.mutate()} disabled={save.isPending || quotaInvalid}>
+        <Button onClick={() => save.mutate()} disabled={save.isPending || quotaInvalid || ageInvalid}>
           {t("common.save")}
         </Button>
       </div>

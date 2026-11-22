@@ -813,3 +813,4 @@ trip_items.end_at
 | 本期行程附件区 | 聚合现有交通附件，不新增通用上传归属 |
 | 关联导入导出 | v2 稳定 ID 与用户隔离映射，随阶段交付 |
 | 状态自动推进 | 读时惰性落库：scheduled→completed、planned→ongoing→completed；cancelled/completed 永不覆盖；每次 sweep 一条聚合审计（仅数量）+ X-Status-Updated 一次性提示（§7.3） |
+| 密码修改提醒 | 非强制横幅：`system_settings.password_max_age_days`（0=关闭，管理员可设）+ `users.password_changed_at`（0036 回填 created_at）；服务端计算 `password_change_due` 随 UserRead 返回，前端可关闭 7 天 |
