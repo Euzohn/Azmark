@@ -940,7 +940,11 @@ class DataTransferService:
             # force=True: a restore is not a new submission, so dedup against
             # the target user's existing records must not apply.
             record = service_class(self.db).prepare_record(
-                user_id=user_id, payload=payload, force=True, validate_refs=False
+                user_id=user_id,
+                payload=payload,
+                force=True,
+                validate_refs=False,
+                restore=True,
             )
             record.id = new_id
             return record

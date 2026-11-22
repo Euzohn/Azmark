@@ -1,4 +1,5 @@
 import uuid
+from datetime import date, timedelta
 
 from tests.conftest import auth_headers, register_and_login
 
@@ -203,6 +204,13 @@ def test_flight_advanced_filters(client):
     token = register_and_login(client, "filter_user")["access_token"]
     headers = auth_headers(token)
 
+    # Relative future dates: overdue ``scheduled`` rows are auto-completed on
+    # read (status_refresh), so filter mechanics need rows that stay scheduled.
+    today = date.today()
+    soon = (today + timedelta(days=10)).isoformat()
+    mid = (today + timedelta(days=12)).isoformat()
+    later = (today + timedelta(days=40)).isoformat()
+
     client.post(
         "/api/v1/flights",
         json={
@@ -211,7 +219,7 @@ def test_flight_advanced_filters(client):
             "service_number": "CX659",
             "status": "scheduled",
             "cabin_class": "economy",
-            "departure_time": "2026-09-26T01:45:00Z",
+            "departure_time": f"{later}T01:45:00Z",
         },
         headers=headers,
     )
@@ -223,13 +231,17 @@ def test_flight_advanced_filters(client):
             "service_number": "CA123",
             "status": "completed",
             "cabin_class": "business",
-            "departure_time": "2026-03-01T02:00:00Z",
+            "departure_time": f"{soon}T02:00:00Z",
         },
         headers=headers,
     )
     trip = client.post(
         "/api/v1/trips",
-        json={"name": "Japan", "start_date": "2026-03-01", "end_date": "2026-03-08"},
+        json={
+            "name": "Japan",
+            "start_date": (today + timedelta(days=9)).isoformat(),
+            "end_date": (today + timedelta(days=15)).isoformat(),
+        },
         headers=headers,
     ).json()
     client.post(
@@ -240,7 +252,7 @@ def test_flight_advanced_filters(client):
             "service_number": "CA456",
             "status": "scheduled",
             "cabin_class": "business",
-            "departure_time": "2026-03-02T02:00:00Z",
+            "departure_time": f"{mid}T02:00:00Z",
             "trip_id": trip["id"],
         },
         headers=headers,
@@ -254,11 +266,17 @@ def test_flight_advanced_filters(client):
     assert total(status="scheduled") == 2
     assert total(status="completed") == 1
     assert total(cabin_class="business") == 2
-    assert total(date_from="2026-03-01", date_to="2026-03-31") == 2
+    assert (
+        total(
+            date_from=(today + timedelta(days=5)).isoformat(),
+            date_to=(today + timedelta(days=20)).isoformat(),
+        )
+        == 2
+    )
     assert total(trip_id=trip["id"]) == 1
     # Combined filters intersect.
     assert total(status="scheduled", cabin_class="business") == 1
-    assert total(status="scheduled", date_from="2026-09-01") == 1
+    assert total(status="scheduled", date_from=(today + timedelta(days=35)).isoformat()) == 1
 
 
 def test_create_duplicate_returns_conflict(client):

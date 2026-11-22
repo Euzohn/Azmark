@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 
 from sqlalchemy.orm import Session
 
@@ -11,6 +11,7 @@ from app.repositories.trip_item import TripItemRepository
 from app.services.dedup import record_signature
 from app.services.expense_source import SOURCE_TRANSPORT, clear_source, sync_source_trip
 from app.services.seating import infer_train_seat_type
+from app.services.status_refresh import is_transport_expired, transport_end
 from app.services.write_lock import lock_user_writes
 
 
@@ -111,6 +112,19 @@ class TransportService:
         if inferred:
             data["seat_type"] = inferred
 
+    @staticmethod
+    def _infer_status(data: dict) -> None:
+        """Past journeys are born completed (mirrors HotelService._infer_status).
+
+        Only the default ``scheduled`` is derived; an explicit completed or
+        cancelled status from the caller is kept verbatim.
+        """
+        if data.get("status", "scheduled") != "scheduled":
+            return
+        end, zone = transport_end(data)
+        if is_transport_expired(end_time=end, timezone=zone, now=datetime.now(UTC)):
+            data["status"] = "completed"
+
     def prepare_record(
         self,
         *,
@@ -118,6 +132,7 @@ class TransportService:
         payload,
         force: bool = False,
         validate_refs: bool = True,
+        restore: bool = False,
     ) -> TransportRecord:
         """Validate, normalize and encrypt an unsaved record.
 
@@ -125,7 +140,8 @@ class TransportService:
         ownership, dedup, seat inference and sensitive-field encryption — are
         never reimplemented by the import path. The importer resolves references
         from the bundle itself, so it passes ``validate_refs=False`` (rows are
-        still pending and therefore invisible to a query).
+        still pending and therefore invisible to a query) and ``restore=True``
+        so the exported status survives instead of being re-derived.
         """
         data = payload.model_dump()
         if validate_refs:
@@ -137,6 +153,10 @@ class TransportService:
                 raise DuplicateRecordError(existing)
 
         self._infer_seat_type(data)
+        # A restore keeps the exported status verbatim (docs §10.6); only new
+        # submissions derive completed from a past end day.
+        if not restore:
+            self._infer_status(data)
         enc = self._encrypt_sensitive(data)
         record = TransportRecord(user_id=user_id, type=self.record_type, **data)
         for field, cipher in enc.items():
@@ -176,6 +196,13 @@ class TransportService:
                 setattr(record, f"{field}_enc", encrypt_value(value) if value else None)
         for field, value in data.items():
             setattr(record, field, value)
+        # A scheduled journey whose end day has passed is completed right away
+        # (the read-time sweep would do the same on the next access). Explicit
+        # status choices in this request are never overwritten.
+        if "status" not in data and record.status == "scheduled":
+            end, zone = transport_end(record)
+            if is_transport_expired(end_time=end, timezone=zone, now=datetime.now(UTC)):
+                record.status = "completed"
         sync_source_trip(
             self.db,
             user_id=user_id,

@@ -12,6 +12,7 @@ from app.core.security import PAT_PREFIX, SESSION_COOKIE_NAME, decode_access_tok
 from app.models.personal_access_token import TokenScope
 from app.models.user import User, UserRole, UserStatus
 from app.services.access_token import AccessTokenService
+from app.services.status_refresh import refresh_user_statuses
 from app.services.storage import StorageProvider
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -89,6 +90,20 @@ def get_current_user(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
     request.state.auth_kind = "session"
     return user
+
+
+def refresh_record_statuses(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    """Materialize time-based status transitions before serving the request.
+
+    Attached to routers that expose record/hotel/trip statuses. The sweep only
+    advances ``scheduled``/``planned`` rows whose end day has passed — derived
+    maintenance, not a user mutation, so it also runs for read-only tokens
+    (spec #33/#85 forbids agent *writes*, not the passage of time).
+    """
+    refresh_user_statuses(db, current_user.id)
 
 
 def get_current_session_user(

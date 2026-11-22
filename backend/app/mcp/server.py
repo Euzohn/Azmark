@@ -33,6 +33,7 @@ from app.mcp.writes import (
     handle_write,
 )
 from app.services.ai_tools import MCP_READ_TOOL_NAMES, TOOLS
+from app.services.status_refresh import refresh_user_statuses
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +142,9 @@ async def _call_tool(ctx: Any, params: CallToolRequestParams) -> CallToolResult:
 
     try:
         with mcp_db.session_scope() as db:
+            # Each call gets a fresh session; advance overdue statuses so the
+            # agent reads the same live state the web UI shows.
+            refresh_user_statuses(db, identity.user_id)
             payload = await tool.read(db, identity.user_id, arguments)
     except Exception:  # noqa: BLE001
         logger.exception("MCP tool %s failed", name)

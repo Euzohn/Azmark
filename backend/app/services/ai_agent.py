@@ -27,6 +27,7 @@ from app.providers.llm import LLMProvider, LLMProviderError, build_llm_provider
 from app.schemas.ai import AiChatResponse, AiHistoryMessage, AiProposal
 from app.services.ai_settings import AiSettingsService
 from app.services.ai_tools import TOOLS, ToolPermission, tool_schemas
+from app.services.status_refresh import refresh_user_statuses
 
 logger = logging.getLogger(__name__)
 
@@ -441,6 +442,10 @@ class AiAgentService:
 
         Returns True if any proposals were captured (``had_pending``).
         """
+        # Reads must see live statuses: advance overdue rows before tools run.
+        # The agent session holds no pending writes here, so the sweep's own
+        # commit is safe (see status_refresh).
+        refresh_user_statuses(self.db, user_id)
         had_pending = False
         for tc in tool_calls:
             tool = TOOLS.get(tc.name)

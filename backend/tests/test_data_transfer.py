@@ -1,8 +1,12 @@
 import csv
 import io
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 
+from sqlalchemy import select
+
+from app.models.hotel import Hotel
+from app.models.user import User
 from tests.conftest import auth_headers, register_and_login
 
 
@@ -166,11 +170,16 @@ def test_import_normalizes_status_aliases(client):
     """A free-form status column is normalized, never a row error (B-tier)."""
     token = register_and_login(client, "import_status")["access_token"]
     headers = auth_headers(token)
+    # Future dates keep the normalized statuses observable on read: overdue
+    # ``scheduled`` rows are auto-completed by the read-time sweep.
+    day1 = (date.today() + timedelta(days=10)).isoformat()
+    day2 = (date.today() + timedelta(days=20)).isoformat()
+    day3 = (date.today() + timedelta(days=30)).isoformat()
     csv_text = (
         "type,from,to,date,status,flight_number\n"
-        "flight,PEK,SFO,2026-08-01T08:00:00Z,delayed,CA985\n"
-        "flight,SFO,PEK,2026-08-10T08:00:00Z,landed,CA986\n"
-        "flight,SFO,LAX,2026-09-01T08:00:00Z,bogus,CA987\n"
+        f"flight,PEK,SFO,{day1}T08:00:00Z,delayed,CA985\n"
+        f"flight,SFO,PEK,{day2}T08:00:00Z,landed,CA986\n"
+        f"flight,SFO,LAX,{day3}T08:00:00Z,bogus,CA987\n"
     )
     response = _commit(client, headers, csv_text)
     assert response.status_code == 200, response.text
@@ -719,7 +728,7 @@ def test_v2_roundtrip_restores_migration_evidence(client, db):
     )
 
 
-def test_v2_import_uses_service_defaults(client):
+def test_v2_import_uses_service_defaults(client, db):
     """Imported rows go through the business Service layer (docs §10.6)."""
     token_a = register_and_login(client, "v2_service_a")["access_token"]
     token_b = register_and_login(client, "v2_service_b")["access_token"]
@@ -779,8 +788,16 @@ def test_v2_import_uses_service_defaults(client):
     expenses_b = client.get("/api/v1/expenses", headers=headers_b).json()["items"]
     assert expenses_b[0]["occurred_at"] is None
 
+    # The restore keeps the pinned status at write time (checked in the DB,
+    # before any read-time sweep can advance the overdue stay)…
+    restored = db.scalar(
+        select(Hotel).join(User, Hotel.user_id == User.id).where(User.username == "v2_service_b")
+    )
+    assert restored is not None
+    assert restored.status == "scheduled"
+    # …and the first read then materializes the passage of time (docs §7.3).
     hotels_b = client.get("/api/v1/hotels", headers=headers_b).json()["items"]
-    assert hotels_b[0]["status"] == "scheduled"
+    assert hotels_b[0]["status"] == "completed"
 
 
 def test_import_rejects_oversized_file(client, monkeypatch):
