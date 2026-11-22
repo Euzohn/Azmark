@@ -5,7 +5,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { useQuery } from "@tanstack/react-query";
 import { MapIcon } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ExpressionSpecification,
   GeoJSONSource,
@@ -18,13 +18,14 @@ import type {
 import { useTheme } from "@/components/theme-provider";
 import { AirportName } from "@/components/airport-name";
 import { PageHeader } from "@/components/page-header";
+import { PhotoImage } from "@/components/photo-image";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat } from "@/components/ui/stat";
-import { api } from "@/lib/api";
+import { api, photoImageUrl } from "@/lib/api";
 import { clusterByDistance, greatCircle, type LonLat } from "@/lib/geo";
 import { useI18n } from "@/lib/i18n";
 import { usePageTitle } from "@/lib/page-title";
@@ -63,6 +64,12 @@ const LAYER_FILTERS = [
 // station names appear and MapLibre's collision detection hides the rest.
 const CLUSTER_RADIUS_KM = 45;
 const DETAIL_ZOOM = 7;
+
+// Past city zoom, photo dots bloom into thumbnail "instant photos". Icons
+// are lazy-loaded for the current viewport only, a few requests at a time.
+const PHOTO_THUMB_ZOOM = 9;
+const PHOTO_ICON_SIZE = 128; // 2x the largest on-screen size, for retina crispness
+const THUMB_LOAD_CONCURRENCY = 6;
 
 interface StopPoint {
   point: LonLat;
@@ -154,6 +161,35 @@ function lineFeature(
   };
 }
 
+// Compose a thumbnail into a rounded "instant photo" symbol icon: white
+// frame around a centre-cropped square. Returned as raw pixels so MapLibre
+// can upload it once and re-upload it after every style swap.
+function renderPhotoIcon(img: HTMLImageElement): ImageData | null {
+  if (img.naturalWidth === 0 || img.naturalHeight === 0) return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = PHOTO_ICON_SIZE;
+  canvas.height = PHOTO_ICON_SIZE;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  const frame = 6;
+  const radius = 18;
+  ctx.beginPath();
+  ctx.roundRect(0, 0, PHOTO_ICON_SIZE, PHOTO_ICON_SIZE, radius);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  const inner = PHOTO_ICON_SIZE - frame * 2;
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(frame, frame, inner, inner, radius - frame);
+  ctx.clip();
+  const scale = Math.max(inner / img.naturalWidth, inner / img.naturalHeight);
+  const width = img.naturalWidth * scale;
+  const height = img.naturalHeight * scale;
+  ctx.drawImage(img, frame + (inner - width) / 2, frame + (inner - height) / 2, width, height);
+  ctx.restore();
+  return ctx.getImageData(0, 0, PHOTO_ICON_SIZE, PHOTO_ICON_SIZE);
+}
+
 export default function MapPage() {
   const { t, locale } = useI18n();
   usePageTitle(t("nav.map"));
@@ -225,6 +261,66 @@ export default function MapPage() {
     !isError &&
     (routes.length > 0 || hotels.length > 0 || places.length > 0 || photos.length > 0);
 
+  // Latest photos for the once-bound map handlers (moveend thumbnail pump).
+  const photosRef = useRef(photos);
+  useEffect(() => {
+    photosRef.current = photos;
+  }, [photos]);
+
+  // Processed thumbnail icons, cached across style swaps; per-photo load
+  // status and a small worker pool so a dense viewport never fires hundreds
+  // of requests at once.
+  const thumbCacheRef = useRef(new Map<string, ImageData>());
+  const thumbStatusRef = useRef(new Map<string, "loading" | "failed">());
+  const thumbQueueRef = useRef<string[]>([]);
+  const thumbActiveRef = useRef(0);
+
+  const pumpPhotoThumbs = useCallback(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded() || map.getZoom() < PHOTO_THUMB_ZOOM) return;
+    const bounds = map.getBounds();
+    for (const photo of photosRef.current) {
+      const { id } = photo;
+      if (
+        thumbCacheRef.current.has(id) ||
+        thumbStatusRef.current.has(id) ||
+        thumbQueueRef.current.includes(id) ||
+        !bounds.contains([photo.lon, photo.lat])
+      ) {
+        continue;
+      }
+      thumbQueueRef.current.push(id);
+    }
+    const startNext = () => {
+      while (thumbActiveRef.current < THUMB_LOAD_CONCURRENCY && thumbQueueRef.current.length > 0) {
+        const id = thumbQueueRef.current.shift()!;
+        thumbActiveRef.current += 1;
+        thumbStatusRef.current.set(id, "loading");
+        const img = new Image();
+        img.onload = () => {
+          thumbActiveRef.current -= 1;
+          thumbStatusRef.current.delete(id);
+          const icon = renderPhotoIcon(img);
+          if (icon) {
+            thumbCacheRef.current.set(id, icon);
+            const live = mapRef.current;
+            if (live && live.isStyleLoaded() && !live.hasImage(id)) live.addImage(id, icon);
+          } else {
+            thumbStatusRef.current.set(id, "failed");
+          }
+          startNext();
+        };
+        img.onerror = () => {
+          thumbActiveRef.current -= 1;
+          thumbStatusRef.current.set(id, "failed");
+          startNext();
+        };
+        img.src = photoImageUrl(id, "thumb");
+      }
+    };
+    startNext();
+  }, []);
+
   const summary = useMemo(() => {
     const stops = new Set<string>();
     const countries = new Set<string>();
@@ -295,6 +391,7 @@ export default function MapPage() {
         attributionControl: { compact: true },
       });
       mapRef.current = map;
+      map.on("moveend", pumpPhotoThumbs);
       map.on("load", () => {
         if (!cancelled) setReady(true);
       });
@@ -310,7 +407,7 @@ export default function MapPage() {
       mapRef.current = null;
       setReady(false);
     };
-  }, [showMap]);
+  }, [showMap, pumpPhotoThumbs]);
 
   // Swap the basemap when the colour theme changes.
   useEffect(() => {
@@ -326,6 +423,12 @@ export default function MapPage() {
     if (!map || !maplibregl || !ready) return;
 
     const draw = () => {
+      // Style swaps drop uploaded images; re-add the cached thumbnail icons
+      // so the photos-thumb layer has something to draw.
+      for (const [id, icon] of thumbCacheRef.current) {
+        if (!map.hasImage(id)) map.addImage(id, icon);
+      }
+
       const active = layerRef.current;
       const showFlights = active === "all" || active === "flights";
       const showGround = active === "all" || active === "ground";
@@ -664,6 +767,21 @@ export default function MapPage() {
             "circle-stroke-width": 1,
           },
         });
+        // Zoomed in, each photo blooms into its thumbnail. Collision
+        // detection (icon-allow-overlap / icon-ignore-placement default to
+        // false) hides crowding icons; the dot underneath stays visible and
+        // clickable, and icons appear as their thumbnails finish loading.
+        map.addLayer({
+          id: "photos-thumb",
+          type: "symbol",
+          source: "photos",
+          minzoom: PHOTO_THUMB_ZOOM,
+          layout: {
+            "icon-image": ["get", "id"],
+            "icon-size": ["interpolate", ["linear"], ["zoom"], PHOTO_THUMB_ZOOM, 0.34, 16, 0.5],
+            "icon-padding": 2,
+          },
+        });
         // Symbol layers let MapLibre hide colliding labels for us instead of
         // stacking opaque DOM markers; variable anchors try several sides of
         // the dot before giving up. Busiest stops win the sort key.
@@ -733,7 +851,7 @@ export default function MapPage() {
               node.appendChild(subNode);
             }
             popupRef.current?.remove();
-            popupRef.current = new maplibregl.Popup({ closeButton: false, offset: 8 })
+            popupRef.current = new maplibregl.Popup({ closeButton: false, offset: 8, className: "azmap-popup" })
               .setLngLat(event.lngLat)
               .setDOMContent(node)
               .addTo(map);
@@ -791,7 +909,7 @@ export default function MapPage() {
               node.appendChild(subNode);
             }
             popupRef.current?.remove();
-            popupRef.current = new maplibregl.Popup({ closeButton: false, offset: 8 })
+            popupRef.current = new maplibregl.Popup({ closeButton: false, offset: 8, className: "azmap-popup" })
               .setLngLat(event.lngLat)
               .setDOMContent(node)
               .addTo(map);
@@ -832,7 +950,7 @@ export default function MapPage() {
               node.appendChild(subNode);
             }
             popupRef.current?.remove();
-            popupRef.current = new maplibregl.Popup({ closeButton: false, offset: 8 })
+            popupRef.current = new maplibregl.Popup({ closeButton: false, offset: 8, className: "azmap-popup" })
               .setLngLat(event.lngLat)
               .setDOMContent(node)
               .addTo(map);
@@ -844,7 +962,9 @@ export default function MapPage() {
             map.getCanvas().style.cursor = "";
           });
 
-          map.on("click", "photos-point", (event) => {
+          // Photo card: the thumbnail is the headline, filename and capture
+          // date ride below it, and the whole card opens the photo detail.
+          const photoPopup = (event: MapLayerMouseEvent) => {
             const feature = event.features?.[0];
             if (!feature) return;
             const props = feature.properties as Record<string, string>;
@@ -853,27 +973,61 @@ export default function MapPage() {
               return;
             }
             const node = document.createElement("div");
-            node.className = "text-xs leading-relaxed";
-            const title = document.createElement("a");
-            title.className = "font-semibold underline-offset-2 hover:underline";
-            title.href = `/photos/${props.id}`;
+            node.className = "w-56";
+            const link = document.createElement("a");
+            link.href = `/photos/${props.id}`;
+            link.className = "group block";
+            const frame = document.createElement("div");
+            frame.className = "aspect-[4/3] overflow-hidden rounded-lg bg-muted";
+            const img = document.createElement("img");
+            img.src = photoImageUrl(props.id, "thumb");
+            img.alt = props.filename;
+            img.className =
+              "h-full w-full object-cover transition-transform duration-300 group-hover:scale-105";
+            // Missing blob or storage down: fall back to the text-only card.
+            img.addEventListener("error", () => frame.remove());
+            frame.appendChild(img);
+            link.appendChild(frame);
+            const title = document.createElement("div");
+            title.className = "mt-2 truncate text-xs font-semibold";
             title.textContent = props.filename;
-            node.appendChild(title);
-            if (props.captured) {
-              const subNode = document.createElement("div");
-              subNode.textContent = props.captured;
-              node.appendChild(subNode);
-            }
+            link.appendChild(title);
+            const meta = document.createElement("div");
+            meta.className =
+              "mt-0.5 flex items-center justify-between gap-2 text-[11px] text-muted-foreground";
+            const captured = document.createElement("span");
+            captured.className = "truncate";
+            captured.textContent = props.captured || tRef.current("photos.noDate");
+            const open = document.createElement("span");
+            open.className = "shrink-0 font-medium text-primary";
+            open.textContent = `${tRef.current("map.photoOpen")} →`;
+            meta.appendChild(captured);
+            meta.appendChild(open);
+            link.appendChild(meta);
+            node.appendChild(link);
             popupRef.current?.remove();
-            popupRef.current = new maplibregl.Popup({ closeButton: false, offset: 8 })
+            popupRef.current = new maplibregl.Popup({
+              closeButton: false,
+              offset: 12,
+              maxWidth: "260px",
+              className: "azmap-popup",
+            })
               .setLngLat(event.lngLat)
               .setDOMContent(node)
               .addTo(map);
-          });
+          };
+          map.on("click", "photos-point", photoPopup);
+          map.on("click", "photos-thumb", photoPopup);
           map.on("mouseenter", "photos-point", () => {
             map.getCanvas().style.cursor = "pointer";
           });
           map.on("mouseleave", "photos-point", () => {
+            map.getCanvas().style.cursor = "";
+          });
+          map.on("mouseenter", "photos-thumb", () => {
+            map.getCanvas().style.cursor = "pointer";
+          });
+          map.on("mouseleave", "photos-thumb", () => {
             map.getCanvas().style.cursor = "";
           });
         }
@@ -929,6 +1083,7 @@ export default function MapPage() {
         );
       }
 
+      pumpPhotoThumbs();
     };
 
     draw();
@@ -936,7 +1091,7 @@ export default function MapPage() {
     return () => {
       map.off("style.load", draw);
     };
-  }, [routes, flightRoutes, groundRoutes, hotels, places, photos, ready, layer, locale]);
+  }, [routes, flightRoutes, groundRoutes, hotels, places, photos, ready, layer, locale, pumpPhotoThumbs]);
 
   const selectedRoute = routes.find((route) => route.id === selectedRouteId);
   const selectedHotel = hotels.find((hotel) => hotel.id === selectedHotelId);
@@ -1136,18 +1291,30 @@ export default function MapPage() {
               <Link
                 href={`/photos/${selectedPhoto.id}`}
                 onClick={() => setSelectedPhotoId(null)}
-                className="flex items-center justify-between gap-4 rounded-lg border border-border p-4 text-sm font-medium"
+                className="block overflow-hidden rounded-xl border border-border"
               >
-                <span className="min-w-0 truncate">{selectedPhoto.filename}</span>
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  {selectedPhoto.captured_at
-                    ? new Date(selectedPhoto.captured_at).toLocaleDateString(locale, {
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
-                      })
-                    : t("photos.noDate")}
-                </span>
+                <div className="aspect-[16/10] w-full overflow-hidden bg-muted">
+                  <PhotoImage
+                    id={selectedPhoto.id}
+                    alt={selectedPhoto.filename}
+                    eager
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-3 px-4 py-3">
+                  <span className="min-w-0 truncate text-sm font-medium">
+                    {selectedPhoto.filename}
+                  </span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {selectedPhoto.captured_at
+                      ? new Date(selectedPhoto.captured_at).toLocaleDateString(locale, {
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                        })
+                      : t("photos.noDate")}
+                  </span>
+                </div>
               </Link>
             ) : null}
           </BottomSheet>

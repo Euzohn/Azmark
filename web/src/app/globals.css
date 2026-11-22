@@ -285,3 +285,33 @@ body {
   background-color: color-mix(in srgb, var(--primary) 5%, var(--card));
   box-shadow: inset 3px 0 0 var(--primary);
 }
+
+/*
+ * Map popups — a themed card surface instead of MapLibre's default white
+ * box, so route / stay / place / photo popups sit naturally on both the
+ * light and dark basemaps. Tip colours mirror the library's anchor rules.
+ */
+.azmap-popup .maplibregl-popup-content {
+  background: var(--card);
+  color: var(--card-foreground);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.16);
+}
+.azmap-popup.maplibregl-popup-anchor-top .maplibregl-popup-tip,
+.azmap-popup.maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+.azmap-popup.maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+  border-bottom-color: var(--card);
+}
+.azmap-popup.maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+.azmap-popup.maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+.azmap-popup.maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+  border-top-color: var(--card);
+}
+.azmap-popup.maplibregl-popup-anchor-left .maplibregl-popup-tip {
+  border-right-color: var(--card);
+}
+.azmap-popup.maplibregl-popup-anchor-right .maplibregl-popup-tip {
+  border-left-color: var(--card);
+}
