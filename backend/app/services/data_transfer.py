@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 
 from pydantic import ValidationError
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.models.activity import Activity
@@ -1259,6 +1260,15 @@ class DataTransferService:
                             content_hash=self._content_hash(item),
                         )
                     )
+                    if entity_type == "trip":
+                        # Members reference trips by their final (overwritten)
+                        # ids. The unit of work does not guarantee parent-first
+                        # insert order for pending rows whose PK was replaced,
+                        # and Postgres' enforced foreign keys reject the child
+                        # INSERTs when that happens (SQLite hid it by default).
+                        # Flush trips as soon as they exist; the whole bundle
+                        # still commits or rolls back as one transaction.
+                        self.db.flush()
                 if entity_type == "trip":
                     trips_created += 1
                 elif entity_type != "trip_item" and entity_type not in V2_METADATA_TYPES:
@@ -1283,8 +1293,15 @@ class DataTransferService:
     def _import_v2(
         self, user_id: uuid.UUID, bundle: dict[str, Any], *, commit: bool = True
     ) -> ImportResult:
-        imported, skipped, trips_created, errors = self._run_v2(user_id, bundle, dry_run=False)
+        try:
+            imported, skipped, trips_created, errors = self._run_v2(user_id, bundle, dry_run=False)
+        except SQLAlchemyError:
+            # Never leave a half-applied bundle in the caller's transaction,
+            # regardless of how the caller's session lifecycle handles errors.
+            self.db.rollback()
+            raise
         if errors:
+            self.db.rollback()
             detail = errors[0].message
             raise ValueError(f"import failed and was rolled back: {detail}")
         # A single outer commit keeps the bundle atomic (docs §10.6).

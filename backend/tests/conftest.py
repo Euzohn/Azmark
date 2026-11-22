@@ -3,7 +3,7 @@ from contextlib import nullcontext
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -22,6 +22,15 @@ engine = create_engine(
     poolclass=StaticPool,
 )
 TestingSessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+
+# SQLite ignores FOREIGN KEY constraints unless explicitly enabled, while
+# Postgres enforces them. Keep the test database honest about referential
+# integrity and insert ordering: a v2 import once passed here and 500'd on
+# Postgres because child rows were inserted before their parent trip.
+@event.listens_for(engine, "connect")
+def _enable_sqlite_foreign_keys(dbapi_connection, _record) -> None:
+    dbapi_connection.execute("PRAGMA foreign_keys=ON")
 
 
 @pytest.fixture(autouse=True)

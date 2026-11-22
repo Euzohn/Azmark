@@ -19,6 +19,10 @@ from tests.conftest import auth_headers, register_and_login
 TODAY = date.today()
 YESTERDAY = TODAY - timedelta(days=1)
 TOMORROW = TODAY + timedelta(days=1)
+# Two days back for flight cases: `_noon` stamps UTC and flights default to
+# UTC, so during the local midnight–08:00 window (UTC+8) "local yesterday" is
+# still "today UTC" and day-granularity expiry would not fire yet.
+PAST = TODAY - timedelta(days=2)
 
 
 def _headers(client, username: str) -> dict[str, str]:
@@ -48,8 +52,8 @@ def test_past_journey_is_born_completed(client):
         client,
         headers,
         "CA1001",
-        departure_time=_noon(YESTERDAY),
-        arrival_time=_noon(YESTERDAY),
+        departure_time=_noon(PAST),
+        arrival_time=_noon(PAST),
     )
     assert past["status"] == "completed"
     future = _flight(client, headers, "CA1002")
@@ -61,7 +65,7 @@ def test_past_journey_is_born_completed(client):
             "origin": "北京南",
             "destination": "上海虹桥",
             "service_number": "G1",
-            "departure_time": _noon(YESTERDAY),
+            "departure_time": _noon(PAST),
         },
         headers=headers,
     )
@@ -71,12 +75,8 @@ def test_past_journey_is_born_completed(client):
 
 def test_explicit_statuses_are_never_overwritten(client):
     headers = _headers(client, "status_explicit")
-    cancelled = _flight(
-        client, headers, "CA1101", departure_time=_noon(YESTERDAY), status="cancelled"
-    )
-    completed = _flight(
-        client, headers, "CA1102", departure_time=_noon(YESTERDAY), status="completed"
-    )
+    cancelled = _flight(client, headers, "CA1101", departure_time=_noon(PAST), status="cancelled")
+    completed = _flight(client, headers, "CA1102", departure_time=_noon(PAST), status="completed")
     listed = client.get("/api/v1/flights", headers=headers).json()["items"]
     by_number = {f["service_number"]: f["status"] for f in listed}
     assert by_number["CA1101"] == "cancelled"
@@ -138,8 +138,8 @@ def test_actual_arrival_wins_over_scheduled(client):
         client,
         headers,
         "CA1501",
-        departure_time=_noon(YESTERDAY),
-        arrival_time=_noon(YESTERDAY),
+        departure_time=_noon(PAST),
+        arrival_time=_noon(PAST),
         actual_arrival_time=_noon(TOMORROW),
     )
     assert row["status"] == "scheduled"
@@ -149,7 +149,7 @@ def test_actual_arrival_wins_over_scheduled(client):
 
 def test_pinned_scheduled_is_recompleted_on_next_read(client):
     headers = _headers(client, "status_pin")
-    row = _flight(client, headers, "CA1601", departure_time=_noon(YESTERDAY))
+    row = _flight(client, headers, "CA1601", departure_time=_noon(PAST))
     assert row["status"] == "completed"
     # An explicit status in the request is honoured for that request…
     pinned = client.patch(
@@ -167,7 +167,7 @@ def test_moving_times_into_the_past_completes_on_update(client):
     assert row["status"] == "scheduled"
     updated = client.patch(
         f"/api/v1/flights/{row['id']}",
-        json={"departure_time": _noon(YESTERDAY)},
+        json={"departure_time": _noon(PAST)},
         headers=headers,
     )
     assert updated.json()["status"] == "completed"
