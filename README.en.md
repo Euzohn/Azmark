@@ -7,17 +7,17 @@
 </p>
 
 <p align="center">
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-C66B4E" alt="License: Apache-2.0"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-b45309" alt="License: Apache-2.0"></a>
   &nbsp;
-  <img src="https://img.shields.io/badge/self--hosted-252822" alt="Self-hosted">
+  <img src="https://img.shields.io/badge/self--hosted-20252b" alt="Self-hosted">
   &nbsp;
-  <img src="https://img.shields.io/badge/FastAPI%20%C2%B7%20Next.js%20%C2%B7%20TypeScript-6B6557" alt="Stack: FastAPI · Next.js · TypeScript">
+  <img src="https://img.shields.io/badge/FastAPI%20%C2%B7%20Next.js%20%C2%B7%20TypeScript-626b76" alt="Stack: FastAPI · Next.js · TypeScript">
   &nbsp;
-  <img src="https://img.shields.io/badge/PostgreSQL-PostGIS-78816A" alt="PostgreSQL + PostGIS">
+  <img src="https://img.shields.io/badge/PostgreSQL-PostGIS-0f766e" alt="PostgreSQL + PostGIS">
   &nbsp;
   <a href="https://github.com/Euzohn/Azmark/actions/workflows/ci.yml"><img src="https://github.com/Euzohn/Azmark/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   &nbsp;
-  <a href="https://github.com/Euzohn/Azmark/releases"><img src="https://img.shields.io/github/v/release/Euzohn/Azmark?color=C66B4E&label=release" alt="Release"></a>
+  <a href="https://github.com/Euzohn/Azmark/releases"><img src="https://img.shields.io/github/v/release/Euzohn/Azmark?color=b45309&label=release" alt="Release"></a>
 </p>
 
 **Azmark (行迹)** is an open-source, self-hosted, AI-native personal travel log and data management system. It turns every flight, train ride and journey into a travel logbook that belongs to you alone — the data lives on your own server, with no third-party cloud account in the loop.
