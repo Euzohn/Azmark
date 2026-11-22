@@ -1,7 +1,7 @@
 # AGENTS.md
 
 ## 仓库状态
-- 已进入实现阶段：`backend/`（FastAPI + SQLAlchemy 2 + Alembic）与 `web/`（Next.js App Router + TypeScript + Tailwind）已搭好，当前实现的是“航班记录管理”垂直切片 + 审计日志。
+- **v0.1.0 已发布（2026-11-21）**：MVP 与 P1 全部完成，P2 核心（AI 照片整理）落地，P2 剩余邮件导入与自动化规则；发布规范见「发布流程」。
 - 产品与架构的唯一事实来源：`Azmark_行迹_Personal_Travel_OS_方案_v1.1.md`（中文，v1.1，共 105 个编号章节）。实现前先阅读相关 `#NN` 章节。该文件不提交（见 Git 规则）。文件名含中文字符，shell 命令中需加引号。
 - 项目名为 **Azmark**（中文名 行迹）。不要重新引入旧名 "Waymark"。
 - 目录约定：`backend/` 与 `web/` 两个独立应用，不是 monorepo 的 `apps/*`。
@@ -32,6 +32,22 @@
 ## Git 规则（重要）
 - **不要主动 commit / push**：只有用户明确要求提交时才提交。
 - `Azmark_行迹_Personal_Travel_OS_方案_v1.1.md` 不提交（已加入 `.gitignore`）。
+
+## 发布流程（重要）
+- **只有用户明确要求发布时才执行**；发布指令视为一并授权 commit / push / tag / GitHub Release 全链路。发布前后端 `pytest` + `ruff check/format`、前端 lint / typecheck / test / build 必须全绿。
+- **版本号三处必须一致**（发布前逐一核对，升版则同步更新）：
+  - `web/package.json` 的 `version`
+  - `backend/pyproject.toml` 的 `version`
+  - `backend/app/core/config.py` 的 `app_version`（FastAPI 元数据；管理面板副标题实际展示的版本来自这里）
+- 版本语义：标签带 `v` 前缀（`vX.Y.Z`），CHANGELOG 分节号不带。0.x 阶段 P2/P3 仍在迭代：新功能升 minor，仅修复升 patch，不轻易升 major。
+- CHANGELOG.md：顶部新增 `## [X.Y.Z] - YYYY-MM-DD` 分节（Added / Fixed / Changed 子节，条目写用户可见变化，涉及 schema 的注明 migration 编号），底部追加链接引用 `[X.Y.Z]: https://github.com/Euzohn/Azmark/releases/tag/vX.Y.Z`；**不改写历史分节**。
+- 发布顺序（版本号与 CHANGELOG 先提交并推送 main）：
+  1. `git tag -a vX.Y.Z -m "Azmark vX.Y.Z — <一句话摘要>"`（annotated tag）
+  2. `git push origin vX.Y.Z`
+  3. `gh release create vX.Y.Z --title "Azmark vX.Y.Z — <主题>" --notes "$(cat <<'EOF' … EOF)"`（发布说明用 heredoc 传入，不落盘临时文件）
+- **Release 文本规范**：标题 `Azmark vX.Y.Z — <主题>`；正文中文，固定结构：一句话产品简介 → `## 亮点`（按主题分组的 bullet：记录体系 / AI / 可视化 / 数据主权 / Agent 接入 / 管理与运维 / 体验）→ `## 快速开始`（指向 README 与 `./deploy.sh`）→ `## 版本说明`（0.x 语义 + 完整 CHANGELOG 链接）。不出现密钥、内部路径与用户数据。
+- **无需改动**：README 双语的 release 徽章自动跟随最新 tag；docker-compose 的 api/web 为本地构建、无版本标签；CI 只有 ci.yml，无 release 工作流。
+- **发布 ≠ 部署**：标签发布后仍需用户在服务器执行 `./deploy.sh`（自动备份 + 迁移 + 重建 + 健康检查）；本地绝不触发部署。
 
 ## 引入工具链后
 - 这是本仓库第一个指令文件。一旦出现真实的 build/test/lint/typecheck 命令，请在此处记录确切命令（以及所需的服务前置条件）。
