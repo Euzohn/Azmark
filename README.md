@@ -25,7 +25,7 @@
 > A self-hosted, AI-native personal travel OS — every flight, train and journey in a logbook that belongs only to you.
 
 <p align="center">
-  <img src="./assets/readme/showcase.svg" width="100%" alt="界面结构示意：大圆航线地图、时间线、按行程归组的记录列表（线框示意，非截图）">
+  <img src="./assets/readme/screenshots/dashboard.webp" width="100%" alt="总览：关键指标、即将出发、跨类型最近记录">
 </p>
 
 仓库开发约定见 [`AGENTS.md`](./AGENTS.md)，更新日志见 [`CHANGELOG.md`](./CHANGELOG.md)，备份 / 恢复运维见 [`docs/backup.md`](./docs/backup.md)，MCP 接入见 [`docs/mcp.md`](./docs/mcp.md)，反向代理与审计 IP 见 [`docs/reverse-proxy.md`](./docs/reverse-proxy.md)。
@@ -34,6 +34,7 @@
 
 - [已实现](#已实现)
 - [为什么不同](#为什么不同)
+- [界面截图](#界面截图)
 - [架构](#架构)
 - [Agent / API 访问](#agent--api-访问)
 - [快速部署（服务器）](#快速部署服务器)
@@ -80,6 +81,19 @@
 - **旅行手账** — 编辑式（editorial）界面：大圆航线地图、时间线、行程归组，而非冰冷的表格。
 - **AI 原生但受控** — AI 只能通过绑定当前用户的 tool 层操作，禁止直接访问数据库；破坏性操作必须经用户显式确认；网页/邮件/文件内容一律视为不可信，防御 prompt injection。
 - **同源代理** — 浏览器只访问 web，后端不对外暴露，降低攻击面。
+
+## 界面截图
+
+<p align="center">
+  <img src="./assets/readme/screenshots/map.webp" width="49%" alt="地图：航班大圆航线与火车线路，地点 / 酒店 / 照片图层切换">
+  <img src="./assets/readme/screenshots/trip.webp" width="49%" alt="行程列表：按行程归组，状态随起止日期自动推进（计划中 / 进行中 / 已完成）">
+</p>
+<p align="center">
+  <img src="./assets/readme/screenshots/wrapped.webp" width="100%" alt="Travel Wrapped 年度报告：全屏章节式旅行总结">
+</p>
+<p align="center">
+  <img src="./assets/readme/screenshots/mobile.webp" width="30%" alt="移动端：统计页与底部导航">
+</p>
 
 ## 架构
 

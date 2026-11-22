@@ -25,7 +25,7 @@
 > 自托管、AI 原生的个人旅行 OS——每段航班、火车与旅程，都记在只属于你自己的手账里。
 
 <p align="center">
-  <img src="./assets/readme/showcase-en.svg" width="100%" alt="Interface overview: great-circle route map, timeline, and records grouped by trip (schematic wireframe, not screenshots)">
+  <img src="./assets/readme/screenshots/dashboard-en.webp" width="100%" alt="Dashboard: key metrics, upcoming departures and recent records across types">
 </p>
 
 See [`AGENTS.md`](./AGENTS.md) for repository conventions, [`CHANGELOG.md`](./CHANGELOG.md) for the changelog, [`docs/backup.md`](./docs/backup.md) for backup / restore operations, [`docs/mcp.md`](./docs/mcp.md) for MCP integration, and [`docs/reverse-proxy.md`](./docs/reverse-proxy.md) for reverse proxying and audit client IPs.
@@ -34,6 +34,7 @@ See [`AGENTS.md`](./AGENTS.md) for repository conventions, [`CHANGELOG.md`](./CH
 
 - [Implemented](#implemented)
 - [Why it's different](#why-its-different)
+- [Screenshots](#screenshots)
 - [Architecture](#architecture)
 - [Agent / API access](#agent--api-access)
 - [Quick deploy (server)](#quick-deploy-server)
@@ -80,6 +81,19 @@ See [`AGENTS.md`](./AGENTS.md) for repository conventions, [`CHANGELOG.md`](./CH
 - **A travel logbook, not a spreadsheet** — an editorial interface: great-circle route map, timeline and trip grouping instead of cold tables.
 - **AI-native, but controlled** — AI operates only through a tool layer bound to the current user and never touches the database directly; destructive operations require explicit user confirmation; web / email / file content is always treated as untrusted to defend against prompt injection.
 - **Same-origin proxy** — the browser only ever talks to `web`; the backend is never exposed, shrinking the attack surface.
+
+## Screenshots
+
+<p align="center">
+  <img src="./assets/readme/screenshots/map-en.webp" width="49%" alt="Map: flight great-circle arcs and train lines, with place / stay / photo layers">
+  <img src="./assets/readme/screenshots/trip-en.webp" width="49%" alt="Trips: grouped by trip, status advancing with the dates (planned / ongoing / completed)">
+</p>
+<p align="center">
+  <img src="./assets/readme/screenshots/wrapped-en.webp" width="100%" alt="Travel Wrapped: a full-screen, chapter-based year in review">
+</p>
+<p align="center">
+  <img src="./assets/readme/screenshots/mobile-en.webp" width="30%" alt="Mobile: statistics page with bottom navigation">
+</p>
 
 ## Architecture
 
