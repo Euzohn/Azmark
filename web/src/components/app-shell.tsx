@@ -30,6 +30,7 @@ import { useEffect, useState } from "react";
 import { AzmarkLoader } from "@/components/azmark-loader";
 import { AzmarkMark } from "@/components/azmark-mark";
 import { LanguageToggle } from "@/components/language-toggle";
+import { StatusToast } from "@/components/status-toast";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
@@ -459,6 +460,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {t("nav.more")}
         </button>
       </nav>
+
+      <StatusToast />
 
       <BottomSheet open={moreOpen} onClose={() => setMoreOpen(false)} title={t("nav.moreTitle")}>
         {mobileMoreItems.map((item) => {

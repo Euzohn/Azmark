@@ -503,6 +503,14 @@ export const dictionaries = {
 
     "audit.action.admin_create_user": "管理员新建用户",
     "audit.action.admin_update_settings": "管理员修改设置",
+    "audit.action.status_auto_advanced": "状态自动推进",
+    "audit.statusTransport": "交通 {count}",
+    "audit.statusHotel": "酒店 {count}",
+    "audit.statusTrip": "行程 {count}",
+
+    "toast.statusUpdated": "{count} 条记录已自动标记为完成",
+    "toast.statusUpdatedOne": "1 条记录已自动标记为完成",
+    "toast.dismiss": "关闭提示",
 
     "data.title": "数据",
     "data.subtitle": "备份或迁移你的行程与交通记录。",
@@ -1706,6 +1714,14 @@ export const dictionaries = {
 
     "audit.action.admin_create_user": "Admin created user",
     "audit.action.admin_update_settings": "Admin updated settings",
+    "audit.action.status_auto_advanced": "Status auto-advanced",
+    "audit.statusTransport": "Transport {count}",
+    "audit.statusHotel": "Hotels {count}",
+    "audit.statusTrip": "Trips {count}",
+
+    "toast.statusUpdated": "{count} records auto-marked as completed",
+    "toast.statusUpdatedOne": "1 record auto-marked as completed",
+    "toast.dismiss": "Dismiss",
 
     "data.title": "Data",
     "data.subtitle": "Back up or migrate your trips and transport records.",

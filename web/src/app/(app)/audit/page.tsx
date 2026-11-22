@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { History } from "lucide-react";
 
+import { AuditResourceCell } from "@/components/audit-resource-cell";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
@@ -112,7 +113,11 @@ export default function AuditPage({ embedded = false }: { embedded?: boolean } =
                   <tr key={log.id} className="border-t border-border transition-colors hover:bg-accent/50" style={{ animationDelay: `${index * 20}ms` }}>
                     <td className="px-5 py-3 font-medium">{label ? t(label) : log.action}</td>
                     <td className="px-5 py-3 text-muted-foreground">
-                      {log.resource_type ? `${log.resource_type}` : "-"}
+                      <AuditResourceCell
+                        action={log.action}
+                        resourceType={log.resource_type}
+                        meta={log.meta}
+                      />
                     </td>
                     <td className="px-5 py-3">
                       <AuditClientCell log={log} />

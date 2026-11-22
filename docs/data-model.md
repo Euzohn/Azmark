@@ -496,7 +496,7 @@ Place 中的 `airport/train_station/...` 类型仅用于用户收藏。
 - Trip `planned` → `ongoing`（start_date ≤ 今天且结束日未过）、`planned`/`ongoing` → `completed`（`end_date` < 今天）；
 - `cancelled` 与 `completed` 永不覆盖；推进只前进、不回退。
 
-落库是重新校验 status 的条件 UPDATE，并自带 commit（GET 请求生命周期不提交事务）；属派生状态而非用户操作，不记审计。交通创建时与 Hotel 一样对过去的结束日期推断 `completed`（v2 恢复传 `restore=True` 保留导出值，但恢复后的过期 `scheduled` 行仍会在首次读取时推进，见 §10.6）。只读令牌触发的这次落库不违反 spec #33/#85 的只读语义——禁止的是 agent 改写用户数据，而非时间流逝的物化。
+落库是重新校验 status 的条件 UPDATE，并自带 commit（GET 请求生命周期不提交事务）。每次有变更的 sweep 记**一条聚合审计**（`status_auto_advanced`，meta 仅记各表数量，不记逐条 ID 与内容），与状态更新同事务提交/回滚；REST 触发时保留客户端 IP 与请求关联（#47）。变更总数经 `X-Status-Updated` 响应头返回，前端聚合并发请求后弹一次性 toast（「N 条记录已自动标记为完成」），审计页/管理审计以「交通 N · 酒店 N · 行程 N」展示该聚合行。交通创建时与 Hotel 一样对过去的结束日期推断 `completed`（v2 恢复传 `restore=True` 保留导出值，但恢复后的过期 `scheduled` 行仍会在首次读取时推进，见 §10.6）。只读令牌触发的这次落库不违反 spec #33/#85 的只读语义——禁止的是 agent 改写用户数据，而非时间流逝的物化。
 
 ---
 
@@ -812,4 +812,4 @@ trip_items.end_at
 | Note/Attachment | 不进入时间线 |
 | 本期行程附件区 | 聚合现有交通附件，不新增通用上传归属 |
 | 关联导入导出 | v2 稳定 ID 与用户隔离映射，随阶段交付 |
-| 状态自动推进 | 读时惰性落库：scheduled→completed、planned→ongoing→completed；cancelled/completed 永不覆盖，不记审计（§7.3） |
+| 状态自动推进 | 读时惰性落库：scheduled→completed、planned→ongoing→completed；cancelled/completed 永不覆盖；每次 sweep 一条聚合审计（仅数量）+ X-Status-Updated 一次性提示（§7.3） |

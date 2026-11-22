@@ -22,4 +22,5 @@ export const AUDIT_ACTION_LABELS: Record<string, TranslationKey> = {
   admin_update_user: "audit.action.admin_update_user",
   admin_create_user: "audit.action.admin_create_user",
   admin_update_settings: "audit.action.admin_update_settings",
+  status_auto_advanced: "audit.action.status_auto_advanced",
 };

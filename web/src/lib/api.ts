@@ -1,4 +1,5 @@
 import { useAuth } from "@/lib/auth-store";
+import { notifyStatusUpdate } from "@/lib/status-toast";
 import type {
   AdminAuditLogList,
   AdminSettings,
@@ -153,10 +154,17 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     throw new ApiError(response.status, detail, payload);
   }
 
+  reportStatusUpdate(response);
+
   if (response.status === 204) {
     return undefined as T;
   }
   return (await response.json()) as T;
+}
+
+/** Surface the status sweep's one-time toast trigger (X-Status-Updated). */
+function reportStatusUpdate(response: Response): void {
+  notifyStatusUpdate(Number(response.headers.get("x-status-updated") ?? 0));
 }
 
 /** Fetch a binary response, keeping the server-provided download filename. */
@@ -170,6 +178,7 @@ async function fetchDownload(path: string): Promise<{ blob: Blob; filename: stri
   if (!response.ok) {
     throw new ApiError(response.status, response.statusText);
   }
+  reportStatusUpdate(response);
   // Content-Disposition: attachment; filename="azmark-export-2026-11-20.json"
   const disposition = response.headers.get("content-disposition") ?? "";
   const match = /filename="?([^";]+)"?/.exec(disposition);

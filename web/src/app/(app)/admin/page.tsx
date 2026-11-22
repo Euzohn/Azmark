@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, ShieldAlert, Users } from "lucide-react";
 import { useState } from "react";
 
+import { AuditResourceCell } from "@/components/audit-resource-cell";
 import { AzmarkLoader } from "@/components/azmark-loader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -642,7 +643,11 @@ export default function AdminPage({ embedded = false }: { embedded?: boolean } =
                           {log.user_id ? log.user_id.slice(0, 8) : "—"}
                         </td>
                         <td className="px-4 py-3 text-muted-foreground">
-                          {log.resource_type || "—"}
+                          <AuditResourceCell
+                            action={log.action}
+                            resourceType={log.resource_type}
+                            meta={log.meta}
+                          />
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">

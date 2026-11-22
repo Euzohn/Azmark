@@ -65,7 +65,7 @@ See [`AGENTS.md`](./AGENTS.md) for repository conventions, [`CHANGELOG.md`](./CH
 | Dashboard | Key metrics, upcoming departures, recent records across types |
 | Statistics | Flight / train breakdowns, year / month / day distributions, expense composition (no overlap with dashboard metrics) |
 | Year in review | Travel Wrapped: an annual summary (distance / footprint / top airlines, airports & stations / longest journey / spend), entered from Statistics, full-screen chapters |
-| Audit log | Account, records, trips, attachments, AI and import / export actions; client IP and its salted hash |
+| Audit log | Account, records, trips, attachments, AI, import / export and auto-advanced status (aggregated counts) actions; client IP and its salted hash |
 | Agent access | Personal access tokens (read / write scopes, revocable, rate-limited per token); scripts and AI agents can call the REST API directly |
 | MCP | MCP server (Streamable HTTP): read-only tools plus write proposals for `write`-scope tokens; Claude / Cursor connect to `/api/v1/mcp` with an access token |
 | Pending actions | Writes submitted by agents via MCP never apply immediately — a user must approve them on the web "Pending" page; the confirm endpoint rejects tokens, so an agent can never approve its own proposal |
