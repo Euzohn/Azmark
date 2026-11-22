@@ -1,10 +1,14 @@
+from datetime import UTC
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from sqlalchemy.orm import Session
 
 from app.api.deps import (
     get_attachment_service,
     get_audit_service,
     get_auth_service,
     get_current_user,
+    get_db,
     get_photo_service,
     get_system_settings_service,
 )
@@ -18,7 +22,8 @@ from app.core.config import settings
 from app.core.rate_limit import login_limiter, register_limiter
 from app.core.security import SESSION_COOKIE_NAME, create_access_token
 from app.models.audit_log import AuditAction
-from app.models.user import User
+from app.models.system_setting import SystemSetting
+from app.models.user import User, utcnow
 from app.schemas.auth import (
     AuthConfig,
     CaptchaChallenge,
@@ -41,7 +46,11 @@ from app.services.auth import (
     UsernameTakenError,
 )
 from app.services.photo import PhotoService
-from app.services.system_setting import SystemSettingsService, effective_registration_captcha
+from app.services.system_setting import (
+    SETTINGS_ROW_ID,
+    SystemSettingsService,
+    effective_registration_captcha,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -77,6 +86,26 @@ def _set_session_cookie(response: Response, token: str) -> None:
     )
 
 
+def _serialize_user(user: User, db: Session) -> UserRead:
+    """UserRead plus the server-computed password-age reminder flag.
+
+    The threshold is instance policy (``system_settings.password_max_age_days``,
+    0 = disabled); the age is measured from the last password write, falling
+    back to account creation for rows that predate migration 0036. Every route
+    returning UserRead goes through here so the flag never disagrees between
+    /me and mutation responses. Read-only: never creates the settings row.
+    """
+    read = UserRead.model_validate(user)
+    row = db.get(SystemSetting, SETTINGS_ROW_ID)
+    max_age = row.password_max_age_days if row is not None else 0
+    if max_age > 0:
+        changed = user.password_changed_at or user.created_at
+        if changed.tzinfo is None:  # SQLite hands back naive datetimes
+            changed = changed.replace(tzinfo=UTC)
+        read.password_change_due = (utcnow() - changed).days >= max_age
+    return read
+
+
 @router.get("/config", response_model=AuthConfig)
 def auth_config(
     service: SystemSettingsService = Depends(get_system_settings_service),
@@ -110,7 +139,8 @@ def register(
     service: AuthService = Depends(get_auth_service),
     sys_settings: SystemSettingsService = Depends(get_system_settings_service),
     audit: AuditService = Depends(get_audit_service),
-) -> User:
+    db: Session = Depends(get_db),
+) -> UserRead:
     row = sys_settings.get_or_create()
     if not row.allow_registration:
         raise HTTPException(
@@ -166,7 +196,7 @@ def register(
             status_code=status.HTTP_409_CONFLICT, detail="Email already in use"
         ) from None
     audit.log(action=AuditAction.REGISTER, user_id=user.id, request=request)
-    return user
+    return _serialize_user(user, db)
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -216,8 +246,11 @@ def logout(
 
 
 @router.get("/me", response_model=UserRead)
-def me(current_user: User = Depends(get_current_user)) -> User:
-    return current_user
+def me(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UserRead:
+    return _serialize_user(current_user, db)
 
 
 @router.patch("/me", response_model=UserRead)
@@ -227,7 +260,8 @@ def update_me(
     current_user: User = Depends(get_current_user),
     service: AuthService = Depends(get_auth_service),
     audit: AuditService = Depends(get_audit_service),
-) -> User:
+    db: Session = Depends(get_db),
+) -> UserRead:
     fields = sorted(payload.model_dump(exclude_unset=True).keys())
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(current_user, field, value)
@@ -240,7 +274,7 @@ def update_me(
         meta={"fields": fields},
         request=request,
     )
-    return user
+    return _serialize_user(user, db)
 
 
 @router.post("/me/password", response_model=UserRead)
@@ -250,7 +284,8 @@ def change_password(
     current_user: User = Depends(get_current_user),
     service: AuthService = Depends(get_auth_service),
     audit: AuditService = Depends(get_audit_service),
-) -> User:
+    db: Session = Depends(get_db),
+) -> UserRead:
     try:
         user = service.change_password(
             user=current_user,
@@ -262,7 +297,7 @@ def change_password(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid current password"
         ) from None
     audit.log(action=AuditAction.PASSWORD_CHANGE, user_id=user.id, request=request)
-    return user
+    return _serialize_user(user, db)
 
 
 @router.post("/me/username", response_model=UserRead)
@@ -272,7 +307,8 @@ def change_username(
     current_user: User = Depends(get_current_user),
     service: AuthService = Depends(get_auth_service),
     audit: AuditService = Depends(get_audit_service),
-) -> User:
+    db: Session = Depends(get_db),
+) -> UserRead:
     try:
         user = service.change_username(
             user=current_user,
@@ -288,7 +324,7 @@ def change_username(
             status_code=status.HTTP_409_CONFLICT, detail="Username already taken"
         ) from None
     audit.log(action=AuditAction.USERNAME_CHANGE, user_id=user.id, request=request)
-    return user
+    return _serialize_user(user, db)
 
 
 @router.post("/me/delete", status_code=status.HTTP_204_NO_CONTENT)

@@ -19,7 +19,7 @@ from app.models.audit_log import AuditLog
 from app.models.photo import Photo
 from app.models.transport_record import TransportRecord
 from app.models.trip import Trip
-from app.models.user import User, UserRole, UserStatus
+from app.models.user import User, UserRole, UserStatus, utcnow
 from app.repositories.user import UserRepository
 from app.schemas.admin import AdminSystemRead, AdminUserRead, AdminUserUpdate
 from app.services.storage_quota import default_quota_bytes, used_bytes
@@ -92,6 +92,7 @@ def ensure_admin(
             changed = True
         if reset_password and password:
             existing.password_hash = hash_password(password)
+            existing.password_changed_at = utcnow()
             changed = True
             return repo.save(existing), "updated"
         if changed:

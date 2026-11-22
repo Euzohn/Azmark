@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password, verify_password
-from app.models.user import User, UserRole, UserStatus
+from app.models.user import User, UserRole, UserStatus, utcnow
 from app.repositories.user import UserRepository
 from app.services.attachment import AttachmentService
 from app.services.photo import PhotoService
@@ -61,6 +61,7 @@ class AuthService:
         if not verify_password(current_password, user.password_hash):
             raise InvalidCredentialsError
         user.password_hash = hash_password(new_password)
+        user.password_changed_at = utcnow()
         return self.users.save(user)
 
     def change_username(self, *, user: User, current_password: str, new_username: str) -> User:

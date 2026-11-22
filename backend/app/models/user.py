@@ -36,6 +36,12 @@ class User(Base):
     locale: Mapped[str] = mapped_column(String(10), default="zh-CN", nullable=False)
     timezone: Mapped[str] = mapped_column(String(64), default="UTC", nullable=False)
     currency: Mapped[str] = mapped_column(String(3), default="CNY", nullable=False)
+    #: When the password was last set or changed. Rows predating migration
+    #: 0036 were backfilled with ``created_at`` there; NULL is only a defensive
+    #: fallback (age then falls back to ``created_at`` as well).
+    password_changed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
     #: Total object-storage cap in bytes. NULL = follow the instance default;
     #: 0 = unlimited; > 0 = per-user cap. Enforced on attachment/photo upload.
     storage_quota_bytes: Mapped[int | None] = mapped_column(BigInteger)

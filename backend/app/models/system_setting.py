@@ -48,6 +48,9 @@ class SystemSetting(Base):
     #: Instance-wide default storage cap in bytes; 0 = unlimited (opt-in).
     #: Per-user overrides live on ``users.storage_quota_bytes``.
     default_storage_quota_bytes: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
+    #: Remind users to change their password once it is older than this many
+    #: days (non-blocking banner). 0 = disabled — admins opt in explicitly.
+    password_max_age_days: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )

@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -51,6 +52,11 @@ class UserRead(BaseModel):
     locale: str
     timezone: str
     currency: str
+    password_changed_at: datetime | None
+    #: True when the instance policy (system_settings.password_max_age_days)
+    #: says this password is old enough to warrant a change reminder. Computed
+    #: per response by the auth routes; never trust a client-supplied value.
+    password_change_due: bool = False
 
 
 class UserUpdate(BaseModel):

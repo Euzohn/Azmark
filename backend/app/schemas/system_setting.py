@@ -21,6 +21,8 @@ class AdminSettingsRead(BaseModel):
     smtp_password_set: bool
     #: Instance-wide default storage cap in bytes; 0 = unlimited.
     default_storage_quota_bytes: int
+    #: Password-age reminder threshold in days; 0 = disabled.
+    password_max_age_days: int
 
 
 class AdminSettingsUpdate(BaseModel):
@@ -38,6 +40,8 @@ class AdminSettingsUpdate(BaseModel):
     smtp_sender: str | None = Field(default=None, max_length=255)
     smtp_starttls: bool | None = None
     default_storage_quota_bytes: int | None = Field(default=None, ge=0)
+    #: 0 disables the reminder; capped at 10 years to keep the policy sane.
+    password_max_age_days: int | None = Field(default=None, ge=0, le=3650)
 
 
 class AdminTestEmailRequest(BaseModel):
