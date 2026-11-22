@@ -12,7 +12,7 @@ Azmark（行迹）更新日志，记录用户可见的功能变化。格式参�
 
 - **v2 导入在 Postgres 上 500（外键顺序）**：导入含行程的 bundle 时，子行（交通 / 酒店等）可能先于父行程 INSERT——SQLite 默认不强制外键，本地测试全绿，Postgres 抛 `ForeignKeyViolation` 并整体回滚（预览正常、提交 500）。现导入时行程入 session 后立即 flush，保证父行先落库；导入服务在 bundle 失败时自行回滚（不依赖调用方会话生命周期），整单原子性不变。测试库开启 `PRAGMA foreign_keys=ON` 让此类问题在 CI 暴露，并新增路由级回归测试。
 - **测试日期窗口加固**：状态推进测试的航班过去日期改用「两天前」——`_noon` 打 UTC 戳且航班默认 UTC 时区，本地 00:00–08:00（UTC+8）期间「本地昨天」仍是「UTC 今天」，按天判定尚未过期，导致跨午夜运行必挂（与功能无关的既有缺陷）。
-- **超过 10MB 的照片 / 附件上传 500**：Next.js 16 同源代理默认只缓冲前 10MB 请求体（`proxyClientMaxBodySize`），更大的上传被截断并重置上游连接（web 日志 `Request body exceeded 10MB` + socket hang up），请求根本到不了 API——12.9MB 的 Motion Photo 因此失败而小图正常。代理缓冲上限现随 `MAX_ATTACHMENT_BYTES`（默认 20MB）+ 5MB 余量联动（构建期注入，compose 已传 build arg），超限文件仍由后端干净地 413 拒绝。
+- **超过 10MB 的照片 / 附件上传 500**：Next.js 16 同源代理默认只缓冲前 10MB 请求体（`proxyClientMaxBodySize`），更大的上传被截断并重置上游连接（web 日志 `Request body exceeded 10MB` + socket hang up），请求根本到不了 API——12.9MB 的 Motion Photo 因此失败而小图正常。代理缓冲上限现随 `MAX_ATTACHMENT_BYTES`（默认 20MB）+ 5MB 余量联动（构建期注入，compose 已传 build arg），超限文件仍由后端干净地 413 拒绝。另修复 runner 镜像未复制 `next.config.ts` 导致 `next start` 运行时把该上限重置回 10MB 默认值的问题（运行时 env 与构建期对齐）。
 
 ## [0.1.0] - 2026-11-21
 

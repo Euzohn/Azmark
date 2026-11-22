@@ -20,6 +20,15 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+# next start re-evaluates next.config.ts at runtime; without the file the
+# experimental proxy body limit falls back to the 10MB default even though
+# the build embedded a larger one. Keep the runtime env identical to the
+# builder's so re-evaluation cannot diverge (rewrites destination included).
+ARG API_INTERNAL_URL=http://localhost:8000
+ENV API_INTERNAL_URL=$API_INTERNAL_URL
+ARG MAX_ATTACHMENT_BYTES=20971520
+ENV MAX_ATTACHMENT_BYTES=$MAX_ATTACHMENT_BYTES
+COPY --from=builder /app/next.config.ts ./next.config.ts
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
