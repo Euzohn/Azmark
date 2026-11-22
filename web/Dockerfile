@@ -10,6 +10,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ARG API_INTERNAL_URL=http://localhost:8000
 ENV API_INTERNAL_URL=$API_INTERNAL_URL
+ARG MAX_ATTACHMENT_BYTES=20971520
+ENV MAX_ATTACHMENT_BYTES=$MAX_ATTACHMENT_BYTES
 ENV NEXT_TELEMETRY_DISABLED=1
 # 持久化 Next.js 构建缓存，后续构建只重编译变更部分。
 RUN --mount=type=cache,target=/app/.next/cache npm run build

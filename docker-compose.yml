@@ -91,6 +91,8 @@ services:
       args:
         # Next.js 在服务端把 /api/* 反代到这个内部地址（构建期写入）
         API_INTERNAL_URL: http://api:8000
+        # 代理层请求体缓冲上限需高于后端字节上限，否则大上传被截断（构建期写入）
+        MAX_ATTACHMENT_BYTES: ${MAX_ATTACHMENT_BYTES:-20971520}
     depends_on:
       - api
     ports:
