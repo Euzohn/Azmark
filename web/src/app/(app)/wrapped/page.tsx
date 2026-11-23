@@ -143,7 +143,7 @@ function Chapter({
     >
       <ChapterVisibleContext.Provider value={inView}>
         <header className="flex items-center gap-3">
-          <span className="font-display text-xs font-semibold tabular-nums tracking-[0.18em] text-primary/80">
+          <span className="font-display text-sm font-semibold tabular-nums tracking-[0.18em] text-primary">
             {String(index).padStart(2, "0")}
           </span>
           <span aria-hidden className="h-px w-8 bg-border" />
@@ -172,7 +172,7 @@ function Stat({
     <div className="stagger flex flex-col gap-1" style={staggerStyle(index)}>
       <CountUp
         value={value}
-        className="font-display text-4xl font-semibold tabular-nums tracking-tight sm:text-5xl"
+        className="font-display text-5xl font-semibold tabular-nums tracking-tight sm:text-6xl"
       />
       <span className="text-sm text-muted-foreground">{label}</span>
       {detail ? <span className="text-xs text-muted-foreground/70">{detail}</span> : null}
@@ -194,12 +194,12 @@ function ModeStat({
   return (
     <div className="stagger flex flex-col gap-1.5" style={staggerStyle(index)}>
       <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <span aria-hidden className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+        <span aria-hidden className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color, boxShadow: `0 0 12px ${color}` }} />
         {label}
       </span>
       <CountUp
         value={value}
-        className="font-display text-4xl font-semibold tabular-nums tracking-tight sm:text-5xl"
+        className="font-display text-5xl font-semibold tabular-nums tracking-tight sm:text-6xl"
       />
     </div>
   );
@@ -229,13 +229,13 @@ function TopList({
           const name = locale === "zh-CN" ? (item.name ?? item.label) : item.label;
           return (
             <li key={item.label} className="flex items-center gap-3">
-              <span className="w-4 shrink-0 text-right font-display text-xs tabular-nums text-muted-foreground/70">
+              <span className="w-4 shrink-0 text-right font-display text-xs tabular-nums text-primary/70">
                 {rank + 1}
               </span>
               <span className="w-28 shrink-0 truncate text-sm sm:w-36">{name}</span>
-              <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
+              <span className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
                 <span
-                  className="block h-full rounded-full bg-primary/70 transition-[width] duration-700 ease-out"
+                  className="wrapped-bar block h-full rounded-full bg-primary transition-[width] duration-700 ease-out"
                   style={{ width: active ? `${(item.count / max) * 100}%` : "0%" }}
                 />
               </span>
@@ -264,7 +264,7 @@ function ModeShare({ totals }: { totals: WrappedTotals }) {
   return (
     <div className="stagger flex flex-col gap-3" style={staggerStyle(3, 60)}>
       <div
-        className="flex h-2 w-full overflow-hidden rounded-full bg-muted"
+        className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted"
         role="img"
         aria-label={t("wrapped.moves")}
       >
@@ -315,7 +315,7 @@ function RouteArc({ route }: { route: WrappedRoute }) {
         <svg
           viewBox="0 0 480 150"
           aria-hidden
-          className="h-36 w-full text-primary/60 sm:h-44"
+          className="wrapped-arc h-36 w-full text-primary/80 sm:h-44"
         >
           <path
             d="M24 132 C 140 16, 340 16, 456 132"
@@ -326,11 +326,13 @@ function RouteArc({ route }: { route: WrappedRoute }) {
             strokeLinecap="round"
             className={active ? "animate-dash-flow" : undefined}
           />
+          <circle cx="24" cy="132" r="4" fill="var(--primary)" className="wrapped-ping" />
+          <circle cx="456" cy="132" r="4" fill="var(--primary)" className="wrapped-ping" />
           <circle cx="24" cy="132" r="4" fill="var(--primary)" />
           <circle cx="456" cy="132" r="4" fill="var(--primary)" />
         </svg>
         <span className="absolute inset-x-0 top-0 flex justify-center">
-          <span className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card/80 px-3 py-1 text-xs tabular-nums text-muted-foreground">
+          <span className="wrapped-glass flex items-center gap-1.5 rounded-full px-3 py-1 text-xs tabular-nums text-muted-foreground">
             <ModeIcon className="h-3.5 w-3.5" />
             {numbers.format(Math.round(route.distance_km))} {t("stats.km")}
           </span>
@@ -338,7 +340,7 @@ function RouteArc({ route }: { route: WrappedRoute }) {
       </div>
       <div className="flex items-end justify-between gap-4">
         <div className="stagger min-w-0" style={staggerStyle(1)}>
-          <p className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+          <p className="font-display text-4xl font-semibold tracking-tight sm:text-5xl">
             {originTitle}
           </p>
           {originSub && originSub !== originTitle ? (
@@ -346,7 +348,7 @@ function RouteArc({ route }: { route: WrappedRoute }) {
           ) : null}
         </div>
         <div className="stagger min-w-0 text-right" style={staggerStyle(2)}>
-          <p className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+          <p className="font-display text-4xl font-semibold tracking-tight sm:text-5xl">
             {destinationTitle}
           </p>
           {destinationSub && destinationSub !== destinationTitle ? (
@@ -383,7 +385,7 @@ function Cover({ wrapped, journeys }: { wrapped: WrappedRead; journeys: number }
       data-chapter="cover"
       ref={ref}
       className={cn(
-        "reveal relative flex flex-col items-center gap-5 overflow-hidden pb-14 pt-12 text-center sm:pb-20 sm:pt-16",
+        "reveal relative flex flex-col items-center gap-5 overflow-hidden pb-14 pt-16 text-center sm:pb-24 sm:pt-24",
         inView && "is-visible",
       )}
     >
@@ -391,7 +393,7 @@ function Cover({ wrapped, journeys }: { wrapped: WrappedRead; journeys: number }
         <svg
           viewBox="0 0 560 200"
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 mx-auto h-44 w-full max-w-xl text-border/80"
+          className="wrapped-arc pointer-events-none absolute inset-x-0 top-0 mx-auto h-44 w-full max-w-xl text-primary/45"
         >
           <path
             d="M12 188 C 152 16, 408 16, 548 188"
@@ -404,13 +406,13 @@ function Cover({ wrapped, journeys }: { wrapped: WrappedRead; journeys: number }
           />
         </svg>
         <p
-          className="stagger relative text-[11px] font-medium uppercase tracking-[0.32em] text-muted-foreground"
+          className="stagger relative text-[11px] font-medium uppercase tracking-[0.32em] text-primary/90"
           style={staggerStyle(0)}
         >
           {t("wrapped.subtitle", { year: wrapped.year })}
         </p>
         <h2
-          className="stagger relative font-display text-[clamp(4.5rem,17vw,9.5rem)] font-semibold leading-none tracking-[-0.04em] tabular-nums"
+          className="wrapped-year stagger relative font-display text-[clamp(5rem,20vw,12rem)] font-semibold leading-none tracking-[-0.04em] tabular-nums"
           style={staggerStyle(1)}
         >
           {wrapped.year}
@@ -619,14 +621,14 @@ function WrappedContent() {
         <div className="grid gap-6 sm:grid-cols-2">
           {wrapped.most_visited_city ? (
             <div
-              className="stagger flex flex-col gap-3 rounded-2xl border border-border/60 bg-card/50 p-6 sm:p-7"
+              className="wrapped-glass stagger flex flex-col gap-3 rounded-2xl p-6 sm:p-7"
               style={staggerStyle(0)}
             >
               <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                <MapPin className="h-3.5 w-3.5" />
+                <MapPin className="h-3.5 w-3.5 text-primary" />
                 {t("wrapped.mostVisitedCity")}
               </p>
-              <p className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
+              <p className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
                 {locale === "zh-CN"
                   ? (wrapped.most_visited_city.name ?? wrapped.most_visited_city.label)
                   : wrapped.most_visited_city.label}
@@ -638,14 +640,14 @@ function WrappedContent() {
           ) : null}
           {wrapped.favorite_trip ? (
             <div
-              className="stagger flex flex-col gap-3 rounded-2xl border border-border/60 bg-card/50 p-6 sm:p-7"
+              className="wrapped-glass stagger flex flex-col gap-3 rounded-2xl p-6 sm:p-7"
               style={staggerStyle(1)}
             >
               <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                <Star className="h-3.5 w-3.5" />
+                <Star className="h-3.5 w-3.5 text-primary" />
                 {t("wrapped.favoriteTrip")}
               </p>
-              <p className="truncate font-display text-2xl font-semibold tracking-tight sm:text-3xl">
+              <p className="truncate font-display text-3xl font-semibold tracking-tight sm:text-4xl">
                 {wrapped.favorite_trip.name ?? wrapped.favorite_trip.label}
               </p>
               <p className="text-xs text-muted-foreground">
@@ -694,10 +696,10 @@ function WrappedContent() {
           {spend.converted_count > 0 ? (
             <>
               <div className="stagger flex items-baseline gap-2.5" style={staggerStyle(0)}>
-                <span className="font-display text-4xl font-semibold tabular-nums tracking-tight sm:text-5xl">
+                <span className="font-display text-5xl font-semibold tabular-nums tracking-tight sm:text-6xl">
                   {numbers.format(Number(spend.converted_total))}
                 </span>
-                <span className="text-lg text-muted-foreground">{spend.report_currency}</span>
+                <span className="text-lg font-medium text-primary/90">{spend.report_currency}</span>
               </div>
               <p className="stagger text-sm text-muted-foreground" style={staggerStyle(1)}>
                 {t("wrapped.spendConverted", {
@@ -738,7 +740,7 @@ function WrappedContent() {
           </div>
           {peak && peak.count > 0 ? (
             <div
-              className="stagger flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/60 bg-card/50 px-5 py-4"
+              className="wrapped-glass stagger flex flex-wrap items-center justify-between gap-3 rounded-2xl px-5 py-4"
               style={staggerStyle(3)}
             >
               <p className="text-sm font-medium text-foreground">
@@ -805,7 +807,10 @@ function WrappedContent() {
       />
 
       {/* key remounts the whole report on year switch, resetting reveals. */}
-      <div key={wrapped.year} className="flex items-start gap-12">
+      <div
+        key={wrapped.year}
+        className="wrapped-canvas relative flex items-start gap-12 overflow-clip rounded-3xl border border-border px-5 py-6 sm:px-10 sm:py-10 lg:px-14"
+      >
         <div ref={scrollRef} className="min-w-0 flex-1">
           <Cover wrapped={wrapped} journeys={journeys} />
           {chapters.map((chapter, index) => (
@@ -820,13 +825,13 @@ function WrappedContent() {
           ))}
 
           <div className="flex flex-col items-center gap-6 py-16 text-center sm:py-24">
-            <span aria-hidden className="h-px w-16 bg-border" />
-            <p className="max-w-md font-display text-xl leading-relaxed text-foreground/90 sm:text-2xl">
+            <span aria-hidden className="wrapped-hairline h-px w-24" />
+            <p className="max-w-md font-display text-2xl leading-relaxed text-foreground/90 sm:text-3xl">
               {t(wrappedClosingKey(wrapped.year))}
             </p>
             <Link
               href="/statistics"
-              className="inline-flex h-9 items-center justify-center rounded-md border border-border px-4 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+              className="wrapped-glass inline-flex h-9 items-center justify-center rounded-md px-4 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
             >
               {t("wrapped.back")}
             </Link>
@@ -853,7 +858,7 @@ function WrappedContent() {
                 className={cn(
                   "h-1.5 w-1.5 shrink-0 rounded-full transition-all duration-300",
                   activeChapter === id
-                    ? "scale-125 bg-primary"
+                    ? "scale-125 bg-primary shadow-[0_0_10px_var(--primary)]"
                     : "bg-border group-hover:bg-muted-foreground/60",
                 )}
               />
