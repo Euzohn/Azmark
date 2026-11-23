@@ -537,7 +537,7 @@ export default function StatisticsPage() {
               </span>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3 lg:grid-cols-5">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3 xl:grid-cols-6">
                 {summary.map((item) => (
                   <Stat key={item.label} label={item.label} value={item.value} />
                 ))}
