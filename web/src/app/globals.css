@@ -203,12 +203,29 @@ body {
 }
 
 /*
- * Wrapped report canvas — a self-contained cinematic surface. It redefines
- * the semantic tokens locally so every shared component (charts, pills,
- * tooltips) renders in the report's own night palette regardless of the app
- * theme: warm off-black, saffron flight glow, teal rail glow, film grain.
+ * Wrapped report canvas — a report surface that follows the app theme. In
+ * light mode it inherits the app's own tokens (so it never jars against the
+ * surrounding page) and adds only a whisper of saffron / teal glow plus film
+ * grain; in dark mode it becomes a self-contained cinematic night palette.
+ * Shared components (charts, pills, tooltips) read the same tokens, so they
+ * adapt automatically in either theme.
  */
 .wrapped-canvas {
+  color: var(--foreground);
+  background:
+    radial-gradient(
+      52rem 30rem at 12% -6%,
+      color-mix(in srgb, var(--mode-flight) 9%, transparent),
+      transparent 62%
+    ),
+    radial-gradient(
+      46rem 30rem at 108% 112%,
+      color-mix(in srgb, var(--mode-train) 8%, transparent),
+      transparent 60%
+    ),
+    var(--background);
+}
+.dark .wrapped-canvas {
   --background: #100e0b;
   --foreground: #f3ede2;
   --card: #1c1813;
@@ -231,7 +248,6 @@ body {
   --mode-train: #5fc4b0;
   --mode-other: #8fb0e8;
 
-  color: var(--foreground);
   background:
     radial-gradient(
       52rem 30rem at 12% -6%,
@@ -256,13 +272,14 @@ body {
   mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
 }
-/* The cover year reads as warm metal: paper-white fading into saffron. */
+/* The cover year reads as warm metal: ink (light) / paper (dark) fading into
+ * the theme's saffron, so it stays legible on either canvas. */
 .wrapped-year {
-  background-image: linear-gradient(180deg, #fdf7ea 18%, var(--primary) 96%);
+  background-image: linear-gradient(180deg, var(--foreground) 14%, var(--primary) 92%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  filter: drop-shadow(0 0 28px color-mix(in srgb, var(--primary) 32%, transparent));
+  filter: drop-shadow(0 0 28px color-mix(in srgb, var(--primary) 28%, transparent));
 }
 .wrapped-arc {
   filter: drop-shadow(0 0 6px color-mix(in srgb, var(--primary) 55%, transparent));
