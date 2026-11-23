@@ -414,6 +414,7 @@ export interface ExpenseStatistics {
   by_trip: ExpenseBreakdownItem[];
   by_currency: ExpenseCurrencyBreakdown[];
   unconverted: ExpenseCurrencyTotal[];
+  trip_linked?: ExpenseStatistics | null;
 }
 
 export interface ExpenseList {

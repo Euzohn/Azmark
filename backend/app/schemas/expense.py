@@ -170,3 +170,6 @@ class ExpenseStatistics(BaseModel):
     by_trip: list[ExpenseBreakdownItem]
     by_currency: list[ExpenseCurrencyBreakdown]
     unconverted: list[ExpenseCurrencyTotal]
+    # Same aggregates restricted to expenses linked to a trip (travel spend);
+    # None when nothing is linked. Never nested further.
+    trip_linked: "ExpenseStatistics | None" = None

@@ -207,3 +207,66 @@ def test_expense_statistics_empty(client):
     assert stats["count"] == 0
     assert stats["by_category"] == []
     assert stats["by_trip"] == []
+    assert stats["trip_linked"] is None
+
+
+def test_expense_statistics_trip_linked_scope(client):
+    """Trip-linked spend gets its own aggregate; unlinked daily spend stays out."""
+    headers = _headers(client, "stats_trip_scope")
+    trip = _trip(client, headers, "Yunnan 2026")
+
+    _expense(
+        client,
+        headers,
+        category="transport",
+        amount="100.00",
+        trip_id=trip,
+        occurred_at="2026-04-01T02:30:00Z",
+    )
+    _expense(
+        client,
+        headers,
+        category="food",
+        amount="30.00",
+        trip_id=trip,
+        occurred_at="2026-04-02T02:30:00Z",
+    )
+    # Unlinked daily spend: in the overall stats, out of the trip scope.
+    _expense(client, headers, category="other", amount="500.00")
+    # Unconvertible linked spend keeps its own bucket inside the scope.
+    _expense(
+        client,
+        headers,
+        category="shopping",
+        amount="20.00",
+        currency="USD",
+        trip_id=trip,
+        occurred_at="2026-04-04T02:30:00Z",
+    )
+
+    stats = _stats(client, headers)
+    assert stats["total"] == "630.00"
+    assert stats["count"] == 4
+
+    linked = stats["trip_linked"]
+    assert linked is not None
+    assert linked["total"] == "130.00"
+    assert linked["count"] == 3
+    assert linked["converted_count"] == 2
+    assert linked["unconverted_count"] == 1
+    assert linked["average"] == "65.00"
+    assert linked["largest"] == "100.00"
+    assert _bucket(linked["by_category"], "transport")["amount"] == "100.00"
+    assert "other" not in [item["label"] for item in linked["by_category"]]
+    assert [item["label"] for item in linked["by_trip"]] == [trip]
+    assert linked["unconverted"][0]["currency"] == "USD"
+    # The scope aggregate carries no scope of its own (no infinite nesting).
+    assert linked["trip_linked"] is None
+
+
+def test_expense_statistics_trip_linked_absent_without_trips(client):
+    headers = _headers(client, "stats_trip_scope_none")
+    _expense(client, headers, amount="42.00")
+    stats = _stats(client, headers)
+    assert stats["total"] == "42.00"
+    assert stats["trip_linked"] is None

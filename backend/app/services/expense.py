@@ -128,6 +128,7 @@ def build_expense_statistics(
     report_currency: str,
     *,
     trip_names: dict[uuid.UUID, str] | None = None,
+    include_trip_linked: bool = True,
 ) -> ExpenseStatistics:
     """Aggregate whole-history spend for the statistics page (spec #28).
 
@@ -137,6 +138,9 @@ def build_expense_statistics(
     is flagged per bucket rather than silently dropped. Monthly buckets follow
     ``occurred_at`` in UTC (the stored instant; expenses have no location zone
     of their own).
+
+    ``trip_linked`` repeats the same aggregates over only the expenses assigned
+    to a trip, so travel spend can be read apart from unlinked daily spend.
     """
     names = trip_names or {}
     categories = _Buckets()
@@ -202,6 +206,19 @@ def build_expense_statistics(
 
     average = (total / converted_count).quantize(_QUANTUM) if converted_count else ZERO
 
+    linked = (
+        [expense for expense in expenses if expense.trip_id is not None]
+        if include_trip_linked
+        else []
+    )
+    trip_linked = (
+        build_expense_statistics(
+            linked, report_currency, trip_names=names, include_trip_linked=False
+        )
+        if linked
+        else None
+    )
+
     return ExpenseStatistics(
         report_currency=report_currency,
         total=total.quantize(_QUANTUM),
@@ -220,6 +237,7 @@ def build_expense_statistics(
             ExpenseCurrencyTotal(currency=currency, amount=amount)
             for currency, amount in sorted(unconverted.items())
         ],
+        trip_linked=trip_linked,
     )
 
 

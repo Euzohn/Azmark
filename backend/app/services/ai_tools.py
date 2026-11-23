@@ -1205,6 +1205,16 @@ def _compact_expense_statistics(stats) -> dict:
         "unconverted": [
             {"currency": item.currency, "amount": float(item.amount)} for item in stats.unconverted
         ],
+        "trip_linked": (
+            {
+                "total": float(stats.trip_linked.total),
+                "count": stats.trip_linked.count,
+                "average": float(stats.trip_linked.average),
+                "unconverted_count": stats.trip_linked.unconverted_count,
+            }
+            if stats.trip_linked is not None
+            else None
+        ),
     }
 
 

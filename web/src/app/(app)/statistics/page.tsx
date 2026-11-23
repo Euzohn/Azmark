@@ -375,6 +375,7 @@ export default function StatisticsPage() {
   usePageTitle(t("nav.stats"));
   const [selectedYear, setSelectedYear] = useState<string | null>(null);
   const [spendYear, setSpendYear] = useState<string | null>(null);
+  const [expenseScope, setExpenseScope] = useState<"all" | "trip">("all");
 
   const { data, isLoading } = useQuery({
     queryKey: ["statistics"],
@@ -447,10 +448,18 @@ export default function StatisticsPage() {
     }))
     .filter((group) => group.sections.length > 0);
 
-  const expense = data?.expense_stats;
+  const expenseAll = data?.expense_stats;
+  // Trip scope reads the nested trip-linked aggregate; falls back to the
+  // whole-history one when nothing is linked (the toggle is hidden then).
+  const expense =
+    expenseScope === "trip" && expenseAll?.trip_linked ? expenseAll.trip_linked : expenseAll;
   const currency = expense?.report_currency ?? "CNY";
   const hasExpense = (expense?.count ?? 0) > 0;
   const showStats = Boolean(data && (journeys > 0 || hasExpense));
+  const tripShare =
+    expenseScope === "trip" && expenseAll?.trip_linked && Number(expenseAll.total) > 0
+      ? Math.round((Number(expense?.total ?? 0) / Number(expenseAll.total)) * 100)
+      : null;
 
   const spendYears = useMemo(
     () =>
@@ -537,13 +546,48 @@ export default function StatisticsPage() {
           </Card>
 
           <section id="stats-expense" className="flex scroll-mt-24 flex-col gap-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                 {t("stats.expenseTitle")}
               </h2>
-              <span className="text-xs text-muted-foreground">
-                {t("stats.expenseReportCurrency", { currency })}
-              </span>
+              <div className="flex flex-wrap items-center gap-3">
+                {expenseAll?.trip_linked ? (
+                  <div
+                    className="flex gap-1.5"
+                    role="group"
+                    aria-label={t("stats.expenseScopeLabel")}
+                  >
+                    <button
+                      type="button"
+                      aria-pressed={expenseScope === "all"}
+                      onClick={() => setExpenseScope("all")}
+                      className={
+                        expenseScope === "all"
+                          ? "rounded-full bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground"
+                          : "rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                      }
+                    >
+                      {t("stats.expenseScopeAll")}
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={expenseScope === "trip"}
+                      title={t("stats.expenseScopeTripHint")}
+                      onClick={() => setExpenseScope("trip")}
+                      className={
+                        expenseScope === "trip"
+                          ? "rounded-full bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground"
+                          : "rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                      }
+                    >
+                      {t("stats.expenseScopeTrip")}
+                    </button>
+                  </div>
+                ) : null}
+                <span className="text-xs text-muted-foreground">
+                  {t("stats.expenseReportCurrency", { currency })}
+                </span>
+              </div>
             </div>
 
             {expense && hasExpense ? (
@@ -553,6 +597,9 @@ export default function StatisticsPage() {
                     <CardTitle>{t("stats.expenseOverview")}</CardTitle>
                     <span className="text-xs tabular-nums text-muted-foreground">
                       {t("stats.expenseCountShort", { count: expense.count })}
+                      {tripShare !== null
+                        ? ` · ${t("stats.expenseTripShare", { percent: tripShare })}`
+                        : ""}
                     </span>
                   </CardHeader>
                   <CardContent className="flex flex-col gap-4">
