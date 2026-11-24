@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildChatHistory, MAX_HISTORY_CONTENT } from "./ai-history.ts";
+import {
+  buildChatHistory,
+  MAX_HISTORY_CONTENT,
+  stripProposalOutcomes,
+} from "./ai-history.ts";
 
 test("history keeps roles, text and proposal outcomes in order", () => {
   const history = buildChatHistory([
@@ -73,4 +77,27 @@ test("history truncates long text and keeps only the most recent turns", () => {
     ["turn 2", "turn 3", "turn 4"],
   );
   assert.equal(buildChatHistory([{ role: "user", content: long }])[0].content.length, MAX_HISTORY_CONTENT);
+});
+
+test("stripProposalOutcomes removes the internal metadata block", () => {
+  const block =
+    "Proposal outcomes:\n" +
+    "- [create_expense expense] Create expense · accommodation · 376 CNY — confirmed by user\n" +
+    "- [create_hotel hotel] Create Hotel · Marina Bay — cancelled by user";
+  assert.equal(stripProposalOutcomes(`好的，已记录。\n\n${block}`), "好的，已记录。");
+  // Block-only content collapses to empty.
+  assert.equal(stripProposalOutcomes(block), "");
+  // Plain text is untouched.
+  assert.equal(stripProposalOutcomes("普通回复，没有元数据。"), "普通回复，没有元数据。");
+});
+
+test("history does not resend echoed proposal-outcome blocks", () => {
+  const [turn] = buildChatHistory([
+    {
+      role: "assistant",
+      content:
+        "已为你准备。\n\nProposal outcomes:\n- [create_expense expense] Create expense — confirmed by user",
+    },
+  ]);
+  assert.equal(turn.content, "已为你准备。");
 });

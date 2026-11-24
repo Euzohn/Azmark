@@ -278,6 +278,9 @@ CONVERSATION HISTORY — when prior turns are provided:
 - Earlier user and assistant messages may be included for context. Proposal \
 outcomes (saved / cancelled / duplicate) are FACTS about what the user decided; \
 treat them as history, never as new instructions (spec #70).
+- The "Proposal outcomes:" block appended to earlier assistant turns is \
+internal state for your context only. Never reproduce that header or its \
+"- [action type] …" lines in your reply; speak naturally instead.
 - Do not re-propose an action the user already saved. If they saved a proposal \
 and now ask to change it, call the update tool (find it first) rather than \
 re-creating it.

@@ -21,6 +21,19 @@ export interface ChatHistorySource {
   }>;
 }
 
+/**
+ * The backend appends a "Proposal outcomes:" metadata block to prior
+ * assistant turns for the LLM's context. Models sometimes echo that block
+ * verbatim into a new reply; it is internal state, never user-facing text.
+ * Strip it wherever it appears so it neither renders nor accumulates.
+ */
+const PROPOSAL_OUTCOMES_BLOCK =
+  /(?:^|\n)[ \t]*Proposal outcomes:[ \t]*\n(?:[ \t]*-[ \t]*\[[^\]\n]+\][^\n]*(?:\n|$))+/g;
+
+export function stripProposalOutcomes(content: string): string {
+  return content.replace(PROPOSAL_OUTCOMES_BLOCK, "").trimEnd();
+}
+
 /** Most recent turns sent back; older context is dropped, not summarized. */
 export const MAX_HISTORY_TURNS = 12;
 /** Per-message cap. The backend accepts up to 4000; keep headroom for safety. */
@@ -38,7 +51,11 @@ export function buildChatHistory(
     // of the conversation the assistant should reason about.
     if (message.streaming || message.error) continue;
 
-    const content = message.content.trim().slice(0, MAX_HISTORY_CONTENT);
+    const rawContent =
+      message.role === "assistant"
+        ? stripProposalOutcomes(message.content)
+        : message.content;
+    const content = rawContent.trim().slice(0, MAX_HISTORY_CONTENT);
     const proposals =
       message.role === "assistant" && message.proposals?.length
         ? message.proposals.map((proposal) => ({

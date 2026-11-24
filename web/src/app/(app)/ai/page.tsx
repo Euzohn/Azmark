@@ -26,7 +26,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Markdown } from "@/components/markdown";
 import { PageHeader } from "@/components/page-header";
 import { api, ApiError } from "@/lib/api";
-import { buildChatHistory } from "@/lib/ai-history";
+import { buildChatHistory, stripProposalOutcomes } from "@/lib/ai-history";
 import { consumeDeepLinkPrompt } from "@/lib/ai-deeplink";
 import { composerKeyboardInset } from "@/lib/keyboard-inset";
 import {
@@ -1021,8 +1021,10 @@ export default function AiChatPage() {
                     <p className="whitespace-pre-wrap">{msg.error}</p>
                   ) : msg.role === "assistant" ? (
                     // Model replies are Markdown (the journal prompt even asks
-                    // for it); render them safely instead of as raw text.
-                    <Markdown content={msg.content} />
+                    // for it); render them safely instead of as raw text. The
+                    // internal proposal-outcomes block is stripped so a model
+                    // echoing it never shows as plain text.
+                    <Markdown content={stripProposalOutcomes(msg.content)} />
                   ) : (
                     <p className="whitespace-pre-wrap">{msg.content}</p>
                   )}
