@@ -1016,6 +1016,7 @@ export const dictionaries = {
     "hotels.locateUnavailable": "定位服务暂时不可用（服务器无法连接地图服务），请稍后重试",
     "hotels.clearLocation": "清除定位",
     "hotels.locationCleared": "已清除定位坐标，地图上不再显示该酒店",
+    "hotels.coordinates": "坐标",
 
     "expenses.title": "支出",
     "expenses.subtitle": "记录旅途中的支出",
@@ -2242,6 +2243,7 @@ export const dictionaries = {
     "hotels.locateUnavailable": "Locating is unavailable right now — the server cannot reach the map service. Try again later.",
     "hotels.clearLocation": "Clear location",
     "hotels.locationCleared": "Location cleared — this stay no longer appears on the map.",
+    "hotels.coordinates": "Coordinates",
 
     "expenses.title": "Expenses",
     "expenses.subtitle": "Track what you spend on the road",

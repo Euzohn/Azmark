@@ -26,6 +26,9 @@ export function HotelSummary({ hotel }: { hotel: Hotel }) {
         )
       : null;
 
+  const coords =
+    hotel.lat != null && hotel.lon != null ? `${hotel.lat}, ${hotel.lon}` : null;
+
   const fields: [TranslationKey, string | null][] = [
     ["hotels.checkIn", hotel.check_in],
     ["hotels.checkOut", hotel.check_out],
@@ -33,6 +36,7 @@ export function HotelSummary({ hotel }: { hotel: Hotel }) {
     ["hotels.roomNumber", hotel.room_number],
     ["hotels.price", hotel.price != null ? `${hotel.price} ${hotel.currency ?? ""}`.trim() : null],
     ["hotels.address", hotel.address],
+    ["hotels.coordinates", coords],
   ];
 
   return (
