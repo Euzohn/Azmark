@@ -16,6 +16,7 @@ from app.models.user import User
 from app.providers.geocode import GeocodeProvider, GeocodeUnavailableError
 from app.schemas.hotel import (
     HotelCreate,
+    HotelGeocodeCandidate,
     HotelGeocodeRead,
     HotelList,
     HotelRead,
@@ -26,6 +27,7 @@ from app.services.attachment import AttachmentService
 from app.services.audit import AuditService
 from app.services.geocoding import (
     address_query_variants,
+    city_hint,
     country_hint,
     is_consistent,
 )
@@ -154,20 +156,19 @@ def update_hotel(
 @router.post("/{hotel_id}/geocode", response_model=HotelGeocodeRead)
 async def geocode_hotel(
     hotel_id: uuid.UUID,
-    request: Request,
     current_user: User = Depends(get_current_user),
     service: HotelService = Depends(get_hotel_service),
-    audit: AuditService = Depends(get_audit_service),
 ):
-    """Geocode the stay's address (or name) and store the coordinates (spec #10).
+    """Look up candidate locations for the stay's address (or name) (spec #10).
 
     Explicit user action only: the public geocoders are rate-limited, so this
-    never runs inside list/create flows.
+    never runs inside list/create flows. Nothing is written — the UI lets the
+    user pick the right candidate and saves it via the regular update endpoint.
 
     Field order: ``address`` first (with postcodes/duplicates stripped as a
     fallback variant), then ``hotel`` name only when the address yields
     nothing. Every candidate is checked against the address's own country/city
-    hint, so a same-named street abroad is rejected instead of pinned.
+    hint, so a same-named street abroad is rejected instead of offered.
 
     "No match" is a 404; an unreachable service is a 503 so the UI does not
     blame the user's address for a network problem.
@@ -185,17 +186,18 @@ async def geocode_hotel(
     elif name and name not in queries:
         queries.append(name)
 
-    hint = country_hint(address)
+    hint = country_hint(address) or city_hint(address)
     provider = GeocodeProvider(language=current_user.locale)
-    result = None
+    candidates: list = []
     matched_query = ""
     try:
         for query in queries:
-            candidates = await provider.search_candidates(
+            found = await provider.search_candidates(
                 query, limit=5, accept=lambda item: is_consistent(item, hint)
             )
-            result = next((item for item in candidates if is_consistent(item, hint)), None)
-            if result is not None:
+            consistent = [item for item in found if is_consistent(item, hint)]
+            if consistent:
+                candidates = consistent
                 matched_query = query
                 break
     except GeocodeUnavailableError:
@@ -204,30 +206,35 @@ async def geocode_hotel(
             detail="Geocoder unavailable",
         ) from None
 
-    if result is None:
+    if not candidates:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No geocode result")
 
+    # Providers can return the same place twice (name + street variants).
+    seen: set[tuple[float, float]] = set()
+    unique = []
+    for item in candidates:
+        key = (round(item.lat, 4), round(item.lon, 4))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(item)
+
     logger.info(
-        "Geocode: hotel=%s query=%r -> %s (%s)",
+        "Geocode: hotel=%s query=%r -> %d candidates",
         hotel.id,
         matched_query,
-        result.display_name,
-        result.provider,
-    )
-    hotel = service.set_coordinates(
-        user_id=current_user.id, hotel_id=hotel_id, lat=result.lat, lon=result.lon, commit=False
-    )
-    audit.log(
-        action=AuditAction.UPDATE_RECORD,
-        user_id=current_user.id,
-        resource_type="hotel",
-        resource_id=str(hotel.id),
-        meta={"geocoded": True, "provider": result.provider or provider.name},
-        request=request,
+        len(unique),
     )
     return HotelGeocodeRead(
-        hotel=HotelRead.model_validate(hotel),
-        matched_address=result.display_name,
+        candidates=[
+            HotelGeocodeCandidate(
+                lat=item.lat,
+                lon=item.lon,
+                display_name=item.display_name,
+                provider=item.provider,
+            )
+            for item in unique[:5]
+        ]
     )
 
 

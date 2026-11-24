@@ -1,7 +1,12 @@
 """Address normalization and wrong-country rejection for the locate action."""
 
 from app.providers.geocode import GeocodeResult
-from app.services.geocoding import address_query_variants, country_hint, is_consistent
+from app.services.geocoding import (
+    address_query_variants,
+    city_hint,
+    country_hint,
+    is_consistent,
+)
 
 
 def test_address_variants_strip_postcode_and_duplicates():
@@ -42,3 +47,33 @@ def test_consistency_handles_country_aliases_and_localized_names():
     assert is_consistent(localized, "tokyo") is True
     # No hint → no filtering.
     assert is_consistent(usa, None) is True
+
+
+def test_city_hint_extracts_chinese_city():
+    assert city_hint("北京市朝阳区建国门外大街1号") == "北京"
+    assert city_hint("成都市武侯区天府大道北段1号") == "成都"
+    assert city_hint("杭州市西湖区") == "杭州"
+    # Municipality without the 市 suffix, leading the address.
+    assert city_hint("北京朝阳区建国门外大街1号") == "北京"
+    # A street named after another city must not hijack the hint.
+    assert city_hint("广州市越秀区北京路") == "广州"
+    # Latin addresses carry no CJK city hint.
+    assert city_hint("261 Outram Rd, Singapore") is None
+    assert city_hint("") is None
+
+
+def test_consistency_rejects_wrong_chinese_city():
+    beijing = GeocodeResult(lat=39.9, lon=116.4, display_name="北京市东城区王府井大街")
+    shanghai = GeocodeResult(lat=31.2, lon=121.5, display_name="上海市黄浦区南京东路")
+    assert is_consistent(beijing, "北京") is True
+    assert is_consistent(shanghai, "北京") is False
+
+
+def test_consistency_checks_chinese_city_romanization():
+    latin = GeocodeResult(lat=39.9, lon=116.4, display_name="Beijing, China")
+    wrong = GeocodeResult(lat=31.2, lon=121.5, display_name="Shanghai, China")
+    assert is_consistent(latin, "北京") is True
+    assert is_consistent(wrong, "北京") is False
+    # Unknown city romanization or empty display cannot be verified — accept.
+    assert is_consistent(latin, "廊坊") is True
+    assert is_consistent(GeocodeResult(lat=39.9, lon=116.4), "北京") is True

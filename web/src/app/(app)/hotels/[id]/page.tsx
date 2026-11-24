@@ -16,7 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api, ApiError } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { hotelsReturnHref } from "@/lib/record-navigation";
-import type { HotelInput } from "@/lib/types";
+import type { HotelGeocodeCandidate, HotelInput } from "@/lib/types";
 
 function HotelDetail() {
   const { id } = useParams<{ id: string }>();
@@ -31,6 +31,7 @@ function HotelDetail() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [saved, setSaved] = useState(false);
   const [geocodedAddress, setGeocodedAddress] = useState<string | null>(null);
+  const [candidates, setCandidates] = useState<HotelGeocodeCandidate[] | null>(null);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["hotel", id],
@@ -69,9 +70,17 @@ function HotelDetail() {
 
   const geocode = useMutation({
     mutationFn: () => api.geocodeHotel(id),
-    onSuccess: async (result) => {
-      queryClient.setQueryData(["hotel", id], result.hotel);
-      setGeocodedAddress(result.matched_address);
+    onSuccess: (result) => {
+      // Lookup only: nothing is pinned until the user picks a candidate.
+      setCandidates(result.candidates);
+    },
+  });
+
+  const applyLocation = useMutation({
+    mutationFn: (input: HotelInput) => api.updateHotel(id, input),
+    onSuccess: async (hotel) => {
+      queryClient.setQueryData(["hotel", id], hotel);
+      setCandidates(null);
       clearLocation.reset();
       await refresh();
     },
@@ -119,6 +128,7 @@ function HotelDetail() {
                 onClick={() => {
                   setGeocodedAddress(null);
                   clearLocation.reset();
+                  applyLocation.reset();
                   geocode.mutate();
                 }}
                 disabled={geocode.isPending}
@@ -153,7 +163,7 @@ function HotelDetail() {
           {t("common.saved")}
         </p>
       ) : null}
-      {geocode.isSuccess && !editing ? (
+      {applyLocation.isSuccess && !editing ? (
         <p role="status" className="text-sm text-success">
           {geocodedAddress
             ? t("hotels.locatedAt", { address: geocodedAddress })
@@ -261,6 +271,61 @@ function HotelDetail() {
             onClick={() => remove.mutate()}
           >
             {t(remove.isPending ? "common.loading" : "common.delete")}
+          </Button>
+        </div>
+      </Dialog>
+      <Dialog
+        open={candidates !== null}
+        onClose={() => {
+          if (!applyLocation.isPending) setCandidates(null);
+        }}
+        title={t("hotels.chooseLocation")}
+        variant="responsive"
+      >
+        <p className="text-sm text-muted-foreground">{t("hotels.chooseLocationHint")}</p>
+        <div className="mt-4 flex flex-col gap-2">
+          {(candidates ?? []).map((candidate, index) => (
+            <button
+              key={`${candidate.lat}-${candidate.lon}-${index}`}
+              type="button"
+              disabled={applyLocation.isPending}
+              onClick={() => {
+                // Overwriting an existing (possibly hand-entered) pin needs
+                // an explicit second confirmation.
+                if (
+                  (data.lat != null || data.lon != null) &&
+                  !window.confirm(t("hotels.overwriteLocationConfirm"))
+                ) {
+                  return;
+                }
+                setGeocodedAddress(candidate.display_name);
+                applyLocation.mutate({ lat: candidate.lat, lon: candidate.lon });
+              }}
+              className="flex flex-col gap-1 rounded-lg border border-border bg-background px-3 py-2.5 text-left transition-colors hover:bg-accent disabled:opacity-60"
+            >
+              <span className="text-sm font-medium">
+                {candidate.display_name ||
+                  `${candidate.lat.toFixed(5)}, ${candidate.lon.toFixed(5)}`}
+              </span>
+              <span className="text-xs tabular-nums text-muted-foreground">
+                {candidate.lat.toFixed(5)}, {candidate.lon.toFixed(5)}
+                {candidate.provider ? ` · ${candidate.provider}` : ""}
+              </span>
+            </button>
+          ))}
+        </div>
+        {applyLocation.isError ? (
+          <p role="alert" className="mt-3 text-sm text-danger">
+            {t("common.error")}
+          </p>
+        ) : null}
+        <div className="mt-6 flex justify-end">
+          <Button
+            variant="outline"
+            disabled={applyLocation.isPending}
+            onClick={() => setCandidates(null)}
+          >
+            {t("common.cancel")}
           </Button>
         </div>
       </Dialog>

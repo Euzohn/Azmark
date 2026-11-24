@@ -188,25 +188,6 @@ class HotelService:
         if commit:
             self.db.commit()
 
-    def set_coordinates(
-        self,
-        *,
-        user_id: uuid.UUID,
-        hotel_id: uuid.UUID,
-        lat: float,
-        lon: float,
-        commit: bool = True,
-    ) -> Hotel:
-        """Attach map coordinates from the explicit geocode action (spec #10)."""
-        lock_user_writes(self.db, user_id)
-        hotel = self.get_hotel(user_id=user_id, hotel_id=hotel_id)
-        hotel.lat = lat
-        hotel.lon = lon
-        hotel = self.hotels.save(hotel)
-        if commit:
-            self.db.commit()
-        return hotel
-
     # -- pending-action surface ------------------------------------------------
     # The approval inbox (spec #69) executes proposals through the same method
     # names the transport services expose, so an agent can propose a hotel stay

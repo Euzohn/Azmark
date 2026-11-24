@@ -305,9 +305,15 @@ export interface HotelList {
   page_size: number;
 }
 
+export interface HotelGeocodeCandidate {
+  lat: number;
+  lon: number;
+  display_name: string | null;
+  provider: string;
+}
+
 export interface HotelGeocodeRead {
-  hotel: Hotel;
-  matched_address: string | null;
+  candidates: HotelGeocodeCandidate[];
 }
 
 export type ExpenseCategory =

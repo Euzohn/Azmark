@@ -226,7 +226,7 @@ def test_hotel_coordinates_roundtrip(client):
     assert got["lon"] is None
 
 
-def test_geocode_hotel_stores_coordinates(client, monkeypatch):
+def test_geocode_hotel_returns_candidates_without_saving(client, monkeypatch):
     headers = _headers(client, "hotel_geocode")
     created = client.post("/api/v1/hotels", json=HOTEL, headers=headers).json()
     assert created["lat"] is None
@@ -248,9 +248,41 @@ def test_geocode_hotel_stores_coordinates(client, monkeypatch):
     resp = client.post(f"/api/v1/hotels/{created['id']}/geocode", headers=headers)
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["hotel"]["lat"] == 1.2834
-    assert body["hotel"]["lon"] == 103.8607
-    assert body["matched_address"] == "Marina Bay Sands, Singapore"
+    assert body["candidates"] == [
+        {
+            "lat": 1.2834,
+            "lon": 103.8607,
+            "display_name": "Marina Bay Sands, Singapore",
+            "provider": "",
+        }
+    ]
+    # The lookup must not pin anything: the user picks and saves explicitly.
+    got = client.get(f"/api/v1/hotels/{created['id']}", headers=headers).json()
+    assert got["lat"] is None
+    assert got["lon"] is None
+
+
+def test_geocode_dedupes_identical_candidates(client, monkeypatch):
+    headers = _headers(client, "hotel_geocode_dedupe")
+    created = client.post("/api/v1/hotels", json=HOTEL, headers=headers).json()
+
+    from app.providers.geocode import GeocodeProvider, GeocodeResult
+
+    async def fake_search(self, query, *, limit=1, accept=None):
+        return [
+            GeocodeResult(lat=1.2834, lon=103.8607, display_name="Marina Bay Sands, Singapore"),
+            GeocodeResult(
+                lat=1.28341, lon=103.86072, display_name="Marina Bay Sands Hotel, Singapore"
+            ),
+            GeocodeResult(lat=1.2901, lon=103.8590, display_name="Bayfront Ave, Singapore"),
+        ]
+
+    monkeypatch.setattr(GeocodeProvider, "search_candidates", fake_search)
+    resp = client.post(f"/api/v1/hotels/{created['id']}/geocode", headers=headers)
+    assert resp.status_code == 200, resp.text
+    candidates = resp.json()["candidates"]
+    assert len(candidates) == 2
+    assert candidates[0]["display_name"] == "Marina Bay Sands, Singapore"
 
 
 def test_geocode_hotel_without_result_returns_404(client, monkeypatch):
@@ -307,7 +339,7 @@ def test_geocode_hotel_falls_back_to_name(client, monkeypatch):
     resp = client.post(f"/api/v1/hotels/{created['id']}/geocode", headers=headers)
     assert resp.status_code == 200, resp.text
     assert seen == [HOTEL["address"], HOTEL["hotel"]]
-    assert resp.json()["hotel"]["lat"] == 1.2834
+    assert resp.json()["candidates"][0]["lat"] == 1.2834
 
 
 def test_geocode_hotel_unavailable_returns_503(client, monkeypatch):
@@ -372,4 +404,4 @@ def test_geocode_retries_address_without_postcode(client, monkeypatch):
     resp = client.post(f"/api/v1/hotels/{created['id']}/geocode", headers=headers)
     assert resp.status_code == 200, resp.text
     assert seen == ["261 Outram Rd, Singapore, Singapore, 169057", "261 Outram Rd, Singapore"]
-    assert resp.json()["hotel"]["lat"] == 1.2811
+    assert resp.json()["candidates"][0]["lat"] == 1.2811

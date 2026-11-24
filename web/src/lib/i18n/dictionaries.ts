@@ -1017,6 +1017,9 @@ export const dictionaries = {
     "hotels.clearLocation": "清除定位",
     "hotels.locationCleared": "已清除定位坐标，地图上不再显示该酒店",
     "hotels.coordinates": "坐标",
+    "hotels.chooseLocation": "选择定位结果",
+    "hotels.chooseLocationHint": "以下是地图服务返回的候选位置，请选择与酒店实际位置相符的一项。",
+    "hotels.overwriteLocationConfirm": "该酒店已有定位坐标，确定用所选位置覆盖吗？",
 
     "expenses.title": "支出",
     "expenses.subtitle": "记录旅途中的支出",
@@ -2244,6 +2247,9 @@ export const dictionaries = {
     "hotels.clearLocation": "Clear location",
     "hotels.locationCleared": "Location cleared — this stay no longer appears on the map.",
     "hotels.coordinates": "Coordinates",
+    "hotels.chooseLocation": "Choose a location",
+    "hotels.chooseLocationHint": "These are the candidates returned by the map service. Pick the one that matches the hotel's actual location.",
+    "hotels.overwriteLocationConfirm": "This stay already has a location. Replace it with the selected one?",
 
     "expenses.title": "Expenses",
     "expenses.subtitle": "Track what you spend on the road",
