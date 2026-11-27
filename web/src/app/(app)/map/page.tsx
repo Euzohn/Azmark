@@ -23,11 +23,13 @@ import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat } from "@/components/ui/stat";
 import { api, photoImageUrl } from "@/lib/api";
 import { clusterByDistance, greatCircle, type LonLat } from "@/lib/geo";
 import { useI18n } from "@/lib/i18n";
+import { hotelYear, mapYears, photoYear, routeYear } from "@/lib/map-years";
 import { usePageTitle } from "@/lib/page-title";
 import type { MapRoute, PlaceType } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -212,11 +214,18 @@ export default function MapPage() {
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
   const [layer, setLayer] = useState<LayerFilter>("all");
+  const [year, setYear] = useState<number | "all">("all");
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["map-routes"],
     queryFn: api.getMapRoutes,
   });
+
+  // Years actually present in the data drive the filter options (spec #27).
+  const years = useMemo(() => mapYears(data), [data]);
+  // A refetch may remove the selected year (e.g. its last record was deleted);
+  // fall back to "all" during render instead of cascading through an effect.
+  const activeYear = year !== "all" && !years.includes(year) ? "all" : year;
 
   // Flight arcs and ground (train / other transport) lines are drawn as
   // separate sources so the map can tell them apart visually (spec #27).
@@ -225,36 +234,47 @@ export default function MapPage() {
       (data?.items ?? []).filter(
         (route) =>
           route.type === "flight" &&
+          (activeYear === "all" || routeYear(route) === activeYear) &&
           pointOf(route.origin.code, route.origin.lat, route.origin.lon) &&
           pointOf(route.destination.code, route.destination.lat, route.destination.lon),
       ),
-    [data],
+    [data, activeYear],
   );
   const groundRoutes = useMemo(
     () =>
       (data?.items ?? []).filter(
         (route) =>
           route.type !== "flight" &&
+          (activeYear === "all" || routeYear(route) === activeYear) &&
           pointOf(route.origin.code, route.origin.lat, route.origin.lon) &&
           pointOf(route.destination.code, route.destination.lat, route.destination.lon),
       ),
-    [data],
+    [data, activeYear],
   );
   const routes = useMemo(() => [...flightRoutes, ...groundRoutes], [flightRoutes, groundRoutes]);
   const hotels = useMemo(
     () =>
       (data?.hotels ?? []).filter(
-        (hotel) => Number.isFinite(hotel.lat) && Number.isFinite(hotel.lon),
+        (hotel) =>
+          Number.isFinite(hotel.lat) &&
+          Number.isFinite(hotel.lon) &&
+          (activeYear === "all" || hotelYear(hotel) === activeYear),
       ),
-    [data],
+    [data, activeYear],
   );
   const places = useMemo(
     () => (data?.places ?? []).filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lon)),
     [data],
   );
   const photos = useMemo(
-    () => (data?.photos ?? []).filter((photo) => Number.isFinite(photo.lat) && Number.isFinite(photo.lon)),
-    [data],
+    () =>
+      (data?.photos ?? []).filter(
+        (photo) =>
+          Number.isFinite(photo.lat) &&
+          Number.isFinite(photo.lon) &&
+          (activeYear === "all" || photoYear(photo) === activeYear),
+      ),
+    [data, activeYear],
   );
   const showMap =
     !isLoading &&
@@ -1041,9 +1061,10 @@ export default function MapPage() {
         (map.getSource("photos") as GeoJSONSource).setData(photoData);
       }
 
-      // Fit view from the FULL dataset (not the layer-filtered view) so
-      // toggling layers never jumps the camera. Ground lines use near-chord
-      // geometry; fitting their raw endpoints is enough.
+      // Fit view from the year-filtered dataset (not the layer-filtered view)
+      // so toggling layers never jumps the camera, while switching years —
+      // a different part of the world — always re-frames. Ground lines use
+      // near-chord geometry; fitting their raw endpoints is enough.
       const boundsCoords: LonLat[] = [
         ...flightRoutes.flatMap((route) => [
           pointOf(route.origin.code, route.origin.lat, route.origin.lon)!,
@@ -1057,7 +1078,7 @@ export default function MapPage() {
         ...places.map((place) => [place.lon, place.lat] as LonLat),
         ...photos.map((photo) => [photo.lon, photo.lat] as LonLat),
       ];
-      const fittedKey = `${routes.length}|${hotels.length}|${places.length}|${photos.length}`;
+      const fittedKey = `${activeYear}|${routes.length}|${hotels.length}|${places.length}|${photos.length}`;
       if (boundsCoords.length > 0 && fittedKey !== fittedKeyRef.current) {
         fittedKeyRef.current = fittedKey;
         let minLon = Infinity;
@@ -1091,7 +1112,7 @@ export default function MapPage() {
     return () => {
       map.off("style.load", draw);
     };
-  }, [routes, flightRoutes, groundRoutes, hotels, places, photos, ready, layer, locale, pumpPhotoThumbs]);
+  }, [routes, flightRoutes, groundRoutes, hotels, places, photos, ready, layer, activeYear, locale, pumpPhotoThumbs]);
 
   const selectedRoute = routes.find((route) => route.id === selectedRouteId);
   const selectedHotel = hotels.find((hotel) => hotel.id === selectedHotelId);
@@ -1156,24 +1177,43 @@ export default function MapPage() {
             </div>
           ) : null}
 
-          <div className="flex flex-wrap gap-2" role="group" aria-label={t("map.layers")}>
-            {LAYER_FILTERS.map((item) => (
-              <Button
-                key={item.value}
-                size="sm"
-                variant={layer === item.value ? "default" : "outline"}
-                onClick={() => setLayer(item.value)}
-                className="gap-1.5"
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap gap-2" role="group" aria-label={t("map.layers")}>
+              {LAYER_FILTERS.map((item) => (
+                <Button
+                  key={item.value}
+                  size="sm"
+                  variant={layer === item.value ? "default" : "outline"}
+                  onClick={() => setLayer(item.value)}
+                  className="gap-1.5"
+                >
+                  {"dot" in item ? (
+                    <span
+                      aria-hidden
+                      className={cn("h-2 w-2 shrink-0 rounded-full", item.dot)}
+                    />
+                  ) : null}
+                  {t(item.key)}
+                </Button>
+              ))}
+            </div>
+            {years.length > 1 ? (
+              <Select
+                className="h-9 w-auto text-sm"
+                value={String(activeYear)}
+                onChange={(event) =>
+                  setYear(event.target.value === "all" ? "all" : Number(event.target.value))
+                }
+                aria-label={t("map.yearFilter")}
               >
-                {"dot" in item ? (
-                  <span
-                    aria-hidden
-                    className={cn("h-2 w-2 shrink-0 rounded-full", item.dot)}
-                  />
-                ) : null}
-                {t(item.key)}
-              </Button>
-            ))}
+                <option value="all">{t("map.allYears")}</option>
+                {years.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </Select>
+            ) : null}
           </div>
 
           <div

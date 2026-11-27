@@ -352,6 +352,29 @@ def test_map_routes(client):
     assert route["distance_km"] == 2540.0
 
 
+def test_map_routes_carry_departure_timezone(client):
+    """The client derives the departure-local year from time + zone (spec #27)."""
+    token = register_and_login(client, "map_tz")["access_token"]
+    headers = auth_headers(token)
+
+    # 2026-12-31 18:00 UTC is already 2027-01-01 in Shanghai; the payload must
+    # carry the zone so the year filter can attribute it to 2027, not 2026.
+    client.post(
+        "/api/v1/flights",
+        json={
+            **FLIGHT_HKG_SIN,
+            "departure_time": "2026-12-31T18:00:00Z",
+            "departure_timezone": "Asia/Shanghai",
+        },
+        headers=headers,
+    )
+
+    body = client.get("/api/v1/map/routes", headers=headers).json()
+    route = body["items"][0]
+    assert route["departure_time"].startswith("2026-12-31T18:00")
+    assert route["departure_timezone"] == "Asia/Shanghai"
+
+
 def test_dashboard_user_isolation(client):
     token_a = register_and_login(client, "iso_a")["access_token"]
     token_b = register_and_login(client, "iso_b")["access_token"]

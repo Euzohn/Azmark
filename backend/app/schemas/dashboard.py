@@ -112,6 +112,8 @@ class MapRoute(BaseModel):
     airline_code: str | None = None
     carrier: str | None = None
     departure_time: datetime | None = None
+    # Lets the client attribute the route to its departure-local year (spec #27).
+    departure_timezone: str | None = None
     origin: MapPoint
     destination: MapPoint
     distance_km: float | None = None

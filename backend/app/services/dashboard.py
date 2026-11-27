@@ -976,6 +976,7 @@ class DashboardService:
                     airline_code=record.airline_code,
                     carrier=record.carrier,
                     departure_time=record.departure_time,
+                    departure_timezone=record.departure_timezone,
                     origin=origin,
                     destination=destination,
                     distance_km=self._distance_km(record),

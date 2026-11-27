@@ -1159,6 +1159,7 @@ export interface MapRoute {
   airline_code: string | null;
   carrier: string | null;
   departure_time: string | null;
+  departure_timezone: string | null;
   origin: MapPoint;
   destination: MapPoint;
   distance_km: number | null;
