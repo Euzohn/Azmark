@@ -174,7 +174,7 @@ Attachments use the MinIO bundled in compose. Change `S3_SECRET_KEY` in `.env` (
 
 > The open-source edition of MinIO is archived. Compose pulls the last open-source release from `docker.1panel.live` with a pinned digest by default; if your server can reach Docker Hub directly, set `MINIO_IMAGE=minio/minio:RELEASE.2025-09-07T16-13-09Z` in `.env`.
 
-> Backend image builds default to the Tsinghua PyPI mirror so servers don't stall on the official index. Override with `PIP_INDEX_URL` in `.env`.
+> Backend image builds default to the Tsinghua PyPI mirror so servers don't stall on the official index. Override with `PIP_INDEX_URL` in `.env`. Frontend builds work the same way: npm defaults to npmmirror, overridable via `NPM_REGISTRY`.
 
 > `POSTGRES_PASSWORD` must contain only URL-safe characters (hex recommended), otherwise the internal `DATABASE_URL` breaks. Cloud servers need inbound TCP 3000 open in the security group; do not open 8000/5432/6379/9000/9001.
 

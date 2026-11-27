@@ -93,6 +93,8 @@ services:
         API_INTERNAL_URL: http://api:8000
         # 代理层请求体缓冲上限需高于后端字节上限，否则大上传被截断（构建期写入）
         MAX_ATTACHMENT_BYTES: ${MAX_ATTACHMENT_BYTES:-20971520}
+        # npm 镜像；与 pip 清华源同理，避免服务器直连 npmjs 过慢。
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
     depends_on:
       - api
     ports:

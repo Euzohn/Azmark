@@ -2,7 +2,9 @@ FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 # npm 缓存目录持久化，lock 不变时秒级完成。
-RUN --mount=type=cache,target=/root/.npm npm ci
+# NPM_REGISTRY 由 compose 传入，服务器网络慢时可切换镜像源。
+ARG NPM_REGISTRY=https://registry.npmjs.org
+RUN --mount=type=cache,target=/root/.npm npm ci --registry "$NPM_REGISTRY"
 
 FROM node:22-alpine AS builder
 WORKDIR /app
